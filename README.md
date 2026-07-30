@@ -32,11 +32,13 @@ What a second press does is declared, not hand-rolled. `drop` (the default) make
 
 The cold watch is a graph primitive: `watch(body, { demand: false })` sees the changes that occur anyway without counting as demand. Persistence, logging and devtools want exactly that.
 
+**`src/core/outbox.ts` — the outbox.** A command that reached for the world is written down before it is sent and leaves the book only when the world confirms it, so a tab dying mid-flight loses nothing. Each entry carries an idempotency key — the same one on every attempt, including after a reload — which is what makes a repeat safe rather than a second purchase. Entries go one at a time in the order they were written: order is part of the promise. A refusal is retried with growing waits; past `maxAttempts` the entry gets stuck and waits for a person, and `again(id)` or `forget(id)` decides its fate. An entry whose handler is unknown after a deploy gets stuck rather than vanishing. What is owed is an ordinary cell, so a screen can show "3 unsent" without asking anybody.
+
 **`src/react/hooks.ts` — the seam,** deliberately thin. `useCell` subscribes a component to one value through `useSyncExternalStore`. `useCommand` hands a command to the tree with a stable `start` reference, so it can go straight into handlers and dependency arrays.
 
 ## What's next
 
-In order, one at a time: an outbox for commands with idempotency keys; reconciliation.
+One thing left in this line of work: reconciliation — watching a value rather than the events that might have changed it, so the list of triggers does not exist and cannot go stale.
 
 ## Imports
 
