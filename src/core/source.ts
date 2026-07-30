@@ -48,6 +48,12 @@ export interface Source<T> {
      */
     require(within: number): () => void
     /**
+     * Put back an answer kept from a previous run, with the moment it originally
+     * arrived — so its age is honest and the usual rules decide what to do next.
+     * Ignored if anything is already held or in flight.
+     */
+    restore(value: T, at: number): void
+    /**
      * Ask now, watched or not. Resolves when the answer has landed in the cell.
      * A flight already under way is ridden rather than duplicated; `force` starts
      * a new one and disowns the old answer.
@@ -194,10 +200,17 @@ export function source<T>(load: () => Promise<T>, options: SourceOptions = {}): 
         }
     }
 
+    function restore(value: T, at: number): void {
+        if (inFlight !== null) return
+        if (heldOf(state.peek()) !== undefined) return
+        state.set(arrived(value, at))
+    }
+
     return {
         name,
         state,
         require,
+        restore,
         get demanded() {
             return state.demanded
         },

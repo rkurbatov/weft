@@ -355,20 +355,31 @@ export class Cell<T> implements Source, Consumer {
 }
 
 /** Watcher: leaf of the graph. Runs its body, then reruns it when what it read moves. */
+export interface WatchOptions {
+    /**
+     * Whether watching counts as asking. A cold watcher (`demand: false`) sees the
+     * changes that happen anyway but causes no work of its own — that is what
+     * persistence and logging want.
+     */
+    demand?: boolean
+}
+
 export class Watcher implements Consumer {
     state: State = DIRTY
     readonly sources = new Set<Source>()
     readonly observers = new Set<Consumer>()
     private disposed = false
     private readonly body: () => void
+    private readonly demanding: boolean
 
-    constructor(body: () => void) {
+    constructor(body: () => void, options: WatchOptions = {}) {
         this.body = body
+        this.demanding = options.demand ?? true
         this.run()
     }
 
     contribution(): number {
-        return this.disposed ? 0 : 1
+        return this.disposed || !this.demanding ? 0 : 1
     }
 
     stabilize(): void {
@@ -411,15 +422,19 @@ export function cell<T>(formula: () => T, options?: CellOptions<T>): Cell<T> {
     return new Cell(formula, options)
 }
 
-export function watch(body: () => void): () => void {
-    const w = new Watcher(body)
+export function watch(body: () => void, options?: WatchOptions): () => void {
+    const w = new Watcher(body, options)
     return () => w.dispose()
 }
 
 export type Readable<T> = Input<T> | Cell<T>
 
 /** Watch one cell; the listener sees only actual changes. */
-export function subscribe<T>(source: Readable<T>, listener: (value: T) => void): () => void {
+export function subscribe<T>(
+    source: Readable<T>,
+    listener: (value: T) => void,
+    options?: WatchOptions,
+): () => void {
     let first = true
     return watch(() => {
         const value = source.get()
@@ -428,5 +443,5 @@ export function subscribe<T>(source: Readable<T>, listener: (value: T) => void):
             return
         }
         untracked(() => listener(value))
-    })
+    }, options)
 }

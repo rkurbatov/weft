@@ -28,11 +28,15 @@ What a second press does is declared, not hand-rolled. `drop` (the default) make
 
 `fresh(feed, within)` ties the two together: a view of a source that holds a requirement for exactly as long as somebody watches it, so nothing has to be released by hand. In React that is `useSource(feed, { within: 200 })` — mounting is the requirement, unmounting withdraws it.
 
+**`src/core/keep.ts` — persistence.** Only stored cells are kept; a formula is recomputed, never restored. What is written carries the moment it arrived and a schema version, so an answer that survives a reload is honest about its age: within shelf life it is served as it stands and nothing is asked, past it the first demand refetches while the old value stays on screen. Another version is dropped unless a `migrate` rescues it; anything past `maxAge` is dropped; rubbish on disk is dropped rather than thrown. A refusal never overwrites a good answer. Watching is cold — persistence records what happens anyway and asks for nothing, so keeping a source does not make it fetch.
+
+The cold watch is a graph primitive: `watch(body, { demand: false })` sees the changes that occur anyway without counting as demand. Persistence, logging and devtools want exactly that.
+
 **`src/react/hooks.ts` — the seam,** deliberately thin. `useCell` subscribes a component to one value through `useSyncExternalStore`. `useCommand` hands a command to the tree with a stable `start` reference, so it can go straight into handlers and dependency arrays.
 
 ## What's next
 
-In order, one at a time: persistence of stored cells with age and schema version; an outbox for commands with idempotency keys; reconciliation.
+In order, one at a time: an outbox for commands with idempotency keys; reconciliation.
 
 ## Imports
 
