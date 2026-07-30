@@ -2,14 +2,26 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { columnName, columnNumber, parseRef, refName, spanRefs } from './address.ts'
 import { read, parse, evaluate, show, isError } from './formula.ts'
-import type { Lookup, Value } from './formula.ts'
+import * as dec from './dec.ts'
+import type { Dec } from './dec.ts'
+import type { CellError, Lookup, Value } from './formula.ts'
 import type { Ref } from './address.ts'
-import { sampleSheet, key } from './sheet.ts'
+import { sampleSheet, key } from './sample.ts'
 
-function sheetOf(cells: Record<string, Value>): Lookup {
+/** A sheet of literal cells: numbers written as text, like a person types them. */
+function sheetOf(cells: Record<string, string | CellError>): Lookup {
     return {
-        value: (ref: Ref) => cells[refName(ref)] ?? '',
+        value: (ref: Ref) => {
+            const raw = cells[refName(ref)]
+            if (raw === undefined) return ''
+            return typeof raw === 'string' ? (dec.fromText(raw) ?? raw) : raw
+        },
     }
+}
+
+/** What a formula shows, which is what a person compares. */
+function seen(text: string, cells: Lookup): string {
+    return show(read(text, cells))
 }
 
 test('columns count the way spreadsheets count', () => {
@@ -30,39 +42,39 @@ test('a span covers the rectangle, whichever corner you give first', () => {
 
 test('arithmetic, with the usual precedence', () => {
     const empty = sheetOf({})
-    assert.equal(read('=1 + 2 * 3', empty), 7)
-    assert.equal(read('=(1 + 2) * 3', empty), 9)
-    assert.equal(read('=2 ^ 3 ^ 2', empty), 512) // right to left
-    assert.equal(read('=-4 + 1', empty), -3)
-    assert.equal(read('=10 / 4', empty), 2.5)
+    assert.equal(seen('=1 + 2 * 3', empty), '7')
+    assert.equal(seen('=(1 + 2) * 3', empty), '9')
+    assert.equal(seen('=2 ^ 3 ^ 2', empty), '512') // right to left
+    assert.equal(seen('=-4 + 1', empty), '-3')
+    assert.equal(seen('=10 / 4', empty), '2.5')
 })
 
 test('a plain cell is a number if it looks like one, otherwise words', () => {
     const empty = sheetOf({})
-    assert.equal(read('42', empty), 42)
-    assert.equal(read('  7.5 ', empty), 7.5)
-    assert.equal(read('total', empty), 'total')
-    assert.equal(read('', empty), '')
+    assert.equal(seen('42', empty), '42')
+    assert.equal(seen('  7.5 ', empty), '7.5')
+    assert.equal(seen('total', empty), 'total')
+    assert.equal(seen('', empty), '')
 })
 
 test('references and ranges', () => {
-    const cells = sheetOf({ A1: 1, A2: 2, A3: 3, B1: 10 })
-    assert.equal(read('=A2', cells), 2)
-    assert.equal(read('=A1 + B1', cells), 11)
-    assert.equal(read('=SUM(A1:A3)', cells), 6)
-    assert.equal(read('=PROD(A1:A3)', cells), 6)
-    assert.equal(read('=AVG(A1:A3)', cells), 2)
-    assert.equal(read('=SUM(A1:A3, B1, 4)', cells), 20)
+    const cells = sheetOf({ A1: '1', A2: '2', A3: '3', B1: '10' })
+    assert.equal(seen('=A2', cells), '2')
+    assert.equal(seen('=A1 + B1', cells), '11')
+    assert.equal(seen('=SUM(A1:A3)', cells), '6')
+    assert.equal(seen('=PROD(A1:A3)', cells), '6')
+    assert.equal(seen('=AVG(A1:A3)', cells), '2')
+    assert.equal(seen('=SUM(A1:A3, B1, 4)', cells), '20')
 })
 
 test('empty and wordy cells count as zero', () => {
-    const cells = sheetOf({ A1: 1, A2: '', A3: 'note' })
-    assert.equal(read('=SUM(A1:A3)', cells), 1)
-    assert.equal(read('=A3 + 1', cells), 1)
+    const cells = sheetOf({ A1: '1', A2: '', A3: 'note' })
+    assert.equal(seen('=SUM(A1:A3)', cells), '1')
+    assert.equal(seen('=A3 + 1', cells), '1')
 })
 
 test('errors travel outward, and division by zero is one', () => {
-    const cells = sheetOf({ A1: { error: '#CYCLE!' }, A2: 5 })
+    const cells = sheetOf({ A1: { error: '#CYCLE!' }, A2: '5' })
     assert.deepEqual(read('=A1 + A2', cells), { error: '#CYCLE!' })
     assert.deepEqual(read('=SUM(A1:A2)', cells), { error: '#CYCLE!' })
     assert.deepEqual(read('=1/0', cells), { error: '#DIV/0!' })
@@ -72,25 +84,25 @@ test('errors travel outward, and division by zero is one', () => {
 })
 
 test('shown text is short and errors show their code', () => {
-    assert.equal(show(3), '3')
-    assert.equal(show(1 / 3), '0.333333')
+    assert.equal(show(dec.fromInt(3)), '3')
+    assert.equal(show(dec.div(dec.fromInt(1), dec.fromInt(3)) as Dec), '0.333333')
     assert.equal(show('note'), 'note')
     assert.equal(show({ error: '#REF!' }), '#REF!')
 })
 
 test('the wider set of functions', () => {
-    const cells = sheetOf({ A1: 4, A2: 9, A3: 'note', A4: '', B1: -3 })
-    assert.equal(read('=MIN(A1:A2)', cells), 4)
-    assert.equal(read('=MAX(A1:A2, 100)', cells), 100)
-    assert.equal(read('=COUNT(A1:A4)', cells), 2) // words and blanks do not count
-    assert.equal(read('=ABS(B1)', cells), 3)
-    assert.equal(read('=SQRT(A2)', cells), 3)
-    assert.equal(read('=MOD(A2, 4)', cells), 1)
-    assert.equal(read('=POW(A1, 3)', cells), 64)
-    assert.equal(read('=INT(10 / 3)', cells), 3)
-    assert.equal(read('=SIGN(B1)', cells), -1)
-    assert.equal(read('=ROUND(10 / 3, 2)', cells), 3.33)
-    assert.equal(read('=ROUND(10 / 3)', cells), 3)
+    const cells = sheetOf({ A1: '4', A2: '9', A3: 'note', A4: '', B1: '-3' })
+    assert.equal(seen('=MIN(A1:A2)', cells), '4')
+    assert.equal(seen('=MAX(A1:A2, 100)', cells), '100')
+    assert.equal(seen('=COUNT(A1:A4)', cells), '2') // words and blanks do not count
+    assert.equal(seen('=ABS(B1)', cells), '3')
+    assert.equal(seen('=SQRT(A2)', cells), '3')
+    assert.equal(seen('=MOD(A2, 4)', cells), '1')
+    assert.equal(seen('=POW(A1, 3)', cells), '64')
+    assert.equal(seen('=INT(10 / 3)', cells), '3')
+    assert.equal(seen('=SIGN(B1)', cells), '-1')
+    assert.equal(seen('=ROUND(10 / 3, 2)', cells), '3.33')
+    assert.equal(seen('=ROUND(10 / 3)', cells), '3')
 })
 
 test('a function given the wrong number of things says so', () => {
@@ -120,14 +132,14 @@ test('the sample sheet is a real chain, and it adds up', () => {
         values.set(at, value)
         return value
     }
-    assert.equal(resolve('D1'), 1 + 2 + 3)
-    assert.equal(resolve('D2'), 2 + 4 + 6)
-    assert.equal(resolve('F2'), 6 + 12)
-    assert.equal(resolve('L4'), 2) // SQRT(4)
-    assert.equal(resolve('M9'), 2) // 9 mod 7
+    assert.equal(show(resolve('D1')), '6')
+    assert.equal(show(resolve('D2')), '12')
+    assert.equal(show(resolve('F2')), '18')
+    assert.equal(show(resolve('L4')), '2') // SQRT(4)
+    assert.equal(show(resolve('M9')), '2') // 9 mod 7
     const rows = shape.rows - 1
     const total = resolve(key(shape.rows - 1, 0))
-    assert.equal(total, (rows * (rows + 1)) / 2)
+    assert.equal(show(total), String((rows * (rows + 1)) / 2))
     assert.equal(isError(total), false)
 })
 

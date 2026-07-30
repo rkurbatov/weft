@@ -44,6 +44,16 @@ The line of work this repository set out to do is done: graph, commands, familie
 
 What is not done, and should be said plainly: none of this has met a real application yet. The next honest step is one domain of a live product moved over whole — not a demo — and the numbers that come out of it. After that, the parts a library cannot reach: purity by construction, a verdict before the program runs, and incremental recomputation inside a formula rather than around it.
 
+## What the library asks of values
+
+The graph does not know what is in a cell, and does not want to. What it does rely on, stated plainly:
+
+**A formula is pure and settled.** Given the same inputs it gives the same result, and it reaches for nothing else — no clock, no random, no fetch. A formula that reads the time is a formula whose value is wrong the moment it is cached.
+
+**Equality is a real equivalence relation.** Propagation stops where a recomputed value equals the old one, so `equal` decides what the rest of the system believes. The default is `Object.is`, which is right for numbers, strings and shared objects, and wrong for a value rebuilt on every run — pass an `equal` that compares content, or the wave never dies. (`0` and `-0` are different under `Object.is`; a formula flipping between them wakes watchers for nothing.)
+
+**Anything to be recomputed in pieces must be exact and associative in its own type.** This one is not needed yet — whole formulas are recomputed whole — but it is the price of the next step. A block-wise total is only the same number as a left-to-right total if addition is associative, and floating point's is not. That is why the demo carries its own decimal arithmetic (`demo/common/dec.ts`, a count of millionths in an integer), and why in Warp the decimal types are the floor while binary floats are for physics rather than for anything the engine reassembles.
+
 ## Two spreadsheets
 
 `demo/` holds the same spreadsheet twice: `spreadsheet/` keeps its state by hand, `spreadsheet-weft/` keeps it on this library. The grid, the formula language, the sample sheet and the instrumentation are shared in `demo/common/`, so what differs is only who keeps the values.
@@ -53,11 +63,13 @@ The hand-written one needs 208 lines for that: a store of texts, what each cell 
 Both pass the same seven questions (`store.test.ts`, `sheet.test.ts`) — the same values, the same cells told, the same recovery when a loop is cut. What differs is the bill. On a sheet of 26,000 cells with 780 on screen, measured by `pnpm demo:bench`:
 
 ```
-classic   build 636ms | edit A1 16.4ms | recomputed 242 | cells told 53
-on weft   lay out 39ms + first look 16ms (780 cells) | edit A1 3.4ms | recomputed 84 | cells told 53
+classic   build 192ms | edit A1 8.1ms | recomputed 242 | cells told 53
+on weft   lay out 11ms + first look 12ms (780 cells) | edit A1 0.8ms | recomputed 84 | cells told 53
 ```
 
-At 130,000 cells the gap widens: 3.2s against 0.5s to start, 76ms against 5ms for one edit. The reason is not a faster engine — it is that the hand-written sheet works out every cell whether anyone is looking or not, while demand decides here. The same 53 cells are told in both, which is the point: same behaviour, different price, much less written down.
+Ten times cheaper per edit, and the gap widens with the sheet: at 130,000 cells the hand-written one spends seconds getting started and tens of milliseconds on a single change. The reason is not a faster engine — it is that the hand-written sheet works out every cell whether anyone is looking or not, while demand decides here. The same 53 cells are told in both, which is the point: same behaviour, different price, much less written down.
+
+Run it yourself rather than trusting the figures — they are one machine's, and the ratios are what matter.
 
 ## One package
 

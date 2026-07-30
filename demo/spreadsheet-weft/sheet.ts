@@ -7,9 +7,9 @@
 import { batch, family, input, untracked } from '#weft'
 import type { Cell, Input } from '#weft'
 import { refName } from '../common/address.ts'
-import { plan, run, show } from '../common/formula.ts'
+import { plan, run, same, show } from '../common/formula.ts'
 import type { Value } from '../common/formula.ts'
-import type { Sheet as Contents } from '../common/sheet.ts'
+import type { Contents } from '../common/sample.ts'
 
 const LOOP: Value = { error: '#CYCLE!' }
 
@@ -43,7 +43,9 @@ export function createSheet(initial: Contents): Sheet {
             recomputed++
             return run(meaning(at).get(), { value: ref => valueAt(refName(ref)) })
         },
-        { name: 'value', max: 500_000 },
+        // Equality by value, not by identity: a complaint is a fresh object each
+        // time, and without this every recomputation would look like a change.
+        { name: 'value', max: 500_000, equal: same },
     )
 
     /**

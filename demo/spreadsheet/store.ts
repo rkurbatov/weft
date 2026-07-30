@@ -6,7 +6,7 @@
 import { refName } from '../common/address.ts'
 import { read, show } from '../common/formula.ts'
 import type { Value } from '../common/formula.ts'
-import type { Sheet as Contents } from '../common/sheet.ts'
+import type { Contents } from '../common/sample.ts'
 import { refsOf } from './depends.ts'
 
 export interface Sheet {

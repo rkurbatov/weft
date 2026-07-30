@@ -4,14 +4,17 @@
 
 import { parseRef, refName, spanRefs } from './address.ts'
 import type { Ref } from './address.ts'
+import * as dec from './dec.ts'
+import type { Dec } from './dec.ts'
 
-export type ErrorCode = '#SYNTAX!' | '#REF!' | '#NAME?' | '#DIV/0!' | '#CYCLE!' | '#VALUE!'
+export type ErrorCode = '#SYNTAX!' | '#REF!' | '#NAME?' | '#DIV/0!' | '#CYCLE!' | '#VALUE!' | '#NUM!'
 
 export interface CellError {
     readonly error: ErrorCode
 }
 
-export type Value = number | string | CellError
+/** A cell holds an exact decimal, some words, or a complaint. */
+export type Value = Dec | string | CellError
 
 export function isError(value: Value): value is CellError {
     return typeof value === 'object' && value !== null && 'error' in value
@@ -23,17 +26,25 @@ export function fail(error: ErrorCode): CellError {
 
 export function show(value: Value): string {
     if (isError(value)) return value.error
-    if (typeof value === 'number') {
-        if (!Number.isFinite(value)) return '#DIV/0!'
-        return Number.isInteger(value) ? String(value) : String(Math.round(value * 1e6) / 1e6)
-    }
+    if (typeof value === 'number') return dec.toText(value)
     return value
+}
+
+/** Two values are the same value. Numbers are counts of millionths, so this is exact. */
+export function same(a: Value, b: Value): boolean {
+    if (isError(a) || isError(b)) return isError(a) && isError(b) && a.error === b.error
+    return a === b
+}
+
+/** Guard a result against running off the end of exact integers. */
+function safe(units: number): Value {
+    return dec.isSafe(units) ? (units as Dec) : fail('#NUM!')
 }
 
 // -- syntax ----------------------------------------------------------------
 
 export type Node =
-    | { readonly kind: 'number'; readonly value: number }
+    | { readonly kind: 'number'; readonly value: Dec }
     | { readonly kind: 'ref'; readonly ref: Ref }
     | { readonly kind: 'range'; readonly from: Ref; readonly to: Ref }
     | { readonly kind: 'unary'; readonly op: '-' | '+'; readonly of: Node }
@@ -42,7 +53,7 @@ export type Node =
     | { readonly kind: 'bad'; readonly error: ErrorCode }
 
 type Token =
-    | { kind: 'number'; value: number }
+    | { kind: 'number'; value: Dec }
     | { kind: 'word'; value: string }
     | { kind: 'punct'; value: string }
 
@@ -58,8 +69,8 @@ function tokenize(text: string): Token[] | undefined {
         if (ch >= '0' && ch <= '9') {
             let j = i
             while (j < text.length && /[0-9.]/.test(text[j] as string)) j++
-            const value = Number(text.slice(i, j))
-            if (Number.isNaN(value)) return undefined
+            const value = dec.fromText(text.slice(i, j))
+            if (value === undefined) return undefined
             tokens.push({ kind: 'number', value })
             i = j
             continue
@@ -221,12 +232,11 @@ export interface Lookup {
     value(ref: Ref): Value
 }
 
-function asNumber(value: Value): number | CellError {
+/** Text counts as zero, as in a spreadsheet; a complaint stays a complaint. */
+function asDec(value: Value): Dec | CellError {
     if (isError(value)) return value
     if (typeof value === 'number') return value
-    if (value.trim() === '') return 0
-    const n = Number(value)
-    return Number.isNaN(n) ? 0 : n // text counts as zero, as in a spreadsheet
+    return dec.fromText(value) ?? dec.ZERO
 }
 
 /** The raw values an argument stands for: a range spreads out, anything else is itself. */
@@ -247,59 +257,76 @@ function gather(node: Node, lookup: Lookup): Value[] | CellError {
 /** A cell counts as a number when it holds one, or holds text that reads as one. */
 function counts(value: Value): boolean {
     if (typeof value === 'number') return true
-    if (typeof value !== 'string' || value.trim() === '') return false
-    return !Number.isNaN(Number(value))
+    return typeof value === 'string' && dec.fromText(value) !== undefined
 }
 
-function numbersOf(values: Value[]): number[] {
-    const numbers: number[] = []
+function numbersOf(values: Value[]): Dec[] {
+    const numbers: Dec[] = []
     for (const value of values) {
-        const n = asNumber(value)
+        const n = asDec(value)
         if (typeof n === 'number') numbers.push(n)
     }
     return numbers
 }
 
-function callFunction(name: string, values: Value[], raw: Value[]): Value {
+function total(numbers: Dec[]): Dec {
+    let sum = dec.ZERO
+    for (const n of numbers) sum = dec.add(sum, n)
+    return sum
+}
+
+function power(base: Dec, exponent: Dec): Value {
+    const whole = dec.toFloat(exponent)
+    if (Number.isInteger(whole) && Math.abs(whole) <= 32) {
+        let result = dec.fromInt(1)
+        for (let i = 0; i < Math.abs(whole); i++) result = dec.mul(result, base)
+        if (whole >= 0) return safe(result)
+        const inverted = dec.div(dec.fromInt(1), result)
+        return inverted === undefined ? fail('#DIV/0!') : inverted
+    }
+    return dec.fromFloat(dec.toFloat(base) ** whole)
+}
+
+function callFunction(name: string, values: Value[]): Value {
     const numbers = numbersOf(values)
+    const one = numbers[0] as Dec
+    const two = numbers[1] as Dec
     switch (name) {
         case 'SUM':
-            return numbers.reduce((a, b) => a + b, 0)
-        case 'PROD':
-            return numbers.reduce((a, b) => a * b, 1)
-        case 'AVG':
-            return numbers.length === 0
-                ? fail('#DIV/0!')
-                : numbers.reduce((a, b) => a + b, 0) / numbers.length
+            return safe(total(numbers))
+        case 'PROD': {
+            let product = dec.fromInt(1)
+            for (const n of numbers) product = dec.mul(product, n)
+            return safe(product)
+        }
+        case 'AVG': {
+            if (numbers.length === 0) return fail('#DIV/0!')
+            const mean = dec.div(total(numbers), dec.fromInt(numbers.length))
+            return mean ?? fail('#DIV/0!')
+        }
         case 'MIN':
-            return numbers.length === 0 ? 0 : Math.min(...numbers)
+            return numbers.length === 0 ? dec.ZERO : numbers.reduce((a, b) => (dec.cmp(a, b) <= 0 ? a : b))
         case 'MAX':
-            return numbers.length === 0 ? 0 : Math.max(...numbers)
+            return numbers.length === 0 ? dec.ZERO : numbers.reduce((a, b) => (dec.cmp(a, b) >= 0 ? a : b))
         case 'COUNT':
-            return raw.filter(counts).length
+            return dec.fromInt(values.filter(counts).length)
         case 'ABS':
-            return numbers.length === 1 ? Math.abs(numbers[0] as number) : fail('#VALUE!')
+            return numbers.length === 1 ? dec.abs(one) : fail('#VALUE!')
         case 'INT':
-            return numbers.length === 1 ? Math.trunc(numbers[0] as number) : fail('#VALUE!')
+            return numbers.length === 1 ? dec.trunc(one) : fail('#VALUE!')
         case 'SIGN':
-            return numbers.length === 1 ? Math.sign(numbers[0] as number) : fail('#VALUE!')
-        case 'SQRT': {
+            return numbers.length === 1 ? dec.sign(one) : fail('#VALUE!')
+        case 'SQRT':
             if (numbers.length !== 1) return fail('#VALUE!')
-            const n = numbers[0] as number
-            return n < 0 ? fail('#VALUE!') : Math.sqrt(n)
-        }
-        case 'MOD': {
+            return one < 0 ? fail('#VALUE!') : dec.fromFloat(Math.sqrt(dec.toFloat(one)))
+        case 'MOD':
             if (numbers.length !== 2) return fail('#VALUE!')
-            const divisor = numbers[1] as number
-            return divisor === 0 ? fail('#DIV/0!') : (numbers[0] as number) % divisor
-        }
+            return dec.rem(one, two) ?? fail('#DIV/0!')
         case 'POW':
-            return numbers.length === 2 ? (numbers[0] as number) ** (numbers[1] as number) : fail('#VALUE!')
+            return numbers.length === 2 ? power(one, two) : fail('#VALUE!')
         case 'ROUND': {
             if (numbers.length === 0 || numbers.length > 2) return fail('#VALUE!')
-            const digits = numbers.length === 2 ? Math.trunc(numbers[1] as number) : 0
-            const scale = 10 ** digits
-            return Math.round((numbers[0] as number) * scale) / scale
+            return dec.round(one, numbers.length === 2 ? dec.toFloat(two) : 0)
         }
         default:
             return fail('#NAME?')
@@ -317,26 +344,26 @@ export function evaluate(node: Node, lookup: Lookup): Value {
         case 'range':
             return fail('#SYNTAX!') // a range only means something inside a function
         case 'unary': {
-            const of = asNumber(evaluate(node.of, lookup))
+            const of = asDec(evaluate(node.of, lookup))
             if (typeof of !== 'number') return of
-            return node.op === '-' ? -of : of
+            return node.op === '-' ? dec.neg(of) : of
         }
         case 'binary': {
-            const left = asNumber(evaluate(node.left, lookup))
+            const left = asDec(evaluate(node.left, lookup))
             if (typeof left !== 'number') return left
-            const right = asNumber(evaluate(node.right, lookup))
+            const right = asDec(evaluate(node.right, lookup))
             if (typeof right !== 'number') return right
             switch (node.op) {
                 case '+':
-                    return left + right
+                    return safe(dec.add(left, right))
                 case '-':
-                    return left - right
+                    return safe(dec.sub(left, right))
                 case '*':
-                    return left * right
+                    return safe(dec.mul(left, right))
                 case '/':
-                    return right === 0 ? fail('#DIV/0!') : left / right
+                    return dec.div(left, right) ?? fail('#DIV/0!')
                 case '^':
-                    return left ** right
+                    return power(left, right)
             }
             return fail('#SYNTAX!')
         }
@@ -347,7 +374,7 @@ export function evaluate(node: Node, lookup: Lookup): Value {
                 if (!Array.isArray(some)) return some
                 values.push(...some)
             }
-            return callFunction(node.name, values, values)
+            return callFunction(node.name, values)
         }
     }
 }
@@ -362,8 +389,7 @@ export function plan(text: string): Plan {
     const body = text.trim()
     if (body.startsWith('=')) return { kind: 'formula', node: parse(body.slice(1)) }
     if (body === '') return { kind: 'plain', value: '' }
-    const n = Number(body)
-    return { kind: 'plain', value: Number.isNaN(n) ? body : n }
+    return { kind: 'plain', value: dec.fromText(body) ?? body }
 }
 
 /** Plan -> value. This is the part that reads other cells. */

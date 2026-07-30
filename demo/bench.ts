@@ -1,5 +1,5 @@
 import { subscribe } from '#weft'
-import { sampleSheet, sizeOf, key } from './common/sheet.ts'
+import { sampleSheet, sizeOf, key } from './common/sample.ts'
 import { createSheet as classic } from './spreadsheet/store.ts'
 import { createSheet as onWeft } from './spreadsheet-weft/sheet.ts'
 

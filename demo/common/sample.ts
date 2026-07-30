@@ -17,7 +17,8 @@ export const BLOCK = 100
 
 export const SHEET: SheetShape = { rows: 1000, cols: 26 }
 
-export type Sheet = Map<string, string>
+/** The contents of a sheet: what a person typed, cell by cell. */
+export type Contents = Map<string, string>
 
 export function key(row: number, col: number): string {
     return `${columnName(col)}${row + 1}`
@@ -34,8 +35,8 @@ export function shapeFromLocation(fallback: SheetShape = SHEET): SheetShape {
     return { rows: number('rows', fallback.rows, 20_000), cols: number('cols', fallback.cols, 26) }
 }
 
-export function sampleSheet(shape: SheetShape = SHEET): Sheet {
-    const cells: Sheet = new Map()
+export function sampleSheet(shape: SheetShape = SHEET): Contents {
+    const cells: Contents = new Map()
     const last = shape.rows - 1
 
     for (let row = 0; row < last; row++) {

@@ -5,8 +5,8 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { columnName } from './address.ts'
-import { SHEET, key } from './sheet.ts'
-import type { SheetShape } from './sheet.ts'
+import { SHEET, key } from './sample.ts'
+import type { SheetShape } from './sample.ts'
 import { useCounters, resetCounters } from './stats.ts'
 
 export interface CellProps {

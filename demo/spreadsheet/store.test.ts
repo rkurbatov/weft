@@ -6,7 +6,7 @@ import assert from 'node:assert/strict'
 import { createSheet } from './store.ts'
 import { refsOf } from './depends.ts'
 import { refName } from '../common/address.ts'
-import { sampleSheet, key } from '../common/sheet.ts'
+import { sampleSheet, key } from '../common/sample.ts'
 
 function small() {
     return createSheet(
