@@ -8,17 +8,25 @@
     "node": ">=26.0"
   },
   "scripts": {
-    "test": "node --test test/*.test.ts",
-    "check": "tsc --noEmit"
+    "test": "node --test test/*.test.ts demo/common/*.test.ts",
+    "check": "tsc --noEmit",
+    "demo": "vite",
+    "demo:build": "vite build"
   },
   "devDependencies": {
     "@types/node": "^26.1.2",
     "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.5",
     "react": "^19.2.8",
-    "typescript": "^7.0.2"
+    "react-dom": "^19.2.8",
+    "typescript": "^7.0.2",
+    "vite": "^8.2.0"
   },
   "imports": {
     "#core/*": "./src/core/*",
-    "#react/*": "./src/react/*"
+    "#react/*": "./src/react/*",
+    "#weft": "./src/index.ts",
+    "#weft/react": "./src/react/hooks.ts"
   }
 }

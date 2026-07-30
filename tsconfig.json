@@ -10,8 +10,15 @@
     "verbatimModuleSyntax": true,
     "noEmit": true,
     "skipLibCheck": true,
-    "types": ["node"],
-    "jsx": "react-jsx"
+    "jsx": "react-jsx",
+    "types": [
+      "node"
+    ]
   },
-  "include": ["src", "test"]
+  "include": [
+    "src",
+    "test",
+    "demo",
+    "vite.config.ts"
+  ]
 }
