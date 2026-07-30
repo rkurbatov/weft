@@ -4,7 +4,7 @@ import { columnName, columnNumber, parseRef, refName, spanRefs } from './address
 import { read, parse, evaluate, referencesOfText, show, isError } from './formula.ts'
 import type { Lookup, Value } from './formula.ts'
 import type { Ref } from './address.ts'
-import { sampleSheet, SHEET, key } from './sheet.ts'
+import { sampleSheet, key } from './sheet.ts'
 
 function sheetOf(cells: Record<string, Value>): Lookup {
     return {
@@ -84,12 +84,37 @@ test('shown text is short and errors show their code', () => {
     assert.equal(show({ error: '#REF!' }), '#REF!')
 })
 
+test('the wider set of functions', () => {
+    const cells = sheetOf({ A1: 4, A2: 9, A3: 'note', A4: '', B1: -3 })
+    assert.equal(read('=MIN(A1:A2)', cells), 4)
+    assert.equal(read('=MAX(A1:A2, 100)', cells), 100)
+    assert.equal(read('=COUNT(A1:A4)', cells), 2) // words and blanks do not count
+    assert.equal(read('=ABS(B1)', cells), 3)
+    assert.equal(read('=SQRT(A2)', cells), 3)
+    assert.equal(read('=MOD(A2, 4)', cells), 1)
+    assert.equal(read('=POW(A1, 3)', cells), 64)
+    assert.equal(read('=INT(10 / 3)', cells), 3)
+    assert.equal(read('=SIGN(B1)', cells), -1)
+    assert.equal(read('=ROUND(10 / 3, 2)', cells), 3.33)
+    assert.equal(read('=ROUND(10 / 3)', cells), 3)
+})
+
+test('a function given the wrong number of things says so', () => {
+    const empty = sheetOf({})
+    assert.deepEqual(read('=SQRT(1, 2)', empty), { error: '#VALUE!' })
+    assert.deepEqual(read('=SQRT(-1)', empty), { error: '#VALUE!' })
+    assert.deepEqual(read('=MOD(1)', empty), { error: '#VALUE!' })
+    assert.deepEqual(read('=MOD(1, 0)', empty), { error: '#DIV/0!' })
+})
+
 test('the sample sheet is a real chain, and it adds up', () => {
-    const cells = sampleSheet()
+    const shape = { rows: 40, cols: 26 }
+    const cells = sampleSheet(shape)
     assert.equal(cells.get('A1'), '1')
     assert.equal(cells.get('B1'), '=A1 * 2')
     assert.equal(cells.get('F2'), '=F1 + D2')
-    assert.equal(cells.get(key(SHEET.rows - 1, 0)), `=SUM(A1:A${SHEET.rows - 1})`)
+    assert.equal(cells.get('Z1'), '=Y1 + A1')
+    assert.equal(cells.get(key(shape.rows - 1, 0)), `=SUM(A1:A${shape.rows - 1})`)
 
     // Work the whole sheet out by hand, the slow way, and check a few answers.
     const values = new Map<string, Value>()
@@ -104,8 +129,10 @@ test('the sample sheet is a real chain, and it adds up', () => {
     assert.equal(resolve('D1'), 1 + 2 + 3)
     assert.equal(resolve('D2'), 2 + 4 + 6)
     assert.equal(resolve('F2'), 6 + 12)
-    const total = resolve(key(SHEET.rows - 1, 0))
-    const rows = SHEET.rows - 1
+    assert.equal(resolve('L4'), 2) // SQRT(4)
+    assert.equal(resolve('M9'), 2) // 9 mod 7
+    const rows = shape.rows - 1
+    const total = resolve(key(shape.rows - 1, 0))
     assert.equal(total, (rows * (rows + 1)) / 2)
     assert.equal(isError(total), false)
 })

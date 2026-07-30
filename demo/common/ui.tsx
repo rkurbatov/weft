@@ -23,7 +23,7 @@ export interface GridProps {
     readonly window?: number
 }
 
-export function Grid({ shape = SHEET, cell: CellOf, window = 60 }: GridProps): ReactNode {
+export function Grid({ shape = SHEET, cell: CellOf, window = 30 }: GridProps): ReactNode {
     const [from, setFrom] = useState(0)
     const rows = Math.min(window, shape.rows - from)
 

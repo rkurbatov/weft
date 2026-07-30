@@ -8,7 +8,7 @@
     "node": ">=26.0"
   },
   "scripts": {
-    "test": "node --test test/*.test.ts demo/common/*.test.ts",
+    "test": "node --test \"test/*.test.ts\" \"demo/**/*.test.ts\"",
     "check": "tsc --noEmit",
     "demo": "vite",
     "demo:build": "vite build"

@@ -5,7 +5,7 @@
 import { parseRef, refName, spanRefs } from './address.ts'
 import type { Ref } from './address.ts'
 
-export type ErrorCode = '#SYNTAX!' | '#REF!' | '#NAME?' | '#DIV/0!' | '#CYCLE!'
+export type ErrorCode = '#SYNTAX!' | '#REF!' | '#NAME?' | '#DIV/0!' | '#CYCLE!' | '#VALUE!'
 
 export interface CellError {
     readonly error: ErrorCode
@@ -111,7 +111,11 @@ class Reader {
     }
 }
 
-const FUNCTIONS = new Set(['SUM', 'PROD', 'AVG'])
+const OVER_MANY = new Set(['SUM', 'PROD', 'AVG', 'MIN', 'MAX', 'COUNT'])
+const OVER_ONE = new Set(['ABS', 'SQRT', 'INT', 'SIGN'])
+const OVER_TWO = new Set(['MOD', 'POW'])
+// ROUND takes one or two: the number, and how many digits to keep.
+const FUNCTIONS = new Set([...OVER_MANY, ...OVER_ONE, ...OVER_TWO, 'ROUND'])
 
 function parseExpr(reader: Reader): Node {
     let left = parseTerm(reader)
@@ -225,18 +229,81 @@ function asNumber(value: Value): number | CellError {
     return Number.isNaN(n) ? 0 : n // text counts as zero, as in a spreadsheet
 }
 
-function gather(node: Node, lookup: Lookup): number[] | CellError {
+/** The raw values an argument stands for: a range spreads out, anything else is itself. */
+function gather(node: Node, lookup: Lookup): Value[] | CellError {
     if (node.kind === 'range') {
-        const numbers: number[] = []
+        const values: Value[] = []
         for (const ref of spanRefs(node.from, node.to)) {
-            const value = asNumber(lookup.value(ref))
-            if (typeof value !== 'number') return value
-            numbers.push(value)
+            const value = lookup.value(ref)
+            if (isError(value)) return value
+            values.push(value)
         }
-        return numbers
+        return values
     }
-    const value = asNumber(evaluate(node, lookup))
-    return typeof value === 'number' ? [value] : value
+    const value = evaluate(node, lookup)
+    return isError(value) ? value : [value]
+}
+
+/** A cell counts as a number when it holds one, or holds text that reads as one. */
+function counts(value: Value): boolean {
+    if (typeof value === 'number') return true
+    if (typeof value !== 'string' || value.trim() === '') return false
+    return !Number.isNaN(Number(value))
+}
+
+function numbersOf(values: Value[]): number[] {
+    const numbers: number[] = []
+    for (const value of values) {
+        const n = asNumber(value)
+        if (typeof n === 'number') numbers.push(n)
+    }
+    return numbers
+}
+
+function callFunction(name: string, values: Value[], raw: Value[]): Value {
+    const numbers = numbersOf(values)
+    switch (name) {
+        case 'SUM':
+            return numbers.reduce((a, b) => a + b, 0)
+        case 'PROD':
+            return numbers.reduce((a, b) => a * b, 1)
+        case 'AVG':
+            return numbers.length === 0
+                ? fail('#DIV/0!')
+                : numbers.reduce((a, b) => a + b, 0) / numbers.length
+        case 'MIN':
+            return numbers.length === 0 ? 0 : Math.min(...numbers)
+        case 'MAX':
+            return numbers.length === 0 ? 0 : Math.max(...numbers)
+        case 'COUNT':
+            return raw.filter(counts).length
+        case 'ABS':
+            return numbers.length === 1 ? Math.abs(numbers[0] as number) : fail('#VALUE!')
+        case 'INT':
+            return numbers.length === 1 ? Math.trunc(numbers[0] as number) : fail('#VALUE!')
+        case 'SIGN':
+            return numbers.length === 1 ? Math.sign(numbers[0] as number) : fail('#VALUE!')
+        case 'SQRT': {
+            if (numbers.length !== 1) return fail('#VALUE!')
+            const n = numbers[0] as number
+            return n < 0 ? fail('#VALUE!') : Math.sqrt(n)
+        }
+        case 'MOD': {
+            if (numbers.length !== 2) return fail('#VALUE!')
+            const divisor = numbers[1] as number
+            return divisor === 0 ? fail('#DIV/0!') : (numbers[0] as number) % divisor
+        }
+        case 'POW':
+            return numbers.length === 2 ? (numbers[0] as number) ** (numbers[1] as number) : fail('#VALUE!')
+        case 'ROUND': {
+            if (numbers.length === 0 || numbers.length > 2) return fail('#VALUE!')
+            const digits = numbers.length === 2 ? Math.trunc(numbers[1] as number) : 0
+            const scale = 10 ** digits
+            return Math.round((numbers[0] as number) * scale) / scale
+        }
+        default:
+            return fail('#NAME?')
+    }
 }
 
 export function evaluate(node: Node, lookup: Lookup): Value {
@@ -274,22 +341,13 @@ export function evaluate(node: Node, lookup: Lookup): Value {
             return fail('#SYNTAX!')
         }
         case 'call': {
-            const numbers: number[] = []
+            const values: Value[] = []
             for (const arg of node.args) {
                 const some = gather(arg, lookup)
                 if (!Array.isArray(some)) return some
-                numbers.push(...some)
+                values.push(...some)
             }
-            switch (node.name) {
-                case 'SUM':
-                    return numbers.reduce((a, b) => a + b, 0)
-                case 'PROD':
-                    return numbers.reduce((a, b) => a * b, 1)
-                case 'AVG':
-                    return numbers.length === 0 ? fail('#DIV/0!') : numbers.reduce((a, b) => a + b, 0) / numbers.length
-                default:
-                    return fail('#NAME?')
-            }
+            return callFunction(node.name, values, values)
         }
     }
 }
