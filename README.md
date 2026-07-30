@@ -2,7 +2,7 @@
 
 The weft woven across Warp's warp: a live-state layer — a cell graph that lives outside the React tree, delivery owned by sources, requirements stated from above. A TypeScript library that runs alongside whatever you already have; Redux can stay switched on while domains move over one at a time.
 
-The rule everything else follows from: **store only what came from outside**. Anything computable is a formula, and its dependencies are written once — inside it. The test for a broken model: if you ever need the word *invalidate*, some dependency is written down twice.
+The rule everything else follows from: **store only what came from outside**. Anything computable is a formula, and its dependencies are written once — inside it. The test for a broken model: if you ever need the word _invalidate_, some dependency is written down twice.
 
 ## What's here
 
@@ -12,7 +12,7 @@ Propagation is pull-based over three states. A write marks its direct consumers 
 
 Tested properties: a formula nobody reads is never run; a diamond recomputes once, not twice; a watcher never sees a half-updated picture; the branch a conditional didn't take is not a dependency; a write from inside a watcher settles in the same round.
 
-**`src/core/command.ts` — commands.** The only way anything reaches the world. A handle gives you the start (`run`), the wait (it returns a promise), and the observable state — idle, running, done, failed, with timestamps. `pending`, `result` and `error` are ordinary cells, so a formula may depend on them: a button greys out because its own condition reads `pending`, not because someone set a flag next to it. Failure is a state *and* a rejected promise, so the caller can handle it on the spot as well.
+**`src/core/command.ts` — commands.** The only way anything reaches the world. A handle gives you the start (`run`), the wait (it returns a promise), and the observable state — idle, running, done, failed, with timestamps. `pending`, `result` and `error` are ordinary cells, so a formula may depend on them: a button greys out because its own condition reads `pending`, not because someone set a flag next to it. Failure is a state _and_ a rejected promise, so the caller can handle it on the spot as well.
 
 What a second press does is declared, not hand-rolled. `drop` (the default) makes the second press ride the first promise and runs the body once — that is double-submit protection. `restart` is for search and suggestions: the older attempt loses its claim on the state through a generation counter, so its answer is ignored rather than applied late over the newer one.
 
@@ -91,10 +91,13 @@ Anything crossing a directory goes through Node's own subpath imports, declared 
 ## Running it
 
 ```
-pnpm test         # library and demo tests in one run
-pnpm check        # types, including the Vite config
-pnpm demo         # the two spreadsheets, side by side
-pnpm demo:build
+pnpm test          # library and demo tests in one run
+pnpm check         # types, including the Vite config
+pnpm lint          # oxlint
+pnpm format        # oxfmt, in place (format:check to only look)
+pnpm demo          # the two spreadsheets, side by side
+pnpm demo:build    # then demo:preview to serve what was built
+pnpm demo:bench    # the two sheets measured against each other, without React
 ```
 
 Node 26 strips types on its own, so there is no build step for the library or its tests; Vite is only there for the demos.

@@ -1,23 +1,29 @@
 <!doctype html>
 <html lang="en">
-<head>
+  <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>weft demo — two spreadsheets</title>
     <link rel="stylesheet" href="./common/style.css" />
-</head>
-<body>
-<main class="menu">
-    <h1>Two spreadsheets, one sheet</h1>
-    <p>
+  </head>
+  <body>
+    <main class="menu">
+      <h1>Two spreadsheets, one sheet</h1>
+      <p>
         The same grid, the same formula language, the same instrumentation. What differs is who
         keeps the values and who decides what has to be redrawn.
-    </p>
-    <ul>
-        <li><a href="./spreadsheet/">Classic</a> — state by hand: a dependency graph, a topological order, invalidation.</li>
-        <li><a href="./spreadsheet-weft/">On weft</a> — a cell is an input, a value is a formula; dependencies come from reading.</li>
-    </ul>
-    <p>Open them in two tabs and edit A1 in both.</p>
-</main>
-</body>
+      </p>
+      <ul>
+        <li>
+          <a href="./spreadsheet/">Classic</a> — state by hand: a dependency graph, a topological
+          order, invalidation.
+        </li>
+        <li>
+          <a href="./spreadsheet-weft/">On weft</a> — a cell is an input, a value is a formula;
+          dependencies come from reading.
+        </li>
+      </ul>
+      <p>Open them in two tabs and edit A1 in both.</p>
+    </main>
+  </body>
 </html>

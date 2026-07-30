@@ -11,14 +11,7 @@
     "noEmit": true,
     "skipLibCheck": true,
     "jsx": "react-jsx",
-    "types": [
-      "node"
-    ]
+    "types": ["node"]
   },
-  "include": [
-    "src",
-    "test",
-    "demo",
-    "vite.config.ts"
-  ]
+  "include": ["src", "test", "demo", "vite.config.ts"]
 }
