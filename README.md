@@ -71,6 +71,24 @@ Ten times cheaper per edit, and the gap widens with the sheet: at 130,000 cells 
 
 Run it yourself rather than trusting the figures — they are one machine's, and the ratios are what matter.
 
+## Blocks
+
+`demo/spreadsheet-weft/blocks.ts` answers a long total from a tree of partial sums rather than by reading every cell: blocks of 32, blocks of blocks above them, each partial an ordinary cell. One edit then touches one partial per level and the total. Trees run both ways — down a column and along a row — and a rectangle is cut into lines along its longer side, since that is the side a tree pays on.
+
+It is worth building here and nowhere else. Each partial is a cell, so what depends on what — and what has to be redone — is the graph's business; the hand-written sheet could keep the same tree, but would have to invalidate it level by level, by hand. And it is only correct because the arithmetic underneath is exact: a total assembled from blocks is the same number as a total added left to right, which floating point would not give.
+
+Measured with the totals row on screen, so the column sums are live (`pnpm demo:bench 15000`, 390,000 cells):
+
+```
+classic   edit A1 195ms | recomputed 242
+on weft   edit A1 425ms | blocks off
+on weft   edit A1   8ms | blocks on
+```
+
+The middle line is the honest one: without blocks this arrangement is _worse_ than the hand-written sheet, because each of the 26 column sums reads its whole column through the graph rather than through a plain array. With blocks the same answer costs a few dozen small sums. Turning them off (`createSheet(cells, { blocks: false })`) is what the middle line measures.
+
+Chasing that middle line also found a real fault in the library: `family` reordered its LRU on every read — a map delete and insert per lookup — which is pure cost while the ceiling is far away. Reordering now happens only as the ceiling comes into sight, and the same scene went from 95ms to 16ms.
+
 ## One package
 
 The library, its tests and the demos are a single package with one `tsconfig.json` and one set of scripts. Nothing crosses a package boundary, so nothing has to be kept in step: no workspace, no alias table, no second compiler config.

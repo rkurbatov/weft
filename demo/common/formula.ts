@@ -239,13 +239,28 @@ export function parse(body: string): Node {
 
 // -- meaning ---------------------------------------------------------------
 
+/** Functions that can be answered block by block, because they fold. */
+export type FoldName = "SUM" | "PROD" | "MIN" | "MAX" | "COUNT";
+
 export interface Lookup {
   /** The value of another cell. Whoever implements this decides how dependencies are noticed. */
   value(ref: Ref): Value;
+  /**
+   * A whole range at once, if the host can do better than cell by cell.
+   * Undefined means "read it the ordinary way".
+   */
+  fold?(name: FoldName, from: Ref, to: Ref): Value | undefined;
+}
+
+const FOLDABLE = new Set<string>(["SUM", "PROD", "MIN", "MAX", "COUNT"]);
+
+/** How many cells a range covers — AVG divides by this, blanks included. */
+function spanSize(from: Ref, to: Ref): number {
+  return (Math.abs(from.row - to.row) + 1) * (Math.abs(from.col - to.col) + 1);
 }
 
 /** Text counts as zero, as in a spreadsheet; a complaint stays a complaint. */
-function asDec(value: Value): Dec | CellError {
+export function asDec(value: Value): Dec | CellError {
   if (isError(value)) return value;
   if (typeof value === "number") return value;
   return dec.fromText(value) ?? dec.ZERO;
@@ -267,7 +282,7 @@ function gather(node: Node, lookup: Lookup): Value[] | CellError {
 }
 
 /** A cell counts as a number when it holds one, or holds text that reads as one. */
-function counts(value: Value): boolean {
+export function counts(value: Value): boolean {
   if (typeof value === "number") return true;
   return typeof value === "string" && dec.fromText(value) !== undefined;
 }
@@ -384,6 +399,21 @@ export function evaluate(node: Node, lookup: Lookup): Value {
       return fail("#SYNTAX!");
     }
     case "call": {
+      const only = node.args.length === 1 ? node.args[0] : undefined;
+      if (lookup.fold !== undefined && only !== undefined && only.kind === "range") {
+        if (FOLDABLE.has(node.name)) {
+          const folded = lookup.fold(node.name as FoldName, only.from, only.to);
+          if (folded !== undefined) return folded;
+        }
+        if (node.name === "AVG") {
+          const sum = lookup.fold("SUM", only.from, only.to);
+          if (sum !== undefined) {
+            if (isError(sum)) return sum;
+            const mean = dec.div(sum as Dec, dec.fromInt(spanSize(only.from, only.to)));
+            return mean ?? fail("#DIV/0!");
+          }
+        }
+      }
       const values: Value[] = [];
       for (const arg of node.args) {
         const some = gather(arg, lookup);

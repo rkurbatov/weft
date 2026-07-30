@@ -7,11 +7,18 @@
 import { batch, family, input, untracked } from "#weft";
 import type { Cell, Input } from "#weft";
 import { refName } from "../common/address.ts";
+import { blockFolds } from "./blocks.ts";
 import { plan, run, same, show } from "../common/formula.ts";
 import type { Value } from "../common/formula.ts";
 import type { Contents } from "../common/sample.ts";
+import type { Ref } from "../common/address.ts";
 
 const LOOP: Value = { error: "#CYCLE!" };
+
+export interface SheetOptions {
+  /** Answer long single-column totals from a tree of partial sums. On by default. */
+  blocks?: boolean;
+}
 
 export interface Sheet {
   text(at: string): string;
@@ -23,7 +30,7 @@ export interface Sheet {
   resetRecomputes(): void;
 }
 
-export function createSheet(initial: Contents): Sheet {
+export function createSheet(initial: Contents, options: SheetOptions = {}): Sheet {
   const texts = new Map<string, Input<string>>();
   let recomputed = 0;
 
@@ -37,11 +44,14 @@ export function createSheet(initial: Contents): Sheet {
   /** What the text means. Reparsed when the text changes, and only then. */
   const meaning = family((at: string) => plan(text(at).get()), { name: "plan", max: 500_000 });
 
+  const folds = (options.blocks ?? true) ? blockFolds((ref) => valueAt(refName(ref))) : undefined;
+
   /** The value. Reading a neighbour here is what makes this cell depend on it. */
   const value = family(
     (at: string): Value => {
       recomputed++;
-      return run(meaning(at).get(), { value: (ref) => valueAt(refName(ref)) });
+      const lookup = { value: (ref: Ref) => valueAt(refName(ref)) };
+      return run(meaning(at).get(), folds === undefined ? lookup : { ...lookup, fold: folds.fold });
     },
     // Equality by value, not by identity: a complaint is a fresh object each
     // time, and without this every recomputation would look like a change.
@@ -81,9 +91,10 @@ export function createSheet(initial: Contents): Sheet {
       });
     },
 
-    recomputes: () => recomputed,
+    recomputes: () => recomputed + (folds?.worked() ?? 0),
     resetRecomputes: () => {
       recomputed = 0;
+      folds?.resetWorked();
     },
   };
 }

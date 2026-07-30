@@ -79,7 +79,9 @@ export function family<K, T>(
     const id = keyOf(key);
     const existing = members.get(id);
     if (existing !== undefined) {
-      touch(id, existing);
+      // Reordering costs a delete and an insert on every read; it only earns
+      // that while the ceiling is in sight.
+      if (members.size >= max) touch(id, existing);
       return existing.cell;
     }
     const member: Member<K, T> = {
