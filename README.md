@@ -24,11 +24,15 @@ What a second press does is declared, not hand-rolled. `drop` (the default) make
 
 **`src/core/graph.ts` — demand.** The graph counts demand along its links, which is what lets a source know it is being watched: a watcher contributes one, a formula passes it up while anything demands it, and dropping a dependency releases the source it held. Source hooks run after the graph settles, never inside a formula, so an adapter may write its own cell from them.
 
+**Requirements.** A consumer states what it needs rather than arranging how to get it: `feed.require(200)` says "this must not be older than 200ms" and hands back the withdrawal. The strictest live requirement sets the pace; when it goes, the pace relaxes to the next one; when the last goes, the source falls quiet. Stating a requirement against something already too old asks at once instead of waiting for the next turn of the wheel. A source may declare a `floor` it will not be asked below, and `onUnmet` is told when a requirement asks for more than the floor allows — the honest limit of a library: it can report at runtime what a compiler would refuse before it ran.
+
+`fresh(feed, within)` ties the two together: a view of a source that holds a requirement for exactly as long as somebody watches it, so nothing has to be released by hand. In React that is `useSource(feed, { within: 200 })` — mounting is the requirement, unmounting withdraws it.
+
 **`src/react/hooks.ts` — the seam,** deliberately thin. `useCell` subscribes a component to one value through `useSyncExternalStore`. `useCommand` hands a command to the tree with a stable `start` reference, so it can go straight into handlers and dependency arrays.
 
 ## What's next
 
-In order, one at a time: freshness requirements stated by consumers and withdrawn with them; persistence of stored cells with age and schema version; an outbox for commands with idempotency keys; reconciliation.
+In order, one at a time: persistence of stored cells with age and schema version; an outbox for commands with idempotency keys; reconciliation.
 
 ## Imports
 

@@ -5,6 +5,9 @@ import { useCallback, useDebugValue, useMemo, useRef, useSyncExternalStore } fro
 import { subscribe, untracked } from '#core/graph.ts'
 import type { Readable } from '#core/graph.ts'
 import type { Command, CommandState } from '#core/command.ts'
+import { fresh } from '#core/source.ts'
+import type { Source } from '#core/source.ts'
+import type { Remote } from '#core/remote.ts'
 
 /** Read a cell. The component re-renders when this value changes — nothing else. */
 export function useCell<T>(source: Readable<T>): T {
@@ -46,4 +49,17 @@ export function useCommand<A extends unknown[], T>(cmd: Command<A, T>): CommandH
         error: state.kind === 'failed' ? state.error : undefined,
         result: state.kind === 'done' ? state.value : undefined,
     }
+}
+
+/**
+ * Read a source, stating how fresh this screen needs it. Mounting is the
+ * requirement; unmounting withdraws it, and a source nobody needs goes quiet.
+ */
+export function useSource<T>(feed: Source<T>, options: { within?: number } = {}): Remote<T> {
+    const { within } = options
+    const view = useMemo(
+        () => (within === undefined ? feed.state : fresh(feed, within)),
+        [feed, within],
+    )
+    return useCell(view)
 }
