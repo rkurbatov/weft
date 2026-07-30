@@ -83,7 +83,16 @@ body {
     border-right: 1px solid var(--line);
 }
 
-.sheet { position: relative; }
+.sheet {
+    position: relative;
+    /* Ruled paper under the rows: a frame the drawing has not caught up with
+       looks like an empty sheet rather than a hole. */
+    background-image: repeating-linear-gradient(
+            to bottom,
+            transparent 0 24px,
+            var(--line) 24px 25px
+    );
+}
 .rows { position: absolute; top: 0; left: 0; right: 0; will-change: transform; }
 
 .row { display: flex; height: 25px; }

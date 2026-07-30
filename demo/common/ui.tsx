@@ -33,9 +33,12 @@ const GUTTER = 46
  * the sheet so the bar behaves honestly, and the rows that are drawn sit at the
  * offset the scroll position asks for.
  */
-export function Grid({ shape = SHEET, cell: CellOf, overscan = 6 }: GridProps): ReactNode {
+export function Grid({ shape = SHEET, cell: CellOf, overscan = 12 }: GridProps): ReactNode {
     const viewport = useRef<HTMLDivElement>(null)
-    const [top, setTop] = useState(0)
+    const frame = useRef(0)
+    // The state is the first row drawn, not the scroll position: a pixel of
+    // scrolling is not news, a row of it is.
+    const [first, setFirst] = useState(0)
     const [height, setHeight] = useState(600)
 
     useEffect(() => {
@@ -45,20 +48,30 @@ export function Grid({ shape = SHEET, cell: CellOf, overscan = 6 }: GridProps): 
         measure()
         const watcher = new ResizeObserver(measure)
         watcher.observe(box)
-        return () => watcher.disconnect()
+        return () => {
+            watcher.disconnect()
+            if (frame.current !== 0) cancelAnimationFrame(frame.current)
+        }
     }, [])
 
-    const first = Math.max(0, Math.floor(top / ROW) - overscan)
+    // One redraw per frame at most, and only when the opening has actually moved.
+    const onScroll = (): void => {
+        if (frame.current !== 0) return
+        frame.current = requestAnimationFrame(() => {
+            frame.current = 0
+            const box = viewport.current
+            if (box === null) return
+            const wanted = Math.max(0, Math.floor(box.scrollTop / ROW) - overscan)
+            setFirst(was => (was === wanted ? was : wanted))
+        })
+    }
+
     const drawn = Math.min(shape.rows - first, Math.ceil(height / ROW) + overscan * 2)
     const width = GUTTER + shape.cols * COLUMN
 
     return (
         <div className="grid-wrap">
-            <div
-                className="viewport"
-                ref={viewport}
-                onScroll={event => setTop(event.currentTarget.scrollTop)}
-            >
+            <div className="viewport" ref={viewport} onScroll={onScroll}>
                 <div className="head" style={{ width }}>
                     <div className="corner" />
                     {Array.from({ length: shape.cols }, (_, col) => (

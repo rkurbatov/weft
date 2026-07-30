@@ -12,7 +12,8 @@
     "check": "tsc --noEmit",
     "demo": "vite",
     "demo:build": "vite build",
-    "demo:bench": "node demo/bench.ts"
+    "demo:bench": "node demo/bench.ts",
+    "demo:preview": "vite preview"
   },
   "devDependencies": {
     "@types/node": "^26.1.2",

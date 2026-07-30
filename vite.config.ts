@@ -7,6 +7,9 @@ import react from '@vitejs/plugin-react'
 // tests reach it — no alias to keep in step with tsconfig.
 export default defineConfig({
     root: 'demo',
+    // Relative asset paths, so the built pages open from any directory — a static
+    // server rooted elsewhere, an IDE's own preview, even file://.
+    base: './',
     plugins: [react()],
     build: {
         outDir: '../dist-demo',
