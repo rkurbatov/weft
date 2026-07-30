@@ -352,37 +352,28 @@ export function evaluate(node: Node, lookup: Lookup): Value {
     }
 }
 
-/** Read a cell's text: a formula, a number, or plain words. */
-export function read(text: string, lookup: Lookup): Value {
+/** What a cell's text means before anything is looked up. */
+export type Plan =
+    | { readonly kind: 'formula'; readonly node: Node }
+    | { readonly kind: 'plain'; readonly value: Value }
+
+/** Text -> plan. Depends on the text alone, so it survives a neighbour changing. */
+export function plan(text: string): Plan {
     const body = text.trim()
-    if (body.startsWith('=')) return evaluate(parse(body.slice(1)), lookup)
-    if (body === '') return ''
+    if (body.startsWith('=')) return { kind: 'formula', node: parse(body.slice(1)) }
+    if (body === '') return { kind: 'plain', value: '' }
     const n = Number(body)
-    return Number.isNaN(n) ? body : n
+    return { kind: 'plain', value: Number.isNaN(n) ? body : n }
 }
 
-/** Which cells a formula names. The hand-written demo needs this; the weft one does not. */
-export function referencesOf(node: Node): Ref[] {
-    switch (node.kind) {
-        case 'ref':
-            return [node.ref]
-        case 'range':
-            return spanRefs(node.from, node.to)
-        case 'unary':
-            return referencesOf(node.of)
-        case 'binary':
-            return [...referencesOf(node.left), ...referencesOf(node.right)]
-        case 'call':
-            return node.args.flatMap(referencesOf)
-        default:
-            return []
-    }
+/** Plan -> value. This is the part that reads other cells. */
+export function run(what: Plan, lookup: Lookup): Value {
+    return what.kind === 'plain' ? what.value : evaluate(what.node, lookup)
 }
 
-export function referencesOfText(text: string): Ref[] {
-    const body = text.trim()
-    if (!body.startsWith('=')) return []
-    return referencesOf(parse(body.slice(1)))
+/** Both steps at once, for callers with nowhere to keep the plan. */
+export function read(text: string, lookup: Lookup): Value {
+    return run(plan(text), lookup)
 }
 
 export { refName }

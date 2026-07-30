@@ -4,6 +4,8 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { createSheet } from './store.ts'
+import { refsOf } from './depends.ts'
+import { refName } from '../common/address.ts'
 import { sampleSheet, key } from '../common/sheet.ts'
 
 function small() {
@@ -85,4 +87,10 @@ test('the sample sheet adds up, and one edit runs the whole chain', () => {
     assert.equal(sheet.shown(totalAt), String((rows * (rows + 1)) / 2 + 1))
     // Everything downstream is worked out eagerly, on screen or not.
     assert.ok(sheet.recomputes() > 200, `only ${sheet.recomputes()} cells were recomputed`)
+})
+
+test('the hand-written sheet must know a formula\'s references in advance', () => {
+    assert.deepEqual(refsOf('=A1 + B2').map(refName), ['A1', 'B2'])
+    assert.deepEqual(refsOf('=SUM(A1:A3)').map(refName), ['A1', 'A2', 'A3'])
+    assert.deepEqual(refsOf('7'), [])
 })

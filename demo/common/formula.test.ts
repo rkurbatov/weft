@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { columnName, columnNumber, parseRef, refName, spanRefs } from './address.ts'
-import { read, parse, evaluate, referencesOfText, show, isError } from './formula.ts'
+import { read, parse, evaluate, show, isError } from './formula.ts'
 import type { Lookup, Value } from './formula.ts'
 import type { Ref } from './address.ts'
 import { sampleSheet, key } from './sheet.ts'
@@ -69,12 +69,6 @@ test('errors travel outward, and division by zero is one', () => {
     assert.deepEqual(read('=NOPE(1)', cells), { error: '#NAME?' })
     assert.deepEqual(read('=1 +', cells), { error: '#SYNTAX!' })
     assert.deepEqual(read('=(1', cells), { error: '#SYNTAX!' })
-})
-
-test('what a formula names is readable without running it', () => {
-    assert.deepEqual(referencesOfText('=A1 + B2').map(refName), ['A1', 'B2'])
-    assert.deepEqual(referencesOfText('=SUM(A1:A3)').map(refName), ['A1', 'A2', 'A3'])
-    assert.deepEqual(referencesOfText('7'), [])
 })
 
 test('shown text is short and errors show their code', () => {

@@ -1,165 +1,147 @@
-// The hand-written sheet. Everything the graph does for us in the other demo is
-// written out here, because it has to be: what each cell reads, who reads it,
-// what a change makes stale, in what order the stale ones may be recomputed,
-// which of them form a loop, and who has to be told afterwards.
+// The hand-written sheet.
+//
+// Reading order: what is stored, then the two indexes that have to be kept in
+// step, then the four steps of an edit — relink, spread, sort, recompute.
 
 import { refName } from '../common/address.ts'
-import { read, referencesOfText, show, isError } from '../common/formula.ts'
+import { read, show } from '../common/formula.ts'
 import type { Value } from '../common/formula.ts'
 import type { Sheet as Contents } from '../common/sheet.ts'
+import { refsOf } from './depends.ts'
 
 export interface Sheet {
     text(at: string): string
     value(at: string): Value
-    /** What the cell shows. Kept as a string so React has something stable to compare. */
     shown(at: string): string
     set(at: string, text: string): void
-    /** Told when this one cell's shown value changes. */
     subscribe(at: string, listener: () => void): () => void
-    /** How many cell values were worked out since the last reset. */
     recomputes(): number
     resetRecomputes(): void
 }
 
-const CYCLE: Value = { error: '#CYCLE!' }
+const LOOP = show({ error: '#CYCLE!' })
 
 export function createSheet(initial: Contents): Sheet {
-    const texts = new Map<string, string>(initial)
-    const values = new Map<string, Value>()
-    const shownText = new Map<string, string>()
+    const text = new Map<string, string>(initial)
+    const value = new Map<string, Value>()
+    const shown = new Map<string, string>()
 
-    /** What each cell reads. */
-    const reads = new Map<string, string[]>()
-    /** Who reads each cell — the same thing backwards, and it must be kept in step by hand. */
-    const readers = new Map<string, Set<string>>()
+    // The dependency graph, both ways round. Two maps that must agree, kept in
+    // agreement by hand on every edit.
+    const uses = new Map<string, string[]>() // cell -> cells it reads
+    const usedBy = new Map<string, Set<string>>() // cell -> cells that read it
 
     const listeners = new Map<string, Set<() => void>>()
-    let worked = 0
+    let recomputed = 0
 
-    function linkUp(at: string): void {
-        for (const was of reads.get(at) ?? []) readers.get(was)?.delete(at)
-        const now = referencesOfText(texts.get(at) ?? '').map(refName)
-        reads.set(at, now)
+    // -- the two indexes -----------------------------------------------------
+
+    function relink(at: string): void {
+        for (const old of uses.get(at) ?? []) usedBy.get(old)?.delete(at)
+        const now = refsOf(text.get(at) ?? '').map(refName)
+        uses.set(at, now)
         for (const ref of now) {
-            let set = readers.get(ref)
-            if (set === undefined) {
-                set = new Set()
-                readers.set(ref, set)
-            }
-            set.add(at)
+            const readers = usedBy.get(ref) ?? new Set()
+            readers.add(at)
+            usedBy.set(ref, readers)
         }
     }
 
-    function valueOfCell(at: string): Value {
-        return values.get(at) ?? ''
-    }
+    // -- the four steps of an edit -------------------------------------------
 
-    function work(at: string): boolean {
-        worked++
-        const value = read(texts.get(at) ?? '', { value: ref => valueOfCell(refName(ref)) })
-        const before = shownText.get(at)
-        const after = show(value)
-        values.set(at, value)
-        shownText.set(at, after)
-        return before !== after
-    }
-
-    function tell(at: string): void {
-        const set = listeners.get(at)
-        if (set === undefined) return
-        for (const listener of set) listener()
-    }
-
-    /** Everything that leans on this cell, however far away. */
-    function stainedBy(at: string): Set<string> {
-        const stained = new Set<string>([at])
-        const queue = [at]
+    /** 1. Everything that leans on this cell, however far away. */
+    function spread(from: string): Set<string> {
+        const touched = new Set([from])
+        const queue = [from]
         while (queue.length > 0) {
-            const next = queue.pop() as string
-            for (const reader of readers.get(next) ?? []) {
-                if (stained.has(reader)) continue
-                stained.add(reader)
+            for (const reader of usedBy.get(queue.pop() as string) ?? []) {
+                if (touched.has(reader)) continue
+                touched.add(reader)
                 queue.push(reader)
             }
         }
-        return stained
+        return touched
     }
 
-    /**
-     * Kahn's ordering over the stained cells only. Whatever is left over when the
-     * queue runs dry sits in a loop, and a loop has no value to speak of.
-     */
-    function orderOf(stained: Set<string>): { order: string[]; looped: string[] } {
-        const waitingOn = new Map<string, number>()
-        for (const at of stained) {
-            let count = 0
-            for (const ref of reads.get(at) ?? []) if (stained.has(ref)) count++
-            waitingOn.set(at, count)
+    /** 2. An order in which they may be recomputed. Whatever has no place is in a loop. */
+    function sort(touched: Set<string>): { order: string[]; looped: string[] } {
+        const waiting = new Map<string, number>()
+        for (const at of touched) {
+            waiting.set(at, (uses.get(at) ?? []).filter(ref => touched.has(ref)).length)
         }
-        const ready = [...stained].filter(at => waitingOn.get(at) === 0)
-        const order: string[] = []
-        const placed = new Set<string>()
-        let head = 0
-        while (head < ready.length) {
-            const at = ready[head++] as string
-            order.push(at)
-            placed.add(at)
-            for (const reader of readers.get(at) ?? []) {
-                if (!stained.has(reader)) continue
-                const left = (waitingOn.get(reader) ?? 0) - 1
-                waitingOn.set(reader, left)
-                if (left === 0) ready.push(reader)
+
+        const order = [...touched].filter(at => waiting.get(at) === 0)
+        const placed = new Set(order)
+        for (let i = 0; i < order.length; i++) {
+            for (const reader of usedBy.get(order[i] as string) ?? []) {
+                if (!touched.has(reader)) continue
+                const left = (waiting.get(reader) as number) - 1
+                waiting.set(reader, left)
+                if (left === 0) {
+                    order.push(reader)
+                    placed.add(reader)
+                }
             }
         }
-        const looped = [...stained].filter(at => !placed.has(at))
-        return { order, looped }
+
+        return { order, looped: [...touched].filter(at => !placed.has(at)) }
     }
 
-    function settle(stained: Set<string>): void {
-        const { order, looped } = orderOf(stained)
+    /** 3. Work one cell out. True when what it shows has changed. */
+    function recompute(at: string): boolean {
+        recomputed++
+        const now = read(text.get(at) ?? '', { value: ref => value.get(refName(ref)) ?? '' })
+        value.set(at, now)
+        return replace(at, show(now))
+    }
+
+    function replace(at: string, look: string): boolean {
+        if (shown.get(at) === look) return false
+        shown.set(at, look)
+        return true
+    }
+
+    /** 4. Tell the cells whose look changed — and only those. */
+    function tell(at: string): void {
+        for (const listener of listeners.get(at) ?? []) listener()
+    }
+
+    function settle(touched: Set<string>): void {
+        const { order, looped } = sort(touched)
         for (const at of looped) {
-            const before = shownText.get(at)
-            values.set(at, CYCLE)
-            shownText.set(at, show(CYCLE))
-            if (before !== show(CYCLE)) tell(at)
+            value.set(at, { error: '#CYCLE!' })
+            if (replace(at, LOOP)) tell(at)
         }
         for (const at of order) {
-            if (work(at)) tell(at)
+            if (recompute(at)) tell(at)
         }
     }
 
-    // The first pass: link everything, then work the whole sheet out in order.
-    for (const at of texts.keys()) linkUp(at)
-    settle(new Set(texts.keys()))
+    // The sheet as loaded: link everything, then work all of it out.
+    for (const at of text.keys()) relink(at)
+    settle(new Set(text.keys()))
 
     return {
-        text: at => texts.get(at) ?? '',
-        value: at => valueOfCell(at),
-        shown: at => shownText.get(at) ?? '',
+        text: at => text.get(at) ?? '',
+        value: at => value.get(at) ?? '',
+        shown: at => shown.get(at) ?? '',
 
-        set(at, text) {
-            texts.set(at, text)
-            linkUp(at)
-            settle(stainedBy(at))
+        set(at, next) {
+            text.set(at, next)
+            relink(at)
+            settle(spread(at))
         },
 
         subscribe(at, listener) {
-            let set = listeners.get(at)
-            if (set === undefined) {
-                set = new Set()
-                listeners.set(at, set)
-            }
+            const set = listeners.get(at) ?? new Set()
             set.add(listener)
-            return () => {
-                set?.delete(listener)
-            }
+            listeners.set(at, set)
+            return () => set.delete(listener)
         },
 
-        recomputes: () => worked,
+        recomputes: () => recomputed,
         resetRecomputes: () => {
-            worked = 0
+            recomputed = 0
         },
     }
 }
-
-export { isError }

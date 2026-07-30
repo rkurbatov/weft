@@ -1,11 +1,13 @@
-// The same sheet on weft. What the other demo spells out — who reads whom, what
-// a change makes stale, in what order to recompute, who to tell — is not written
-// here at all, because reading is what records a dependency.
+// The same sheet on weft.
+//
+// Three families, and that is the whole file: the text of a cell, what that
+// text means, and what the screen shows. Nothing here says who reads whom —
+// reading is what records it.
 
 import { batch, family, input, untracked } from '#weft'
 import type { Cell, Input } from '#weft'
 import { refName } from '../common/address.ts'
-import { read, show } from '../common/formula.ts'
+import { plan, run, show } from '../common/formula.ts'
 import type { Value } from '../common/formula.ts'
 import type { Sheet as Contents } from '../common/sheet.ts'
 
@@ -14,10 +16,8 @@ const LOOP: Value = { error: '#CYCLE!' }
 export interface Sheet {
     text(at: string): string
     value(at: string): Value
-    /** What the cell shows. A cell of its own, so an unchanged look wakes nobody. */
     shown(at: string): Cell<string>
     set(at: string, text: string): void
-    /** Several edits as one settling. */
     edit(changes: Iterable<[string, string]>): void
     recomputes(): number
     resetRecomputes(): void
@@ -25,60 +25,63 @@ export interface Sheet {
 
 export function createSheet(initial: Contents): Sheet {
     const texts = new Map<string, Input<string>>()
-    let worked = 0
+    let recomputed = 0
 
-    function textOf(at: string): Input<string> {
-        let box = texts.get(at)
-        if (box === undefined) {
-            box = input('', { name: at })
-            texts.set(at, box)
-        }
+    /** The text of a cell: stored, written only by the editor. */
+    function text(at: string): Input<string> {
+        const box = texts.get(at) ?? input('', { name: at })
+        texts.set(at, box)
         return box
     }
 
-    const values = family(
+    /** What the text means. Reparsed when the text changes, and only then. */
+    const meaning = family((at: string) => plan(text(at).get()), { name: 'plan', max: 500_000 })
+
+    /** The value. Reading a neighbour here is what makes this cell depend on it. */
+    const value = family(
         (at: string): Value => {
-            worked++
-            return read(textOf(at).get(), { value: ref => valueAt(refName(ref)) })
+            recomputed++
+            return run(meaning(at).get(), { value: ref => valueAt(refName(ref)) })
         },
         { name: 'value', max: 500_000 },
     )
 
     /**
-     * A loop is the graph's own complaint: reading a cell that is busy computing
-     * throws, and here that becomes an ordinary spreadsheet error. There is no
-     * cycle search anywhere — this is it.
+     * A loop needs no search: reading a cell that is already computing throws, and
+     * that is the whole of loop detection here.
      */
     function valueAt(at: string): Value {
         try {
-            return values(at).get()
+            return value(at).get()
         } catch {
             return LOOP
         }
     }
 
-    const shownAt = family((at: string) => show(valueAt(at)), { name: 'shown', max: 500_000 })
+    /** What the screen shows. A cell of its own, so an unchanged look wakes nobody. */
+    const shown = family((at: string) => show(valueAt(at)), { name: 'shown', max: 500_000 })
 
-    for (const [at, text] of initial) textOf(at).set(text)
+    for (const [at, initialText] of initial) text(at).set(initialText)
 
     return {
-        text: at => untracked(() => textOf(at).peek()),
+        text: at => untracked(() => text(at).peek()),
         value: at => untracked(() => valueAt(at)),
-        shown: at => shownAt(at),
+        shown: at => shown(at),
 
-        set(at, text) {
-            textOf(at).set(text)
+        set(at, next) {
+            text(at).set(next)
         },
 
+        /** Several edits, one settling. */
         edit(changes) {
             batch(() => {
-                for (const [at, text] of changes) textOf(at).set(text)
+                for (const [at, next] of changes) text(at).set(next)
             })
         },
 
-        recomputes: () => worked,
+        recomputes: () => recomputed,
         resetRecomputes: () => {
-            worked = 0
+            recomputed = 0
         },
     }
 }
