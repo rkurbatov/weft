@@ -19,56 +19,76 @@ export interface GridProps {
     readonly shape?: SheetShape
     /** The demo's own cell: it decides where its value comes from. */
     readonly cell: (props: CellProps) => ReactNode
-    /** Rows drawn at once; the rest scroll into view. */
-    readonly window?: number
+    /** Rows kept above and below the opening, so a fast scroll does not show gaps. */
+    readonly overscan?: number
 }
 
-export function Grid({ shape = SHEET, cell: CellOf, window = 30 }: GridProps): ReactNode {
-    const [from, setFrom] = useState(0)
-    const rows = Math.min(window, shape.rows - from)
+/** Must match .row and .cell in style.css: the whole thing rests on a fixed row height. */
+const ROW = 25
+const COLUMN = 92
+const GUTTER = 46
+
+/**
+ * Only the rows in the opening exist. The scroller is given the full height of
+ * the sheet so the bar behaves honestly, and the rows that are drawn sit at the
+ * offset the scroll position asks for.
+ */
+export function Grid({ shape = SHEET, cell: CellOf, overscan = 6 }: GridProps): ReactNode {
+    const viewport = useRef<HTMLDivElement>(null)
+    const [top, setTop] = useState(0)
+    const [height, setHeight] = useState(600)
+
+    useEffect(() => {
+        const box = viewport.current
+        if (box === null) return
+        const measure = (): void => setHeight(box.clientHeight)
+        measure()
+        const watcher = new ResizeObserver(measure)
+        watcher.observe(box)
+        return () => watcher.disconnect()
+    }, [])
+
+    const first = Math.max(0, Math.floor(top / ROW) - overscan)
+    const drawn = Math.min(shape.rows - first, Math.ceil(height / ROW) + overscan * 2)
+    const width = GUTTER + shape.cols * COLUMN
 
     return (
         <div className="grid-wrap">
-            <div className="grid-scroller">
-                <button type="button" onClick={() => setFrom(Math.max(0, from - window))} disabled={from === 0}>
-                    ↑ earlier rows
-                </button>
-                <span>
-          rows {from + 1}–{from + rows} of {shape.rows}
-        </span>
-                <button
-                    type="button"
-                    onClick={() => setFrom(Math.min(shape.rows - 1, from + window))}
-                    disabled={from + window >= shape.rows}
-                >
-                    later rows ↓
-                </button>
-            </div>
-            <table className="grid">
-                <thead>
-                <tr>
-                    <th className="corner" />
+            <div
+                className="viewport"
+                ref={viewport}
+                onScroll={event => setTop(event.currentTarget.scrollTop)}
+            >
+                <div className="head" style={{ width }}>
+                    <div className="corner" />
                     {Array.from({ length: shape.cols }, (_, col) => (
-                        <th key={col}>{columnName(col)}</th>
+                        <div className="colhead" key={col}>
+                            {columnName(col)}
+                        </div>
                     ))}
-                </tr>
-                </thead>
-                <tbody>
-                {Array.from({ length: rows }, (_, i) => {
-                    const row = from + i
-                    return (
-                        <tr key={row}>
-                            <th className="rowhead">{row + 1}</th>
-                            {Array.from({ length: shape.cols }, (_, col) => (
-                                <td key={col}>
-                                    <CellOf at={key(row, col)} row={row} col={col} />
-                                </td>
-                            ))}
-                        </tr>
-                    )
-                })}
-                </tbody>
-            </table>
+                </div>
+                <div className="sheet" style={{ height: shape.rows * ROW, width }}>
+                    <div className="rows" style={{ transform: `translateY(${first * ROW}px)` }}>
+                        {Array.from({ length: drawn }, (_, i) => {
+                            const row = first + i
+                            return (
+                                <div className="row" key={row}>
+                                    <div className="rowhead">{row + 1}</div>
+                                    {Array.from({ length: shape.cols }, (_, col) => (
+                                        <div className="slot" key={col}>
+                                            <CellOf at={key(row, col)} row={row} col={col} />
+                                        </div>
+                                    ))}
+                                </div>
+                            )
+                        })}
+                    </div>
+                </div>
+            </div>
+            <p className="where">
+                rows {first + 1}–{first + drawn} of {shape.rows.toLocaleString()} — {drawn * shape.cols} cells
+                drawn of {(shape.rows * shape.cols).toLocaleString()}
+            </p>
         </div>
     )
 }

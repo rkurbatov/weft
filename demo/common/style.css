@@ -52,15 +52,63 @@ body {
 .numbers dt { color: var(--dim); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
 .numbers dd { margin: 0; font-variant-numeric: tabular-nums; font-size: 15px; }
 
-.grid-wrap { padding: 12px 16px 40px; }
-.grid-scroller { display: flex; gap: 12px; align-items: center; padding-bottom: 8px; color: var(--dim); }
+.grid-wrap { padding: 12px 16px 16px; }
 
-table.grid { border-collapse: collapse; font-variant-numeric: tabular-nums; }
-table.grid th, table.grid td { border: 1px solid var(--line); padding: 0; }
-table.grid th { background: var(--head); font-weight: 500; color: var(--dim); font-size: 12px; }
-table.grid thead th { min-width: 92px; height: 22px; }
-th.rowhead { width: 44px; }
-th.corner { width: 44px; }
+.viewport {
+    height: calc(100vh - 190px);
+    min-height: 320px;
+    overflow: auto;
+    border: 1px solid var(--line);
+    background: #fff;
+    contain: strict;
+}
+
+.head {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    display: flex;
+    background: var(--head);
+    border-bottom: 1px solid var(--line);
+}
+.head .corner { width: 46px; flex: 0 0 46px; border-right: 1px solid var(--line); }
+.colhead {
+    width: 92px;
+    flex: 0 0 92px;
+    height: 24px;
+    line-height: 24px;
+    text-align: center;
+    font-size: 12px;
+    color: var(--dim);
+    border-right: 1px solid var(--line);
+}
+
+.sheet { position: relative; }
+.rows { position: absolute; top: 0; left: 0; right: 0; will-change: transform; }
+
+.row { display: flex; height: 25px; }
+.rowhead {
+    width: 46px;
+    flex: 0 0 46px;
+    height: 25px;
+    line-height: 24px;
+    text-align: right;
+    padding-right: 6px;
+    font-size: 12px;
+    color: var(--dim);
+    background: var(--head);
+    border-right: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+    position: sticky;
+    left: 0;
+    z-index: 1;
+}
+.slot {
+    width: 92px;
+    flex: 0 0 92px;
+    border-right: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+}
 
 .cell {
     display: block;
@@ -70,12 +118,17 @@ th.corner { width: 44px; }
     border: 0;
     background: transparent;
     font: inherit;
+    font-variant-numeric: tabular-nums;
     text-align: right;
     color: inherit;
+    overflow: hidden;
+    white-space: nowrap;
 }
 button.cell { cursor: cell; }
 button.cell:hover { background: #f7f7f2; }
 input.cell.editing { outline: 2px solid var(--accent); text-align: left; background: #fff; }
+
+.where { margin: 8px 0 0; color: var(--dim); font-size: 12px; }
 
 .menu { padding: 40px; max-width: 60ch; }
 .menu li { margin: 8px 0; }
