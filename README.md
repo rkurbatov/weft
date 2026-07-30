@@ -18,11 +18,17 @@ What a second press does is declared, not hand-rolled. `drop` (the default) make
 
 **`src/core/family.ts` — families.** One cell per entity, built on first demand: `item(id)` hands back the same cell for the same key, so a card subscribes to its own row and nothing else. A member nobody watches is a cache entry rather than state, so it is dropped past a stated ceiling (LRU) or on `sweep()`; a watched member is never dropped, because its watchers hold that very cell. Dropping is not destruction — the next read rebuilds the member from its current sources. Object keys need a `keyOf`; strings, numbers, booleans and bigints work as they are.
 
+**`src/core/remote.ts` — the state of what came from outside.** One shape — empty, in flight, a value with the moment it arrived, or a refusal — instead of a value with flags beside it. A flight and a refusal both carry whatever is already held, so a screen keeps showing the last good answer instead of blanking; `valueOf`, `ageOf` and `isFresh` read that off.
+
+**`src/core/source.ts` — sources.** Delivery lives here and nowhere else: fetching, polling, shelf life, retries with growing waits. A source runs only while something live watches it — the first watcher starts it, the last one to leave stops it, and an unwatched screen therefore costs nothing. A new watcher within shelf life gets the answer already held; past it, a refetch. A second demand rides the flight already under way instead of duplicating it; `refresh({ force: true })` starts a new one and disowns the older answer. The clock and the timers are injectable, so all of this is tested without waiting.
+
+**`src/core/graph.ts` — demand.** The graph counts demand along its links, which is what lets a source know it is being watched: a watcher contributes one, a formula passes it up while anything demands it, and dropping a dependency releases the source it held. Source hooks run after the graph settles, never inside a formula, so an adapter may write its own cell from them.
+
 **`src/react/hooks.ts` — the seam,** deliberately thin. `useCell` subscribes a component to one value through `useSyncExternalStore`. `useCommand` hands a command to the tree with a stable `start` reference, so it can go straight into handlers and dependency arrays.
 
 ## What's next
 
-In order, one at a time: adapters that own delivery and pace; cell state (empty, in flight, value with an age, refused); freshness requirements and their withdrawal; persistence of stored cells with age and schema version; an outbox for commands with idempotency keys; reconciliation.
+In order, one at a time: freshness requirements stated by consumers and withdrawn with them; persistence of stored cells with age and schema version; an outbox for commands with idempotency keys; reconciliation.
 
 ## Imports
 
