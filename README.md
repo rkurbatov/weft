@@ -34,30 +34,55 @@ The cold watch is a graph primitive: `watch(body, { demand: false })` sees the c
 
 **`src/core/outbox.ts` — the outbox.** A command that reached for the world is written down before it is sent and leaves the book only when the world confirms it, so a tab dying mid-flight loses nothing. Each entry carries an idempotency key — the same one on every attempt, including after a reload — which is what makes a repeat safe rather than a second purchase. Entries go one at a time in the order they were written: order is part of the promise. A refusal is retried with growing waits; past `maxAttempts` the entry gets stuck and waits for a person, and `again(id)` or `forget(id)` decides its fate. An entry whose handler is unknown after a deploy gets stuck rather than vanishing. What is owed is an ordinary cell, so a screen can show "3 unsent" without asking anybody.
 
+**`src/core/reconcile.ts` — reconciliation.** Something outside must match a value inside: request headers match the identity, a socket subscription matches the row on show. The rule is to watch the value itself rather than the events that might have changed it — then there is no list of triggers, and nothing to go stale when a fourth thing starts feeding that value. Following is cold by default: a reconciliation does not keep a source awake on its own, though `demand: true` says otherwise. While one value is being applied a newer one supersedes the ones between, because the world was never in those states. Refusals are retried with growing waits and then reported; a new value clears the refusal and starts over.
+
 **`src/react/hooks.ts` — the seam,** deliberately thin. `useCell` subscribes a component to one value through `useSyncExternalStore`. `useCommand` hands a command to the tree with a stable `start` reference, so it can go straight into handlers and dependency arrays.
 
-## What's next
+## Where it stands
 
-One thing left in this line of work: reconciliation — watching a value rather than the events that might have changed it, so the list of triggers does not exist and cannot go stale.
+The line of work this repository set out to do is done: graph, commands, families, remote state, sources with demand-driven delivery, freshness requirements, persistence, an outbox, reconciliation — 87 tests, no build step, no runtime dependencies. `src/index.ts` is the front door; React lives behind `#react/hooks.ts` so the graph stays usable and testable without it.
 
-## Imports
+What is not done, and should be said plainly: none of this has met a real application yet. The next honest step is one domain of a live product moved over whole — not a demo — and the numbers that come out of it. After that, the parts a library cannot reach: purity by construction, a verdict before the program runs, and incremental recomputation inside a formula rather than around it.
+
+## Two spreadsheets
+
+`demo/` holds the same spreadsheet twice: `spreadsheet/` keeps its state by hand, `spreadsheet-weft/` keeps it on this library. The grid, the formula language, the sample sheet and the instrumentation are shared in `demo/common/`, so what differs is only who keeps the values.
+
+The hand-written one needs 208 lines for that: a store of texts, what each cell reads and who reads it kept in both directions, the transitive stain of a change, Kahn's order over it, a loop search for whatever the order leaves out, and a subscription per cell. The weft one needs 84, and none of those words appear in it — a cell's text is an `input`, its value is a `family` member whose formula reads its neighbours, and reading is what records the dependency. A loop is not searched for: reading a cell that is busy computing throws, and that becomes `#CYCLE!`.
+
+Both pass the same seven questions (`store.test.ts`, `sheet.test.ts`) — the same values, the same cells told, the same recovery when a loop is cut. What differs is the bill. On a sheet of 26,000 cells with 780 on screen, measured by `pnpm demo:bench`:
+
+```
+classic   build 636ms | edit A1 16.4ms | recomputed 242 | cells told 53
+on weft   lay out 39ms + first look 16ms (780 cells) | edit A1 3.4ms | recomputed 84 | cells told 53
+```
+
+At 130,000 cells the gap widens: 3.2s against 0.5s to start, 76ms against 5ms for one edit. The reason is not a faster engine — it is that the hand-written sheet works out every cell whether anyone is looking or not, while demand decides here. The same 53 cells are told in both, which is the point: same behaviour, different price, much less written down.
+
+## One package
+
+The library, its tests and the demos are a single package with one `tsconfig.json` and one set of scripts. Nothing crosses a package boundary, so nothing has to be kept in step: no workspace, no alias table, no second compiler config.
 
 Anything crossing a directory goes through Node's own subpath imports, declared in `package.json`; inside a directory, relative paths stay relative.
 
 ```json
 "imports": {
   "#core/*": "./src/core/*",
-  "#react/*": "./src/react/*"
+  "#react/*": "./src/react/*",
+  "#weft": "./src/index.ts",
+  "#weft/react": "./src/react/hooks.ts"
 }
 ```
 
-`import { cell } from '#core/graph.ts'` is resolved by Node itself and understood by the compiler under `nodenext` — no bundler config and no `paths` mapping to keep in sync with it.
+`import { cell } from '#core/graph.ts'` inside the library, `import { input, family } from '#weft'` from a demo — resolved by Node itself, understood by the compiler under `nodenext`, and understood by Vite. There is no `paths` mapping and no bundler alias to drift.
 
 ## Running it
 
 ```
-pnpm test    # tests, straight over TypeScript — no build step
-pnpm check   # types
+pnpm test         # library and demo tests in one run
+pnpm check        # types, including the Vite config
+pnpm demo         # the two spreadsheets, side by side
+pnpm demo:build
 ```
 
-Node 26 strips types on its own; on Node 22.6+ add `--experimental-strip-types` to the test script.
+Node 26 strips types on its own, so there is no build step for the library or its tests; Vite is only there for the demos.

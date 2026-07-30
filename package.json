@@ -11,7 +11,8 @@
     "test": "node --test \"test/*.test.ts\" \"demo/**/*.test.ts\"",
     "check": "tsc --noEmit",
     "demo": "vite",
-    "demo:build": "vite build"
+    "demo:build": "vite build",
+    "demo:bench": "node demo/bench.ts"
   },
   "devDependencies": {
     "@types/node": "^26.1.2",
