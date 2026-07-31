@@ -3,7 +3,7 @@
 // bookkeeping.
 
 import { memo } from "react";
-import { useCell } from "#react/hooks.ts";
+import { useCell } from "#weft/react";
 import { CellFrame } from "../common/ui.tsx";
 import { countCellRender } from "../common/stats.ts";
 import type { CellProps } from "../common/ui.tsx";

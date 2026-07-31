@@ -1,5 +1,5 @@
-// The library's front door. React lives behind '#react/hooks.ts' so that the
-// graph stays usable — and testable — without React in the picture.
+// The library's front door. React lives behind '#weft/react' so that the graph
+// stays usable — and testable — without React in the picture.
 
 export {
   input,

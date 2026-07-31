@@ -6,10 +6,9 @@
   "type": "module",
   "imports": {
     "#core/*": "./src/core/*",
-    "#react/*": "./src/react/*",
+    "#link/*": "./src/link/*",
     "#weft": "./src/index.ts",
-    "#weft/react": "./src/react/hooks.ts",
-    "#link/*": "./src/link/*"
+    "#weft/react": "./src/react/hooks.ts"
   },
   "scripts": {
     "test": "node --test \"test/*.test.ts\" \"demo/**/*.test.ts\"",

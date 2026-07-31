@@ -103,13 +103,13 @@ Anything crossing a directory goes through Node's own subpath imports, declared 
 ```json
 "imports": {
   "#core/*": "./src/core/*",
-  "#react/*": "./src/react/*",
+  "#link/*": "./src/link/*",
   "#weft": "./src/index.ts",
   "#weft/react": "./src/react/hooks.ts"
 }
 ```
 
-`import { cell } from '#core/graph.ts'` inside the library, `import { input, family } from '#weft'` from a demo — resolved by Node itself, understood by the compiler under `nodenext`, and understood by Vite. There is no `paths` mapping and no bundler alias to drift.
+`import { cell } from '#core/graph.ts'` inside the library, `import { input, family } from '#weft'` and `import { useCell } from '#weft/react'` from a demo — resolved by Node itself, understood by the compiler under `nodenext`, and understood by Vite. There is no `paths` mapping and no bundler alias to drift.
 
 ## Running it
 
