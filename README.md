@@ -36,6 +36,10 @@ The cold watch is a graph primitive: `watch(body, { demand: false })` sees the c
 
 **`src/core/reconcile.ts` — reconciliation.** Something outside must match a value inside: request headers match the identity, a socket subscription matches the row on show. The rule is to watch the value itself rather than the events that might have changed it — then there is no list of triggers, and nothing to go stale when a fourth thing starts feeding that value. Following is cold by default: a reconciliation does not keep a source awake on its own, though `demand: true` says otherwise. While one value is being applied a newer one supersedes the ones between, because the world was never in those states. Refusals are retried with growing waits and then reported; a new value clears the refusal and starts over.
 
+**`src/link/` — placement.** The graph is meant to live in a worker, so the boundary is designed for rather than retrofitted. A `Channel` is two functions — send and listen; `serve(surface, channel)` publishes named cells, keyed families and commands from the graph's side; `link(channel)` gives the watching side mirrors and command handles. A mirrored cell is an ordinary stored cell whose single writer is the wire, so **demand crosses the boundary by itself**: watching a mirror is what asks the other side for it, and the last watcher leaving is what stops it. Changes are coalesced per cell and flushed on a schedule you pass in — once a frame in a browser, at once in tests — so a slow reader gets what is true now rather than a queue of what was.
+
+`pairInMemory()` is the two ends in one process, and it clones messages on the way exactly as a real boundary would, so a value that could not survive the crossing fails in the tests rather than in the browser. `channelOverPort(port)` covers a browser worker or any message port that behaves like one; the test suite runs the whole protocol over a real `MessageChannel` as well as in memory.
+
 **`src/react/hooks.ts` — the seam,** deliberately thin. `useCell` subscribes a component to one value through `useSyncExternalStore`. `useCommand` hands a command to the tree with a stable `start` reference, so it can go straight into handlers and dependency arrays.
 
 ## Where it stands
@@ -77,17 +81,18 @@ Run it yourself rather than trusting the figures — they are one machine's, and
 
 It is worth building here and nowhere else. Each partial is a cell, so what depends on what — and what has to be redone — is the graph's business; the hand-written sheet could keep the same tree, but would have to invalidate it level by level, by hand. And it is only correct because the arithmetic underneath is exact: a total assembled from blocks is the same number as a total added left to right, which floating point would not give.
 
-Measured with the totals row on screen, so the column sums are live (`pnpm demo:bench 15000`, 390,000 cells):
+Measured with the totals row on screen, so the long column sums are live — the same run, second scene:
 
 ```
-classic   edit A1 195ms | recomputed 242
-on weft   edit A1 425ms | blocks off
-on weft   edit A1   8ms | blocks on
+                     open   first look   edit A1   worked out   told   vs classic
+classic           5419 ms       2.9 ms    181 ms          242     66         1.0x
+weft, no blocks    657 ms      4211 ms    295 ms          240     66         0.6x
+weft, blocks       369 ms      4204 ms   10.7 ms          271     67        17.0x
 ```
 
-The middle line is the honest one: without blocks this arrangement is _worse_ than the hand-written sheet, because each of the 26 column sums reads its whole column through the graph rather than through a plain array. With blocks the same answer costs a few dozen small sums. Turning them off (`createSheet(cells, { blocks: false })`) is what the middle line measures.
+Three honest things in that table. The middle row is _worse_ than the hand-written sheet: without blocks each of the 26 column sums reads its whole column through the graph rather than through a plain array — that is what `createSheet(cells, { blocks: false })` measures. Blocks turn the same answer into a few dozen small sums. And the first look costs four seconds either way, because the first total has to read every cell it covers; what blocks buy is every edit after it.
 
-Chasing that middle line also found a real fault in the library: `family` reordered its LRU on every read — a map delete and insert per lookup — which is pure cost while the ceiling is far away. Reordering now happens only as the ceiling comes into sight, and the same scene went from 95ms to 16ms.
+Chasing that middle row also found a real fault in the library: `family` reordered its LRU on every read — a map delete and insert per lookup — which is pure cost while the ceiling is far away. Reordering now happens only as the ceiling comes into sight, and the same scene went from 95ms to 16ms.
 
 ## One package
 

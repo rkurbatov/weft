@@ -3,14 +3,14 @@
 
 import { useCallback, useDebugValue, useMemo, useRef, useSyncExternalStore } from "react";
 import { subscribe, untracked } from "#core/graph.ts";
-import type { Readable } from "#core/graph.ts";
+import type { Watchable } from "#core/graph.ts";
 import type { Command, CommandState } from "#core/command.ts";
 import { fresh } from "#core/source.ts";
 import type { Source } from "#core/source.ts";
 import type { Remote } from "#core/remote.ts";
 
 /** Read a cell. The component re-renders when this value changes — nothing else. */
-export function useCell<T>(source: Readable<T>): T {
+export function useCell<T>(source: Watchable<T>): T {
   const store = useMemo(
     () => ({
       subscribe: (onChange: () => void) => subscribe(source, onChange),

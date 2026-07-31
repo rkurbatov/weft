@@ -430,9 +430,18 @@ export function watch(body: () => void, options?: WatchOptions): () => void {
 
 export type Readable<T> = Input<T> | Cell<T>;
 
+/**
+ * Anything that can be read and watched. Stated structurally so that a mirror,
+ * a view, or anything else with a value can stand where a cell stands.
+ */
+export interface Watchable<T> {
+  get(): T;
+  peek(): T;
+}
+
 /** Watch one cell; the listener sees only actual changes. */
 export function subscribe<T>(
-  source: Readable<T>,
+  source: Watchable<T>,
   listener: (value: T) => void,
   options?: WatchOptions,
 ): () => void {

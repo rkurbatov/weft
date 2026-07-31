@@ -12,7 +12,14 @@ export {
   Cell,
   Watcher,
 } from "./core/graph.ts";
-export type { Equal, CellOptions, InputOptions, WatchOptions, Readable } from "./core/graph.ts";
+export type {
+  Equal,
+  CellOptions,
+  InputOptions,
+  WatchOptions,
+  Readable,
+  Watchable,
+} from "./core/graph.ts";
 
 export { command } from "./core/command.ts";
 export type { Command, CommandOptions, CommandState, WhileRunning } from "./core/command.ts";
@@ -44,3 +51,15 @@ export type { Outbox, OutboxOptions, Entry, EntryState, Handler } from "./core/o
 
 export { reconcile } from "./core/reconcile.ts";
 export type { Reconciliation, ReconcileOptions } from "./core/reconcile.ts";
+
+export { serve } from "./link/serve.ts";
+export type { Surface, ServeOptions } from "./link/serve.ts";
+
+export { link } from "./link/link.ts";
+export type { Link } from "./link/link.ts";
+
+export { pairInMemory, channelOverPort } from "./link/channels.ts";
+export type { Pair, Port } from "./link/channels.ts";
+
+export { valueOf as seenValue, valueOr, atOnce, perFrame, NOT_YET } from "./link/channel.ts";
+export type { Channel, Mirrored, Schedule, ToGraph, ToWatcher } from "./link/channel.ts";

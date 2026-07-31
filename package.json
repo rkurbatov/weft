@@ -8,7 +8,8 @@
     "#core/*": "./src/core/*",
     "#react/*": "./src/react/*",
     "#weft": "./src/index.ts",
-    "#weft/react": "./src/react/hooks.ts"
+    "#weft/react": "./src/react/hooks.ts",
+    "#link/*": "./src/link/*"
   },
   "scripts": {
     "test": "node --test \"test/*.test.ts\" \"demo/**/*.test.ts\"",
