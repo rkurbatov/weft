@@ -2,11 +2,11 @@
 // the graph in the same thread; the port one covers a browser worker and any
 // message port that behaves like one.
 
-import type { Channel } from "./channel.ts";
+import type { Channel } from './channel.ts'
 
 export interface Pair {
-  graph: Channel;
-  watcher: Channel;
+  graph: Channel
+  watcher: Channel
 }
 
 /**
@@ -18,42 +18,42 @@ export function pairInMemory(clone: boolean = true): Pair {
   const listeners: { graph: Set<(m: unknown) => void>; watcher: Set<(m: unknown) => void> } = {
     graph: new Set(),
     watcher: new Set(),
-  };
+  }
 
   const deliver = (to: keyof typeof listeners, message: unknown): void => {
-    const sent = clone ? structuredClone(message) : message;
+    const sent = clone ? structuredClone(message) : message
     // A copy on purpose: a listener may stop listening while being told.
     // oxlint-disable-next-line unicorn/no-useless-spread
-    for (const listener of [...listeners[to]]) listener(sent);
-  };
+    for (const listener of [...listeners[to]]) listener(sent)
+  }
 
   const end = (mine: keyof typeof listeners, theirs: keyof typeof listeners): Channel => ({
-    send: (message) => deliver(theirs, message),
-    listen: (handler) => {
-      listeners[mine].add(handler);
-      return () => listeners[mine].delete(handler);
+    send: message => deliver(theirs, message),
+    listen: handler => {
+      listeners[mine].add(handler)
+      return () => listeners[mine].delete(handler)
     },
-  });
+  })
 
-  return { graph: end("graph", "watcher"), watcher: end("watcher", "graph") };
+  return { graph: end('graph', 'watcher'), watcher: end('watcher', 'graph') }
 }
 
 /** Anything that posts and receives messages: a Worker, a MessagePort, `self`. */
 export interface Port {
-  postMessage(message: unknown): void;
-  addEventListener(kind: "message", handler: (event: { data: unknown }) => void): void;
-  removeEventListener(kind: "message", handler: (event: { data: unknown }) => void): void;
-  start?(): void;
+  postMessage(message: unknown): void
+  addEventListener(kind: 'message', handler: (event: { data: unknown }) => void): void
+  removeEventListener(kind: 'message', handler: (event: { data: unknown }) => void): void
+  start?(): void
 }
 
 export function channelOverPort(port: Port): Channel {
-  port.start?.();
+  port.start?.()
   return {
-    send: (message) => port.postMessage(message),
-    listen: (handler) => {
-      const onMessage = (event: { data: unknown }): void => handler(event.data);
-      port.addEventListener("message", onMessage);
-      return () => port.removeEventListener("message", onMessage);
+    send: message => port.postMessage(message),
+    listen: handler => {
+      const onMessage = (event: { data: unknown }): void => handler(event.data)
+      port.addEventListener('message', onMessage)
+      return () => port.removeEventListener('message', onMessage)
     },
-  };
+  }
 }
