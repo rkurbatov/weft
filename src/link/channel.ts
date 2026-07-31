@@ -19,6 +19,8 @@ export type ToGraph =
     }
 
 export type ToWatcher =
+  /** The graph's side is up. Anyone watching should ask again — it knows nothing of what came before. */
+  | { readonly kind: 'up' }
   | { readonly kind: 'values'; readonly changed: ReadonlyArray<{ id: number; value: unknown }> }
   | { readonly kind: 'done'; readonly id: number; readonly value: unknown }
   | { readonly kind: 'failed'; readonly id: number; readonly error: string }

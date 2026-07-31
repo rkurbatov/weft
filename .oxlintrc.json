@@ -45,6 +45,12 @@
       "rules": {
         "import/no-unassigned-import": "off"
       }
+    },
+    {
+      "files": ["src/link/*.ts"],
+      "rules": {
+        "unicorn/require-post-message-target-origin": "off"
+      }
     }
   ]
 }

@@ -8,6 +8,8 @@ import { NOT_YET } from './channel.ts'
 import type { Channel, Mirrored, ToWatcher } from './channel.ts'
 
 export interface Link {
+  /** Ask again for everything being watched. Called for you when the other side announces itself. */
+  rewatch(): void
   /** A cell of the other side, by name; a family needs its key as well. */
   cell<T>(name: string, key?: unknown): Watchable<Mirrored<T>>
   /** A command of the other side. Arguments and the answer must be cloneable. */
@@ -27,6 +29,9 @@ export function link(channel: Channel): Link {
   const stopListening = channel.listen(raw => {
     const message = raw as ToWatcher
     switch (message?.kind) {
+      case 'up':
+        rewatch()
+        return
       case 'values':
         for (const { id, value } of message.changed) {
           byId.get(id)?.set({ known: true, value })
@@ -54,6 +59,20 @@ export function link(channel: Channel): Link {
     }
   })
 
+  /** Ask again for everything somebody is still watching. */
+  function rewatch(): void {
+    for (const [at, mirror] of mirrors) {
+      if (!mirror.cell.demanded) continue
+      const [name, rawKey] = at.split('\u0000')
+      channel.send({
+        kind: 'watch',
+        id: mirror.id,
+        cell: name,
+        key: rawKey === undefined ? undefined : (JSON.parse(rawKey) as unknown),
+      })
+    }
+  }
+
   function mirrorOf(name: string, key: unknown): Input<Mirrored<unknown>> {
     const at = key === undefined ? name : `${name}\u0000${JSON.stringify(key)}`
     const known = mirrors.get(at)
@@ -75,6 +94,7 @@ export function link(channel: Channel): Link {
   }
 
   return {
+    rewatch,
     cell: <T>(name: string, key?: unknown) =>
       mirrorOf(name, key) as unknown as Watchable<Mirrored<T>>,
 

@@ -114,6 +114,9 @@ export function serve(surface: Surface, channel: Channel, options: ServeOptions 
     }
   })
 
+  // Say we are here: a watcher that outlived the last graph must ask again.
+  channel.send({ kind: 'up' })
+
   return () => {
     stopListening()
     for (const stop of watching.values()) stop()

@@ -61,5 +61,14 @@ export type { Link } from './link/link.ts'
 export { pairInMemory, channelOverPort } from './link/channels.ts'
 export type { Pair, Port } from './link/channels.ts'
 
+export { busHub, channelOverBus } from './link/bus.ts'
+export type { Bus, Hub } from './link/bus.ts'
+
+export { sharedWorkerHub, channelToSharedWorker, sharedWorkersExist } from './link/shared.ts'
+export type { SharedScope } from './link/shared.ts'
+
+export { leadOrFollow, webLocks } from './link/lead.ts'
+export type { Lock, LeadOptions } from './link/lead.ts'
+
 export { valueOf as seenValue, valueOr, atOnce, perFrame, NOT_YET } from './link/channel.ts'
 export type { Channel, Mirrored, Schedule, ToGraph, ToWatcher } from './link/channel.ts'

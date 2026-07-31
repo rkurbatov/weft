@@ -83,10 +83,13 @@ function readBook(store: Store, key: string): Entry[] {
     if (!Array.isArray(parsed)) return []
     // A run that died mid-flight left entries marked as sending; the world may or
     // may not have taken them, which is exactly what the idempotency key is for.
-    return parsed.map(raw => {
-      const entry = raw as Entry
-      return entry.state === 'sending' ? { ...entry, state: 'waiting' as const } : entry
-    })
+    // These come straight out of JSON.parse and nobody else holds them, so they
+    // are set right in place rather than copied.
+    const entries = parsed as Entry[]
+    for (const entry of entries) {
+      if (entry.state === 'sending') (entry as { state: EntryState }).state = 'waiting'
+    }
+    return entries
   } catch {
     store.remove(key)
     return []
@@ -178,12 +181,7 @@ export function outbox(options: OutboxOptions): Outbox {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       if (attempt >= maxAttempts) {
-        const stuckEntry: Entry = {
-          ...head,
-          attempts: attempt,
-          state: 'stuck',
-          lastError: message,
-        }
+        const stuckEntry: Entry = { ...head, attempts: attempt, state: 'stuck', lastError: message }
         replace(head.id, () => stuckEntry)
         onStuck?.(stuckEntry)
         settle(head.id, error)
