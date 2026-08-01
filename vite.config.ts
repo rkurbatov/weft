@@ -2,7 +2,7 @@ import { resolve } from 'node:path'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
-// One config, five pages: the menu, the two spreadsheets, and the sheet across windows. The library is
+// One config, six pages: the menu, the two spreadsheets, the sheet across windows, and the rail. The library is
 // reached through the package's own subpath imports (#weft), the same way the
 // tests reach it — no alias to keep in step with tsconfig.
 export default defineConfig({
@@ -20,6 +20,7 @@ export default defineConfig({
         classic: resolve(import.meta.dirname, 'demo/spreadsheet/index.html'),
         weft: resolve(import.meta.dirname, 'demo/spreadsheet-weft/index.html'),
         sheetTabs: resolve(import.meta.dirname, 'demo/spreadsheet-tabs/index.html'),
+        rail: resolve(import.meta.dirname, 'demo/rail/index.html'),
       },
     },
   },

@@ -35,6 +35,9 @@ export interface Ordered<R> {
   readonly size: Watchable<number>
   /** Rows [from, to) in order. The same window is the same cell. */
   slice(from: number, to: number): Watchable<readonly R[]>
+  /** Where this key stands right now, -1 when absent. Plain and untracked:
+   *  made for scroll anchoring, not for formulas. */
+  rank(key: Key): number
   dispose(): void
 }
 
@@ -69,8 +72,18 @@ export interface TableOptions<R> {
   name?: string
   /** What counts as the same row. Structural by default. */
   equal?: Equal<R>
+  /**
+   * Who stands when two writers bring the same key: an incoming row that does
+   * not win is dropped without a trace. This is how a page that travelled
+   * slowly loses to the live event that overtook it. Absent, incoming wins.
+   */
+  wins?(incoming: R, standing: R): boolean
   /** Change batches remembered for followers; an older follower rebuilds instead. */
   keep?: number
+  /** First live watcher arrived — anywhere downstream. Time to feed the table. */
+  onDemand?: () => void
+  /** Last live watcher left. Whatever feeds the table may rest. */
+  onIdle?: () => void
 }
 
 const KEEP = 64
@@ -199,7 +212,7 @@ function orderedOver<R>(feed: Feed<R>, compare: (a: R, b: R) => number, name: st
     row: R
   }
   // Equal rows are tied by key, so every entry has one place and can be found again.
-  const rank = (a: Entry, b: Entry): number => compare(a.row, b.row) || keyCompare(a.key, b.key)
+  const order = (a: Entry, b: Entry): number => compare(a.row, b.row) || keyCompare(a.key, b.key)
   let entries: Entry[] = []
   let v = 0
 
@@ -209,7 +222,7 @@ function orderedOver<R>(feed: Feed<R>, compare: (a: R, b: R) => number, name: st
     while (lo < hi) {
       const mid = (lo + hi) >> 1
       const at = entries[mid]
-      if (at !== undefined && rank(at, e) < 0) lo = mid + 1
+      if (at !== undefined && order(at, e) < 0) lo = mid + 1
       else hi = mid
     }
     return lo
@@ -225,7 +238,7 @@ function orderedOver<R>(feed: Feed<R>, compare: (a: R, b: R) => number, name: st
     let i = lowerBound(e)
     while (i < entries.length) {
       const at = entries[i]
-      if (at === undefined || rank(at, e) !== 0) return
+      if (at === undefined || order(at, e) !== 0) return
       if (at.key === key) {
         entries.splice(i, 1)
         return
@@ -237,7 +250,7 @@ function orderedOver<R>(feed: Feed<R>, compare: (a: R, b: R) => number, name: st
   const rebuild = (): void => {
     entries = []
     feed.each(row => entries.push({ key: feed.keyOf(row), row }))
-    entries.sort(rank)
+    entries.sort(order)
   }
 
   const ensure = follow(feed, {
@@ -283,6 +296,20 @@ function orderedOver<R>(feed: Feed<R>, compare: (a: R, b: R) => number, name: st
   return {
     size,
     slice: (from, to) => windows(`${from}:${to}`),
+    rank(key) {
+      version.peek() // brings the order up to date without becoming a dependency
+      const row = feed.get(key)
+      if (row === undefined) return -1
+      const wanted = { key, row }
+      let i = lowerBound(wanted)
+      while (i < entries.length) {
+        const at = entries[i]
+        if (at === undefined || order(at, wanted) !== 0) return -1
+        if (at.key === key) return i
+        i++
+      }
+      return -1
+    },
     dispose: () => version.dispose(),
   }
 }
@@ -425,10 +452,15 @@ export function table<R>(options: TableOptions<R>): SourceTable<R> {
   const name = options.name ?? 'table'
   const keyOf = options.key
   const equal = options.equal ?? alike
+  const wins = options.wins
   const state = new Map<Key, R>()
   const log = changeLog<R>(options.keep ?? KEEP)
   let v = 0
-  const version = input(0, { name: `${name}.version` })
+  const version = input(0, {
+    name: `${name}.version`,
+    ...(options.onDemand ? { onDemand: options.onDemand } : {}),
+    ...(options.onIdle ? { onIdle: options.onIdle } : {}),
+  })
 
   const commit = (changes: Change<R>[]): void => {
     if (changes.length === 0) return
@@ -441,6 +473,7 @@ export function table<R>(options: TableOptions<R>): SourceTable<R> {
     for (const row of patch.put ?? []) {
       const key = keyOf(row)
       const prev = state.get(key)
+      if (prev !== undefined && wins !== undefined && !wins(row, prev)) continue
       if (prev !== undefined && equal(prev, row)) continue
       state.set(key, row)
       changes.push(prev === undefined ? { key, next: row } : { key, prev, next: row })
@@ -461,8 +494,8 @@ export function table<R>(options: TableOptions<R>): SourceTable<R> {
     for (const [key, row] of next) {
       const prev = state.get(key)
       if (prev === undefined) changes.push({ key, next: row })
-      else if (equal(prev, row))
-        next.set(key, prev) // the row stays itself: nobody wakes
+      // Membership is the snapshot's word; what the row says is still contested.
+      else if ((wins !== undefined && !wins(row, prev)) || equal(prev, row)) next.set(key, prev)
       else changes.push({ key, prev, next: row })
     }
     for (const [key, prev] of state) if (!next.has(key)) changes.push({ key, prev })

@@ -33,6 +33,14 @@
         takes the sheet over by the freed lock, and every mirror re-asks on its own. This is the
         page that is not a wrapper over React — React only draws it.
       </p>
+      <h1>A rail that feeds itself</h1>
+      <p>
+        <a href="./rail/">Pages from a server, a live feed on top.</a> The state module declares
+        what things are — a table with a precedence rule, shelves, counters — and holds not a single
+        reducer. The feed starts with the first look and rests when nobody watches; a page that
+        travelled slowly loses to the event that overtook it. Watch the render counter while scores
+        tick.
+      </p>
     </main>
   </body>
 </html>

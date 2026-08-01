@@ -235,3 +235,53 @@ test('oracle: every derived answer equals a recount from scratch, at every step'
     check()
   }
 })
+
+test('a page that travelled slowly loses to the event that overtook it', () => {
+  interface Versioned {
+    id: number
+    score: number
+    rev: number
+  }
+  const t = table<Versioned>({ key: r => r.id, wins: (next, prev) => next.rev >= prev.rev })
+  t.put({ id: 1, score: 0, rev: 1 }) // the page was photographed here
+  t.put({ id: 1, score: 3, rev: 5 }) // a live event lands first
+
+  let woke = 0
+  const stop = subscribe(t.row(1), () => woke++)
+  t.put({ id: 1, score: 0, rev: 1 }) // the page finally arrives, stale
+  assert.equal(woke, 0)
+  assert.equal(t.peek(1)?.score, 3)
+
+  t.replace([{ id: 1, score: 0, rev: 1 }]) // even as a whole snapshot
+  assert.equal(t.peek(1)?.score, 3)
+  stop()
+})
+
+test('demand reaches the table through anything derived from it', () => {
+  const t = table<Row>({
+    key: r => r.id,
+    onDemand: () => log.push('on'),
+    onIdle: () => log.push('off'),
+  })
+  const log: string[] = []
+  t.put(row(1, 'a', 10))
+  const top = t.where(r => r.score > 5).orderBy((a, b) => b.score - a.score)
+
+  const stop = subscribe(top.slice(0, 3), () => {})
+  assert.deepEqual(log, ['on'])
+  stop()
+  assert.deepEqual(log, ['on', 'off'])
+})
+
+test('rank follows the living order: a birth above shifts it, absence is -1', () => {
+  const t = table<Row>({ key: r => r.id })
+  t.put(row(1, 'a', 10), row(2, 'a', 20), row(3, 'a', 30))
+  const byScore = t.orderBy((a, b) => a.score - b.score)
+  assert.equal(byScore.rank(3), 2)
+
+  t.put(row(4, 'a', 5)) // lands above everything
+  assert.equal(byScore.rank(3), 3)
+
+  t.drop(3)
+  assert.equal(byScore.rank(3), -1)
+})
