@@ -33,6 +33,14 @@
         takes the sheet over by the freed lock, and every mirror re-asks on its own. This is the
         page that is not a wrapper over React — React only draws it.
       </p>
+      <h1>Kanban, twice</h1>
+      <p>
+        <a href="./kanban-classic/">The classic side</a> — redux + redux-observable, written the
+        usual honest way: normalized state, optimistic moves with rollback bookkeeping, polling with
+        a hand guard. Drag cards; some writes get refused on purpose and roll back before your eyes.
+        The weft side comes after this one stands trial.
+      </p>
+
       <h1>A rail that feeds itself</h1>
       <p>
         <a href="./rail/">Pages from a server, a live feed on top.</a> The state module declares

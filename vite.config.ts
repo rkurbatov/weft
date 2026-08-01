@@ -1,6 +1,7 @@
 import { resolve } from 'node:path'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import tailwindcss from '@tailwindcss/vite'
 
 // One config, six pages: the menu, the two spreadsheets, the sheet across windows, and the rail. The library is
 // reached through the package's own subpath imports (#weft), the same way the
@@ -10,7 +11,7 @@ export default defineConfig({
   // Relative asset paths, so the built pages open from any directory — a static
   // server rooted elsewhere, an IDE's own preview, even file://.
   base: './',
-  plugins: [react()],
+  plugins: [react(), tailwindcss()],
   build: {
     outDir: '../dist-demo',
     emptyOutDir: true,
@@ -21,6 +22,7 @@ export default defineConfig({
         weft: resolve(import.meta.dirname, 'demo/spreadsheet-weft/index.html'),
         sheetTabs: resolve(import.meta.dirname, 'demo/spreadsheet-tabs/index.html'),
         rail: resolve(import.meta.dirname, 'demo/rail/index.html'),
+        kanbanClassic: resolve(import.meta.dirname, 'demo/kanban-classic/index.html'),
       },
     },
   },

@@ -17,144 +17,144 @@ const OVERSCAN = 6
 const SHELVES: Shelf[] = ['all', 'live', 'upcoming', 'final']
 
 const clock = (ts: number): string =>
-    new Date(ts).toLocaleString(undefined, { weekday: 'short', hour: '2-digit', minute: '2-digit' })
+  new Date(ts).toLocaleString(undefined, { weekday: 'short', hour: '2-digit', minute: '2-digit' })
 
 const Card = memo(function Card({ id }: { id: number }): ReactNode {
-    countCellRender()
-    const game = useCell(app.games.row(id))
-    if (game === undefined) return null
-    const fresh = Date.now() - game.born < 15_000
-    return (
-        <div className={`card ${game.status}${fresh ? ' fresh' : ''}`} style={{ height: ROW }}>
-            <span className="sport">{game.sport}</span>
-            <span className="sides">
+  countCellRender()
+  const game = useCell(app.games.row(id))
+  if (game === undefined) return null
+  const fresh = Date.now() - game.born < 15_000
+  return (
+    <div className={`card ${game.status}${fresh ? ' fresh' : ''}`} style={{ height: ROW }}>
+      <span className="sport">{game.sport}</span>
+      <span className="sides">
         {game.home} — {game.away}
       </span>
-            {game.status === 'upcoming' ? (
-                <span className="when">{clock(game.start)}</span>
-            ) : (
-                <span className="net">
+      {game.status === 'upcoming' ? (
+        <span className="when">{clock(game.start)}</span>
+      ) : (
+        <span className="net">
           {game.score.h}:{game.score.a}
         </span>
-            )}
-            <span className="chip">{game.status}</span>
-            <span className="rev">r{game.rev}</span>
-        </div>
-    )
+      )}
+      <span className="chip">{game.status}</span>
+      <span className="rev">r{game.rev}</span>
+    </div>
+  )
 })
 
 function Tab({ name }: { name: Shelf }): ReactNode {
-    const picked = useCell(app.shelf) === name
-    const count = useCell(app.counts[name])
-    return (
-        <button className={picked ? 'tab on' : 'tab'} onClick={() => app.shelf.set(name)}>
-            {name} <b>{count}</b>
-        </button>
-    )
+  const picked = useCell(app.shelf) === name
+  const count = useCell(app.counts[name])
+  return (
+    <button className={picked ? 'tab on' : 'tab'} onClick={() => app.shelf.set(name)}>
+      {name} <b>{count}</b>
+    </button>
+  )
 }
 
 function Meter(): ReactNode {
-    const { cellRenders } = useCounters()
-    const goals = useCell(app.goals)
-    const loaded = useCell(app.loaded)
-    const arrivals = useCell(app.arrivals)
-    return (
-        <p className="meter">
-            rows loaded {loaded} · born since open {arrivals} · goals on air {goals} · card renders{' '}
-            {cellRenders}
-        </p>
-    )
+  const { cellRenders } = useCounters()
+  const goals = useCell(app.goals)
+  const loaded = useCell(app.loaded)
+  const arrivals = useCell(app.arrivals)
+  return (
+    <p className="meter">
+      rows loaded {loaded} · born since open {arrivals} · goals on air {goals} · card renders{' '}
+      {cellRenders}
+    </p>
+  )
 }
 
 function Rail(): ReactNode {
-    const name = useCell(app.shelf)
-    const shelfView = app.shelves[name]
-    const size = useCell(shelfView.size)
+  const name = useCell(app.shelf)
+  const shelfView = app.shelves[name]
+  const size = useCell(shelfView.size)
 
-    const box = useRef<HTMLDivElement>(null)
-    const frame = useRef(0)
-    const [first, setFirst] = useState(0)
-    const [height, setHeight] = useState(600)
+  const box = useRef<HTMLDivElement>(null)
+  const frame = useRef(0)
+  const [first, setFirst] = useState(0)
+  const [height, setHeight] = useState(600)
 
-    useEffect(() => {
-        const view = box.current
-        if (view === null) return
-        const measure = (): void => setHeight(view.clientHeight)
-        measure()
-        const watcher = new ResizeObserver(measure)
-        watcher.observe(view)
-        return () => {
-            watcher.disconnect()
-            if (frame.current !== 0) cancelAnimationFrame(frame.current)
-        }
-    }, [])
-
-    const span = Math.ceil(height / ROW) + OVERSCAN * 2
-
-    // Reporting the look is the only "effect" here; the pages follow on their own.
-    useEffect(() => {
-        app.reach.set(first + span)
-    }, [first, span])
-
-    const onScroll = (): void => {
-        if (frame.current !== 0) return
-        frame.current = requestAnimationFrame(() => {
-            frame.current = 0
-            const view = box.current
-            if (view === null) return
-            const wanted = Math.max(0, Math.floor(view.scrollTop / ROW) - OVERSCAN)
-            setFirst(was => (was === wanted ? was : wanted))
-        })
+  useEffect(() => {
+    const view = box.current
+    if (view === null) return
+    const measure = (): void => setHeight(view.clientHeight)
+    measure()
+    const watcher = new ResizeObserver(measure)
+    watcher.observe(view)
+    return () => {
+      watcher.disconnect()
+      if (frame.current !== 0) cancelAnimationFrame(frame.current)
     }
+  }, [])
 
-    const rows = useCell(shelfView.slice(first, first + span))
+  const span = Math.ceil(height / ROW) + OVERSCAN * 2
 
-    // The list is alive: games are born and leave above the window, and every
-    // such move shifts the indices the window is positioned by. The anchor keeps
-    // the top drawn row at the same pixel; the scroll event then catches `first`
-    // up, and the overscan covers the frame in between.
-    const anchor = useRef<{ key: number; rank: number; shelf: Shelf } | null>(null)
-    useLayoutEffect(() => {
-        const held = anchor.current
-        if (held !== null && held.shelf === name) {
-            const stands = shelfView.rank(held.key)
-            if (stands >= 0 && stands !== held.rank) {
-                const view = box.current
-                if (view !== null) view.scrollTop += (stands - held.rank) * ROW
-                anchor.current = { ...held, rank: stands }
-                return // the same anchor, restated
-            }
-        }
-        const top = rows[0]
-        anchor.current = top === undefined ? null : { key: top.id, rank: first, shelf: name }
+  // Reporting the look is the only "effect" here; the pages follow on their own.
+  useEffect(() => {
+    app.reach.set(first + span)
+  }, [first, span])
+
+  const onScroll = (): void => {
+    if (frame.current !== 0) return
+    frame.current = requestAnimationFrame(() => {
+      frame.current = 0
+      const view = box.current
+      if (view === null) return
+      const wanted = Math.max(0, Math.floor(view.scrollTop / ROW) - OVERSCAN)
+      setFirst(was => (was === wanted ? was : wanted))
     })
+  }
 
-    return (
-        <div className="stack" ref={box} onScroll={onScroll}>
-            <div style={{ height: size * ROW, position: 'relative' }}>
-                <div style={{ position: 'absolute', top: first * ROW, left: 0, right: 0 }}>
-                    {rows.map(g => (
-                        <Card key={g.id} id={g.id} />
-                    ))}
-                </div>
-            </div>
+  const rows = useCell(shelfView.slice(first, first + span))
+
+  // The list is alive: games are born and leave above the window, and every
+  // such move shifts the indices the window is positioned by. The anchor keeps
+  // the top drawn row at the same pixel; the scroll event then catches `first`
+  // up, and the overscan covers the frame in between.
+  const anchor = useRef<{ key: number; rank: number; shelf: Shelf } | null>(null)
+  useLayoutEffect(() => {
+    const held = anchor.current
+    if (held !== null && held.shelf === name) {
+      const stands = shelfView.rank(held.key)
+      if (stands >= 0 && stands !== held.rank) {
+        const view = box.current
+        if (view !== null) view.scrollTop += (stands - held.rank) * ROW
+        anchor.current = { ...held, rank: stands }
+        return // the same anchor, restated
+      }
+    }
+    const top = rows[0]
+    anchor.current = top === undefined ? null : { key: top.id, rank: first, shelf: name }
+  })
+
+  return (
+    <div className="stack" ref={box} onScroll={onScroll}>
+      <div style={{ height: size * ROW, position: 'relative' }}>
+        <div style={{ position: 'absolute', top: first * ROW, left: 0, right: 0 }}>
+          {rows.map(g => (
+            <Card key={g.id} id={g.id} />
+          ))}
         </div>
-    )
+      </div>
+    </div>
+  )
 }
 
 export function App(): ReactNode {
-    return (
-        <div className="rail">
-            <header className="bar">
-                <h1>Rail on weft</h1>
-                <nav className="tabs">
-                    {SHELVES.map(name => (
-                        <Tab key={name} name={name} />
-                    ))}
-                </nav>
-                <Meter />
-            </header>
-            <Rail />
-        </div>
-    )
+  return (
+    <div className="rail">
+      <header className="bar">
+        <h1>Rail on weft</h1>
+        <nav className="tabs">
+          {SHELVES.map(name => (
+            <Tab key={name} name={name} />
+          ))}
+        </nav>
+        <Meter />
+      </header>
+      <Rail />
+    </div>
+  )
 }
