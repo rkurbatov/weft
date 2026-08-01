@@ -43,8 +43,14 @@ export {
 } from './core/remote.ts'
 export type { Remote, Held } from './core/remote.ts'
 
-export { keepInput, keepSource, memoryStore, webStore } from './core/keep.ts'
-export type { Store, Kept, KeepOptions, Dropped } from './core/keep.ts'
+export { memoryStore, webStore } from './core/store.ts'
+export type { Store } from './core/store.ts'
+
+export { idbStore } from './core/idb.ts'
+export type { IdbOptions } from './core/idb.ts'
+
+export { keepInput, keepSource } from './core/keep.ts'
+export type { Kept, KeepOptions, Keeping, Dropped } from './core/keep.ts'
 
 export { outbox } from './core/outbox.ts'
 export type { Outbox, OutboxOptions, Entry, EntryState, Handler } from './core/outbox.ts'

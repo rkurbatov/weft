@@ -1,57 +1,29 @@
 // Persistence. Only stored cells are kept — a formula is recomputed, never
 // restored. What is kept carries the moment it arrived, so an answer that
 // survives a reload is honest about its age instead of pretending to be new.
+//
+// The disk is asynchronous, and two things follow. Restoring never delays the
+// first show: the screen starts on the initial value, and what the disk held
+// arrives as an ordinary write — unless a human or the network got there first,
+// because what was done while the disk was thinking is newer than what it
+// holds. And a refusal to write is a declared state, not a silence: `keeping`
+// says whether writes are landing, and why not.
 
-import { subscribe } from './graph.ts'
-import type { Input } from './graph.ts'
+import { input, subscribe } from './graph.ts'
+import type { Input, Watchable } from './graph.ts'
 import { heldOf } from './remote.ts'
 import type { Source } from './source.ts'
-
-export interface Store {
-  read(key: string): string | null
-  write(key: string, text: string): void
-  remove(key: string): void
-}
-
-/** Whatever was written last, in memory. For tests and for a fallback. */
-export function memoryStore(seed: Record<string, string> = {}): Store {
-  const cells = new Map<string, string>(Object.entries(seed))
-  return {
-    read: key => cells.get(key) ?? null,
-    write: (key, text) => {
-      cells.set(key, text)
-    },
-    remove: key => {
-      cells.delete(key)
-    },
-  }
-}
-
-/** Browser storage, if there is any; otherwise an in-memory stand-in. */
-export function webStore(area: 'local' | 'session' = 'local'): Store {
-  const backing =
-    typeof globalThis === 'object' && 'localStorage' in globalThis
-      ? ((area === 'local' ? globalThis.localStorage : globalThis.sessionStorage) as Storage)
-      : undefined
-  if (backing === undefined) return memoryStore()
-  return {
-    read: key => backing.getItem(key),
-    write: (key, text) => {
-      // A full or blocked store must not take the application down with it.
-      try {
-        backing.setItem(key, text)
-      } catch {
-        /* ignore */
-      }
-    },
-    remove: key => {
-      backing.removeItem(key)
-    },
-  }
-}
+import type { Store } from './store.ts'
 
 /** Why something on disk was not put back. */
 export type Dropped = 'version' | 'age' | 'unreadable'
+
+/** Whether what happens here is reaching the disk. */
+export type Keeping =
+  | { readonly kind: 'keeping' }
+  | { readonly kind: 'without'; readonly reason: string }
+
+export const KEEPING: Keeping = { kind: 'keeping' }
 
 interface Envelope {
   v: number
@@ -73,31 +45,88 @@ export interface KeepOptions<T> {
 }
 
 export interface Kept {
-  /** Was something put back at startup. */
-  readonly restored: boolean
+  /** Resolves once the disk has been asked: true if something was put back. */
+  readonly restored: Promise<boolean>
+  /** Are writes reaching the disk. `without` names the reason they are not. */
+  readonly keeping: Watchable<Keeping>
   /** Stop keeping it; what is on disk stays. */
   stop(): void
   /** Stop keeping it and wipe what is on disk. */
   forget(): void
 }
 
-function readEnvelope<T>(options: KeepOptions<T>): { value: unknown; at: number } | undefined {
+function describe(error: unknown): string {
+  return error instanceof Error ? `${error.name}: ${error.message}` : String(error)
+}
+
+/**
+ * One writer per kept key. Changes coalesce while a write is in flight — the
+ * queue is never lost, and the disk always ends on the latest value. A refusal
+ * turns `keeping` to `without`; the next change simply tries again, so a store
+ * that comes back (quota freed, private mode left) is picked up by itself.
+ */
+function pumpFor(options: { key: string; store: Store; version?: number }) {
+  const { key, store, version = 1 } = options
+  const keeping = input<Keeping>(KEEPING, { name: `${key}.keeping` })
+  let pending: Envelope | undefined
+  let flying = false
+
+  const drain = (): void => {
+    if (flying || pending === undefined) return
+    const load = pending
+    pending = undefined
+    flying = true
+    store.write(key, load).then(
+      () => {
+        flying = false
+        keeping.set(KEEPING)
+        drain()
+      },
+      (error: unknown) => {
+        flying = false
+        keeping.set({ kind: 'without', reason: describe(error) })
+        // A newer value may be waiting; it gets its try — one per change, so a
+        // dead disk costs one refusal per edit, not a loop.
+        drain()
+      },
+    )
+  }
+
+  return {
+    keeping,
+    push: (value: unknown, at: number): void => {
+      pending = { v: version, at, value }
+      drain()
+    },
+  }
+}
+
+async function readEnvelope<T>(
+  options: KeepOptions<T>,
+  keeping: Input<Keeping>,
+): Promise<{ value: unknown; at: number } | undefined> {
   const { key, store, version = 1, maxAge, migrate, onDropped } = options
   const now = options.now ?? Date.now
-  const text = store.read(key)
-  if (text === null) return undefined
 
-  let envelope: Envelope
+  let raw: unknown
   try {
-    const parsed: unknown = JSON.parse(text)
-    if (typeof parsed !== 'object' || parsed === null) throw new Error('not an object')
-    envelope = parsed as Envelope
-    if (typeof envelope.v !== 'number' || typeof envelope.at !== 'number') {
-      throw new Error('no envelope')
-    }
-  } catch {
+    raw = await store.read(key)
+  } catch (error) {
+    // The disk did not answer. Nothing to put back — and writes are not likely
+    // to land either, which is the same declared state.
+    keeping.set({ kind: 'without', reason: describe(error) })
+    return undefined
+  }
+  if (raw === undefined || raw === null) return undefined
+
+  const envelope = raw as Envelope
+  if (
+    typeof envelope !== 'object' ||
+    typeof envelope.v !== 'number' ||
+    typeof envelope.at !== 'number'
+  ) {
     onDropped?.('unreadable', key)
-    store.remove(key)
+    void store.remove(key).catch(() => {})
     return undefined
   }
 
@@ -106,7 +135,7 @@ function readEnvelope<T>(options: KeepOptions<T>): { value: unknown; at: number 
     const rescued = migrate?.(envelope.value, envelope.v)
     if (rescued === undefined) {
       onDropped?.('version', key)
-      store.remove(key)
+      void store.remove(key).catch(() => {})
       return undefined
     }
     value = rescued
@@ -114,16 +143,11 @@ function readEnvelope<T>(options: KeepOptions<T>): { value: unknown; at: number 
 
   if (maxAge !== undefined && now() - envelope.at >= maxAge) {
     onDropped?.('age', key)
-    store.remove(key)
+    void store.remove(key).catch(() => {})
     return undefined
   }
 
   return { value, at: envelope.at }
-}
-
-function writeEnvelope<T>(options: KeepOptions<T>, value: unknown, at: number): void {
-  const { key, store, version = 1 } = options
-  store.write(key, JSON.stringify({ v: version, at, value } satisfies Envelope))
 }
 
 /**
@@ -132,23 +156,39 @@ function writeEnvelope<T>(options: KeepOptions<T>, value: unknown, at: number): 
  */
 export function keepInput<T>(target: Input<T>, options: KeepOptions<T>): Kept {
   const now = options.now ?? Date.now
-  const found = readEnvelope(options)
-  if (found !== undefined) target.set(found.value as T)
+  const writes = pumpFor(options)
+  let touched = false
+  let restoring = false
 
   const stop = subscribe(
     target,
     value => {
-      writeEnvelope(options, value, now())
+      if (restoring) return
+      touched = true
+      writes.push(value, now())
     },
     { demand: false },
   )
 
+  const restored = readEnvelope(options, writes.keeping).then(found => {
+    // A human got there while the disk was thinking; theirs is newer.
+    if (found === undefined || touched) return false
+    restoring = true
+    try {
+      target.set(found.value as T)
+    } finally {
+      restoring = false
+    }
+    return true
+  })
+
   return {
-    restored: found !== undefined,
+    restored,
+    keeping: writes.keeping,
     stop,
     forget: () => {
       stop()
-      options.store.remove(options.key)
+      void options.store.remove(options.key).catch(() => {})
     },
   }
 }
@@ -159,26 +199,41 @@ export function keepInput<T>(target: Input<T>, options: KeepOptions<T>): Kept {
  * as it stands, past it the first demand asks again.
  */
 export function keepSource<T>(feed: Source<T>, options: KeepOptions<T>): Kept {
-  const found = readEnvelope(options)
-  if (found !== undefined) feed.restore(found.value as T, found.at)
+  const writes = pumpFor(options)
+  let restoring = false
 
   const stop = subscribe(
     feed.state,
     state => {
+      if (restoring) return
       const held = heldOf(state)
       // Nothing held yet, and a refusal never overwrites a good answer.
       if (held === undefined) return
-      writeEnvelope(options, held.value, held.at)
+      writes.push(held.value, held.at)
     },
     { demand: false },
   )
 
+  const restored = readEnvelope(options, writes.keeping).then(found => {
+    if (found === undefined) return false
+    // The network answered while the disk was thinking; the answer is newer.
+    if (heldOf(feed.state.peek()) !== undefined) return false
+    restoring = true
+    try {
+      feed.restore(found.value as T, found.at)
+    } finally {
+      restoring = false
+    }
+    return true
+  })
+
   return {
-    restored: found !== undefined,
+    restored,
+    keeping: writes.keeping,
     stop,
     forget: () => {
       stop()
-      options.store.remove(options.key)
+      void options.store.remove(options.key).catch(() => {})
     },
   }
 }

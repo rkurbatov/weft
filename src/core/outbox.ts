@@ -4,7 +4,9 @@
 
 import { cell, input } from './graph.ts'
 import type { Readable } from './graph.ts'
-import type { Store } from './keep.ts'
+import { KEEPING } from './keep.ts'
+import type { Keeping } from './keep.ts'
+import type { Store } from './store.ts'
 import type { Timers } from './source.ts'
 
 export type EntryState = 'waiting' | 'sending' | 'stuck'
@@ -47,6 +49,10 @@ export interface OutboxOptions {
 }
 
 export interface Outbox {
+  /** Resolves when what a previous run left behind has been lifted off the disk. */
+  readonly ready: Promise<void>
+  /** Are writes of the book reaching the disk. `without` names the reason. */
+  readonly keeping: Readable<Keeping>
   /** Everything not yet confirmed by the world, in the order it was written down. */
   readonly entries: Readable<readonly Entry[]>
   /** How many are still owed to the world. */
@@ -75,25 +81,17 @@ function randomId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
 }
 
-function readBook(store: Store, key: string): Entry[] {
-  const text = store.read(key)
-  if (text === null) return []
-  try {
-    const parsed: unknown = JSON.parse(text)
-    if (!Array.isArray(parsed)) return []
-    // A run that died mid-flight left entries marked as sending; the world may or
-    // may not have taken them, which is exactly what the idempotency key is for.
-    // These come straight out of JSON.parse and nobody else holds them, so they
-    // are set right in place rather than copied.
-    const entries = parsed as Entry[]
-    for (const entry of entries) {
-      if (entry.state === 'sending') (entry as { state: EntryState }).state = 'waiting'
-    }
-    return entries
-  } catch {
-    store.remove(key)
-    return []
+function mendBook(raw: unknown): Entry[] {
+  if (!Array.isArray(raw)) return []
+  // A run that died mid-flight left entries marked as sending; the world may or
+  // may not have taken them, which is exactly what the idempotency key is for.
+  // The store parted with a clone that nobody else holds, so the entries are
+  // set right in place rather than copied.
+  const entries = raw as Entry[]
+  for (const entry of entries) {
+    if (entry.state === 'sending') (entry as { state: EntryState }).state = 'waiting'
   }
+  return entries
 }
 
 export function outbox(options: OutboxOptions): Outbox {
@@ -103,15 +101,45 @@ export function outbox(options: OutboxOptions): Outbox {
   const timers = options.timers ?? wallClock
   const newId = options.newId ?? randomId
 
-  const entries = input<readonly Entry[]>(readBook(store, key), { name: `${key}.entries` })
+  const entries = input<readonly Entry[]>([], { name: `${key}.entries` })
+  const keeping = input<Keeping>(KEEPING, { name: `${key}.keeping` })
   const waiting = new Map<string, { resolve: () => void; reject: (error: unknown) => void }>()
   let held = options.paused ?? false
   let timer: unknown = null
   let sending = false
+  let lifted = false
+
+  // One writer for the book. Versions coalesce while one is in flight: the disk
+  // always ends on the latest book, and no write is ever lost between two.
+  let pendingBook: readonly Entry[] | undefined
+  let writing = false
+  function drainBook(): void {
+    if (writing || pendingBook === undefined) return
+    const book = pendingBook
+    pendingBook = undefined
+    writing = true
+    store.write(key, book).then(
+      () => {
+        writing = false
+        keeping.set(KEEPING)
+        drainBook()
+      },
+      (error: unknown) => {
+        writing = false
+        const reason = error instanceof Error ? `${error.name}: ${error.message}` : String(error)
+        keeping.set({ kind: 'without', reason })
+        drainBook()
+      },
+    )
+  }
 
   function write(next: readonly Entry[]): void {
     entries.set(next)
-    store.write(key, JSON.stringify(next))
+    // Before the old book is lifted, writing would bury it; the lift merges and
+    // writes the whole of it instead.
+    if (!lifted) return
+    pendingBook = next
+    drainBook()
   }
 
   function replace(id: string, change: (entry: Entry) => Entry): void {
@@ -150,7 +178,7 @@ export function outbox(options: OutboxOptions): Outbox {
 
   /** Send the head of the book, one at a time: order is part of the promise. */
   async function pump(): Promise<void> {
-    if (sending || held) return
+    if (sending || held || !lifted) return
     const head = entries.peek().find(entry => entry.state !== 'stuck')
     if (head === undefined) return
 
@@ -195,10 +223,28 @@ export function outbox(options: OutboxOptions): Outbox {
     if (timer === null) void pump()
   }
 
-  // Whatever a previous run left behind is owed to the world; start now.
-  if (!held) void pump()
+  // Whatever a previous run left behind is owed to the world. It is lifted
+  // first, and nothing is sent until it is: order is part of the promise, and
+  // what was written down earlier goes out earlier.
+  const ready = store
+    .read(key)
+    .then(raw => mendBook(raw))
+    .catch((error: unknown) => {
+      // The disk did not answer: nothing to lift, and the book is not landing.
+      const reason = error instanceof Error ? `${error.name}: ${error.message}` : String(error)
+      keeping.set({ kind: 'without', reason })
+      return [] as Entry[]
+    })
+    .then(book => {
+      const newborn = entries.peek()
+      lifted = true
+      if (book.length > 0 || newborn.length > 0) write([...book, ...newborn])
+      if (!held) void pump()
+    })
 
   return {
+    ready,
+    keeping,
     entries,
     owed: cell(() => entries.get().filter(entry => entry.state !== 'stuck').length, {
       name: `${key}.owed`,

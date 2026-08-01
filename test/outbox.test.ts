@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { cell, subscribe } from '#core/graph.ts'
 import { outbox } from '#core/outbox.ts'
-import { memoryStore } from '#core/keep.ts'
+import { memoryStore } from '#core/store.ts'
 import type { Entry, Handler } from '#core/outbox.ts'
 import type { Timers } from '#core/source.ts'
 
@@ -73,7 +73,7 @@ test('a command is sent with its idempotency key and then leaves the book', asyn
   await done
   assert.deepEqual(seen, [{ args: { amount: 10 }, key: id, attempt: 1 }])
   assert.equal(book.owed.peek(), 0)
-  assert.equal(store.read('out'), '[]')
+  assert.deepEqual(await store.read('out'), [])
 })
 
 test('commands go one at a time, in the order they were written down', async () => {
@@ -114,12 +114,9 @@ test('what was in flight when the tab died is sent again with the same key', asy
   const store = memoryStore()
   const world = fakeWorld()
   // A previous run wrote it down and died mid-send.
-  store.write(
-    'out',
-    JSON.stringify([
-      { id: 'kept-key', name: 'pay', args: { amount: 5 }, at: 900, attempts: 1, state: 'sending' },
-    ] satisfies Entry[]),
-  )
+  await store.write('out', [
+    { id: 'kept-key', name: 'pay', args: { amount: 5 }, at: 900, attempts: 1, state: 'sending' },
+  ] satisfies Entry[])
   const seen: Array<{ key: string; attempt: number }> = []
   const book = outbox({
     key: 'out',
@@ -132,7 +129,7 @@ test('what was in flight when the tab died is sent again with the same key', asy
       }) as Handler,
     },
   })
-  assert.equal(book.owed.peek(), 1)
+  await book.ready
   await settle()
   assert.deepEqual(seen, [{ key: 'kept-key', attempt: 2 }])
   assert.equal(book.owed.peek(), 0)
@@ -247,13 +244,11 @@ test('a stuck entry can be tried again or dropped', async () => {
 test('an entry whose handler is unknown gets stuck instead of vanishing', async () => {
   const store = memoryStore()
   const world = fakeWorld()
-  store.write(
-    'out',
-    JSON.stringify([
-      { id: 'orphan', name: 'gone', args: {}, at: 900, attempts: 0, state: 'waiting' },
-    ] satisfies Entry[]),
-  )
+  await store.write('out', [
+    { id: 'orphan', name: 'gone', args: {}, at: 900, attempts: 0, state: 'waiting' },
+  ] satisfies Entry[])
   const book = outbox({ key: 'out', store, now: world.now, timers: world.timers, handlers: {} })
+  await book.ready
   await settle()
   const stuck = book.stuck.peek()
   assert.equal(stuck.length, 1)
