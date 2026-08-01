@@ -5,6 +5,7 @@
 // watcher depends on it, which is how adapters learn when to start and stop.
 
 import { owned, regionName } from './region.ts'
+import { waves } from './waves.ts'
 
 export type Equal<T> = (a: T, b: T) => boolean
 
@@ -62,7 +63,10 @@ function enter(): void {
 
 function leave(): void {
   workDepth--
-  if (workDepth === 0) drain()
+  if (workDepth === 0) {
+    waves.close()
+    drain()
+  }
 }
 
 function track(source: Source): void {
@@ -249,6 +253,7 @@ export class Input<T> implements Source {
     this.current = next
     enter()
     try {
+      waves.write(this.name, next)
       for (const o of this.observers) markDirty(o)
       flush()
     } finally {
@@ -338,6 +343,7 @@ export class Cell<T> implements Source, Consumer {
   private recompute(): void {
     enter()
     try {
+      const started = waves.on ? waves.now() : 0
       let next!: T
       this.computing = true
       try {
@@ -348,10 +354,12 @@ export class Cell<T> implements Source, Consumer {
         this.computing = false
       }
       // A first value is not a change: nobody held a previous one from us.
-      const changed = this.valued && !this.equal(this.value, next)
+      const hadValue = this.valued
+      const changed = hadValue && !this.equal(this.value, next)
       this.value = next
       this.valued = true
       this.state = CLEAN
+      waves.compute(this.name, waves.on ? waves.now() - started : 0, changed, hadValue)
       // Equal result stops here: observers stay CHECK and settle without recomputing.
       if (changed) for (const o of this.observers) markDirty(o)
     } finally {
@@ -401,6 +409,7 @@ export class Watcher implements Consumer {
   private run(): void {
     enter()
     try {
+      waves.wake()
       retrack(this, this.body)
     } finally {
       this.state = CLEAN
@@ -463,4 +472,57 @@ export function subscribe<T>(
     }
     untracked(() => listener(value))
   }, options)
+}
+
+// ── Looking at the graph ─────────────────────────────────────────────────────
+
+export interface Trace {
+  name: string
+  kind: 'input' | 'cell'
+  /** 'stored' for inputs; for cells, the truth about how current `value` is. */
+  state: 'stored' | 'clean' | 'check' | 'dirty'
+  value: unknown
+  reads?: Trace[]
+  readBy: string[]
+}
+
+function watcherName(consumer: Consumer): string {
+  if (consumer instanceof Cell) return consumer.name
+  if (consumer instanceof Watcher) return '(watcher)'
+  return '(node)'
+}
+
+/**
+ * A look at a node without touching it: its held value as-is — possibly stale,
+ * the state says so — what it reads, who reads it. Nothing recomputes on
+ * account of being looked at; that is the whole point of a debugger.
+ */
+export function trace(node: Watchable<unknown>, depth = 2): Trace {
+  if (node instanceof Input) {
+    return {
+      name: node.name,
+      kind: 'input',
+      state: 'stored',
+      value: node.peek(),
+      readBy: [...node.observers].map(watcherName),
+    }
+  }
+  if (node instanceof Cell) {
+    const raw = node as unknown as { value?: unknown; state: State }
+    const reads =
+      depth > 0
+        ? [...node.sources].flatMap(s =>
+            s instanceof Input || s instanceof Cell ? [trace(s, depth - 1)] : [],
+          )
+        : undefined
+    return {
+      name: node.name,
+      kind: 'cell',
+      state: raw.state === CLEAN ? 'clean' : raw.state === CHECK ? 'check' : 'dirty',
+      value: raw.value,
+      ...(reads === undefined ? {} : { reads }),
+      readBy: [...node.observers].map(watcherName),
+    }
+  }
+  return { name: '(unknown)', kind: 'cell', state: 'dirty', value: undefined, readBy: [] }
 }

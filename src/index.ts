@@ -11,6 +11,7 @@ export {
   Input,
   Cell,
   Watcher,
+  trace,
 } from './core/graph.ts'
 export type {
   Equal,
@@ -19,6 +20,7 @@ export type {
   WatchOptions,
   Readable,
   Watchable,
+  Trace,
 } from './core/graph.ts'
 
 export { command } from './core/command.ts'
@@ -35,6 +37,11 @@ export type { Query, QueryOptions } from './core/query.ts'
 
 export { region, owned, regionName } from './core/region.ts'
 export type { Region } from './core/region.ts'
+
+export { attachProbe } from './core/waves.ts'
+export type { Probe, WaveSummary, WaveWrite, WaveCompute } from './core/waves.ts'
+export { journal } from './core/journal.ts'
+export type { Journal } from './core/journal.ts'
 
 export { table, alike } from './core/table.ts'
 export type {
