@@ -6,6 +6,7 @@ import { cell, input } from './graph.ts'
 import type { Readable } from './graph.ts'
 import { SAVING } from './keep.ts'
 import type { Saving } from './keep.ts'
+import type { Fault } from './remote.ts'
 import type { Store } from './store.ts'
 import { wallClock } from './time.ts'
 import type { Timers } from './time.ts'
@@ -39,14 +40,23 @@ export interface OutboxOptions {
   /** Wait before a retry; doubles per attempt, capped by retryCap. */
   retry?: number
   retryCap?: number
-  /** After this many failures the entry stops trying and waits for a person. */
+  /** After this many REFUSALS the entry stops trying and waits for a person.
+   *  An unknown outcome — sent, no answer — never counts: the ask carries its
+   *  idempotency key, so it is repeated as a matter of course; a blinking
+   *  network must not bury a living entry. */
   maxAttempts?: number
+  /** Name the kind of trouble a handler threw. Default: Unknown-shaped errors
+   *  are unknown, everything else transient. */
+  classify?: (error: unknown) => Fault
   /** Start held: nothing is sent until `resume()`. */
   paused?: boolean
   now?: () => number
   timers?: Timers
   newId?: () => string
   onStuck?: (entry: Entry) => void
+  /** Told when an entry is dropped by hand. Discarding goes through the same
+   *  door as success — with a mark and a trace, never a silent erasure. */
+  onDiscarded?: (entry: Entry) => void
 }
 
 export interface Outbox {
@@ -91,7 +101,13 @@ function mendBook(raw: unknown): Entry[] {
 }
 
 export function outbox(options: OutboxOptions): Outbox {
-  const { key, store, handlers, retry = 1000, maxAttempts = 5, onStuck } = options
+  const { key, store, handlers, retry = 1000, maxAttempts = 5, onStuck, onDiscarded } = options
+  const classify =
+    options.classify ??
+    ((error: unknown): Fault =>
+      error instanceof Error && (error.name === 'Unknown' || error.name === 'UnknownOutcome')
+        ? 'unknown'
+        : 'transient')
   const retryCap = options.retryCap ?? retry * 32
   const now = options.now ?? Date.now
   const timers = options.timers ?? wallClock
@@ -204,7 +220,19 @@ export function outbox(options: OutboxOptions): Outbox {
       settle(head.id)
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
-      if (attempt >= maxAttempts) {
+      if (classify(error) === 'unknown') {
+        // Sent, no answer. The world may have taken it, which is exactly what
+        // the idempotency key is for — so the entry is repeated as a matter of
+        // course and the poison count is not touched: a blinking network must
+        // not bury a living entry.
+        replace(head.id, entry => ({
+          ...entry,
+          state: 'waiting',
+          attempts: head.attempts,
+          lastError: message,
+        }))
+        later(backoff(head.attempts + 1))
+      } else if (attempt >= maxAttempts) {
         const stuckEntry: Entry = { ...head, attempts: attempt, state: 'stuck', lastError: message }
         replace(head.id, () => stuckEntry)
         onStuck?.(stuckEntry)
@@ -273,8 +301,10 @@ export function outbox(options: OutboxOptions): Outbox {
     },
 
     forget(id) {
+      const entry = entries.peek().find(one => one.id === id)
       remove(id)
-      settle(id, new Error('forgotten'))
+      if (entry !== undefined) onDiscarded?.({ ...entry, lastError: 'discarded by hand' })
+      settle(id, new Error(`discarded by hand: ${id}`))
     },
 
     pause() {

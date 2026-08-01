@@ -4,7 +4,7 @@ import { MessageChannel } from 'node:worker_threads'
 import { cell, input, subscribe } from '#core/graph.ts'
 import { atOnce } from '#link/channel.ts'
 import { channelOverPort, pairInMemory } from '#link/channels.ts'
-import { link, UnknownOutcome } from '#link/link.ts'
+import { link, Unknown } from '#link/link.ts'
 import { serve } from '#link/serve.ts'
 
 function settle(): Promise<void> {
@@ -300,7 +300,7 @@ test('closing the link leaves waiting calls unknown, not refused', async () => {
   const slow = seen.command<[], void>('add')()
   seen.close()
   // The command may have run on the other side; closing our end cannot unsay it.
-  await assert.rejects(slow, UnknownOutcome)
+  await assert.rejects(slow, Unknown)
 })
 
 test('a graph restart leaves waiting calls unknown, not refused', async () => {
@@ -316,7 +316,7 @@ test('a graph restart leaves waiting calls unknown, not refused', async () => {
   // The graph comes back knowing nothing of the call it was answering.
   never()
   const again = serve({ commands: {} }, wire.graph, { schedule: atOnce })
-  await assert.rejects(slow, UnknownOutcome)
+  await assert.rejects(slow, Unknown)
 
   seen.close()
   again()
@@ -371,4 +371,69 @@ test('closing the link lets the graph go: unwatch for every mirror still watched
 
   stop()
   stopServing()
+})
+
+test('an ask over the wire waits only so long: past the term the outcome is unknown', async () => {
+  const world = (() => {
+    let time = 0
+    let id = 1
+    const jobs = new Map<number, { at: number; fn: () => void }>()
+    return {
+      timers: {
+        set: (fn: () => void, ms: number) => {
+          const handle = id++
+          jobs.set(handle, { at: time + ms, fn })
+          return handle
+        },
+        clear: (handle: unknown) => {
+          jobs.delete(handle as number)
+        },
+      },
+      async advance(ms: number) {
+        const until = time + ms
+        for (const [handle, job] of [...jobs]) {
+          if (job.at > until) continue
+          jobs.delete(handle)
+          job.fn()
+        }
+        time = until
+        await settle()
+      },
+    }
+  })()
+
+  const wire = pairInMemory()
+  const never = serve({ commands: { forever: () => new Promise(() => {}) } }, wire.graph, {
+    schedule: atOnce,
+  })
+  const seen = link(wire.watcher, { within: 2000, timers: world.timers })
+
+  const slow = seen.command<[], void>('forever')()
+  const outcome = assert.rejects(slow, Unknown)
+  await settle()
+  await world.advance(2000)
+  await outcome
+
+  seen.close()
+  never()
+})
+
+test('perFrame does not wait for a frame that never comes: a background tab still serves', async () => {
+  const had = Object.getOwnPropertyDescriptor(globalThis, 'requestAnimationFrame')
+  // The browser of a background tab: frames are frozen, the callback never fires.
+  Object.defineProperty(globalThis, 'requestAnimationFrame', {
+    value: () => 0,
+    configurable: true,
+  })
+  try {
+    const { perFrame: frozenFrame } = await import('#link/channel.ts')
+    const ran: number[] = []
+    frozenFrame(() => ran.push(1))
+    await new Promise(resolve => setTimeout(resolve, 80))
+    assert.deepEqual(ran, [1]) // the timer raced the frame and won
+  } finally {
+    if (had === undefined)
+      delete (globalThis as { requestAnimationFrame?: unknown }).requestAnimationFrame
+    else Object.defineProperty(globalThis, 'requestAnimationFrame', had)
+  }
 })

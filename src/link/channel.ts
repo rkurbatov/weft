@@ -28,14 +28,28 @@ export type ToWatcher =
 /** What to do with work that must not happen more than once a frame. */
 export type Schedule = (work: () => void) => void
 
-export const perFrame: Schedule =
-  typeof requestAnimationFrame === 'function'
-    ? work => {
-        requestAnimationFrame(() => work())
-      }
-    : work => {
-        setTimeout(work, 0)
-      }
+/**
+ * Once a frame in the foreground — and still soon in the background, where the
+ * browser freezes frames entirely: a leading tab must keep serving the others
+ * after the person switches away, so a timer races the frame and whichever
+ * comes first does the work, once.
+ */
+export const perFrame: Schedule = work => {
+  const frame = (globalThis as { requestAnimationFrame?: (fn: () => void) => unknown })
+    .requestAnimationFrame
+  if (frame === undefined) {
+    setTimeout(work, 0)
+    return
+  }
+  let done = false
+  const once = (): void => {
+    if (done) return
+    done = true
+    work()
+  }
+  frame(once)
+  setTimeout(once, 60)
+}
 
 /** Everything at once, for tests that want no waiting. */
 export const atOnce: Schedule = work => work()

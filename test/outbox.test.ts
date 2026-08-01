@@ -237,7 +237,7 @@ test('a stuck entry can be tried again or dropped', async () => {
 
   const dropped = book.send('later', {})
   book.forget(dropped.id)
-  await assert.rejects(dropped.done, /forgotten/)
+  await assert.rejects(dropped.done, /discarded by hand/)
   assert.equal(book.entries.peek().length, 0)
 })
 
@@ -312,4 +312,68 @@ test('what is owed is a cell: a screen can depend on it', async () => {
   assert.equal(label.peek(), 'saved')
   assert.deepEqual(seen, ['1 unsent', 'saved'])
   stop()
+})
+
+test('an unknown outcome never counts toward poison: the entry is repeated as a matter of course', async () => {
+  const world = fakeWorld()
+  const store = memoryStore()
+  const seen: number[] = []
+  let outcome: 'silence' | 'refusal' | 'taken' = 'silence'
+  const unknown = () => {
+    const error = new Error('sent, no answer')
+    error.name = 'Unknown'
+    return error
+  }
+  const book = outbox({
+    key: 'out',
+    store,
+    now: world.now,
+    timers: world.timers,
+    retry: 100,
+    maxAttempts: 2,
+    handlers: {
+      pay: async (_args, handling) => {
+        seen.push(handling.attempt)
+        if (outcome === 'silence') throw unknown()
+        if (outcome === 'refusal') throw new Error('the world says no')
+      },
+    },
+  })
+  await book.ready
+  const { done } = book.send('pay', { amount: 5 })
+  done.catch(() => {})
+  await settle()
+
+  // Silence upon silence, far past maxAttempts — and nothing is stuck.
+  await world.advance(10_000)
+  assert.ok(seen.length > 4)
+  assert.equal(book.stuck.peek().length, 0)
+
+  // Real refusals, and the poison count starts moving: two are enough.
+  outcome = 'refusal'
+  await world.advance(10_000)
+  assert.equal(book.stuck.peek().length, 1)
+})
+
+test('discarding leaves a trace through the same door as success', async () => {
+  const world = fakeWorld()
+  const store = memoryStore()
+  const discarded: string[] = []
+  const book = outbox({
+    key: 'out',
+    store,
+    now: world.now,
+    timers: world.timers,
+    paused: true,
+    handlers: { pay: async () => {} },
+    onDiscarded: entry => discarded.push(`${entry.name}: ${entry.lastError ?? ''}`),
+  })
+  await book.ready
+  const { id, done } = book.send('pay', { amount: 5 })
+  const refused = assert.rejects(done, /discarded by hand/)
+  await settle()
+  book.forget(id)
+  await refused
+  assert.deepEqual(discarded, ['pay: discarded by hand'])
+  assert.equal(book.entries.peek().length, 0)
 })

@@ -26,12 +26,12 @@ export interface SourceOptions {
   floor?: number
   /**
    * No answer within this long is an answer of its own: the outcome is
-   * uncertain, the ask is broken off, and a late answer is disowned.
+   * unknown, the ask is broken off, and a late answer is disowned.
    */
   timeout?: number
-  /** Name the kind of a refusal. Default: UnknownOutcome-shaped errors are
-   *  uncertain, everything else transient. Only transient and uncertain are
-   *  retried by themselves — a source is a read, and a read is safe to repeat. */
+  /** Name the kind of trouble. Default: Unknown-shaped errors are unknown,
+   *  everything else transient. Only transient and unknown are retried by
+   *  themselves — a source is a read, and a read is safe to repeat. */
   classify?: (error: unknown) => Fault
   /** Told when a requirement asks for more than the floor allows. */
   onUnmet?: (unmet: { source: string; wanted: number; floor: number }) => void
@@ -76,7 +76,9 @@ export function source<T>(
   const classify =
     options.classify ??
     ((error: unknown): Fault =>
-      error instanceof Error && error.name === 'UnknownOutcome' ? 'uncertain' : 'transient')
+      error instanceof Error && (error.name === 'Unknown' || error.name === 'UnknownOutcome')
+        ? 'unknown'
+        : 'transient')
   const jitter = options.jitter ?? Math.random
   const retryCap = options.retryCap ?? (retry === undefined ? undefined : retry * 32)
 
@@ -194,7 +196,7 @@ export function source<T>(
       guard = timers.set(() => {
         if (mine !== generation) return
         // No answer in time. That is not a refusal by the world — the ask may
-        // have reached it — so the outcome is uncertain, and a late answer
+        // have reached it — so the outcome is unknown, and a late answer
         // must not land over whatever comes next.
         generation++
         inFlight = null
@@ -206,7 +208,7 @@ export function source<T>(
             state.peek(),
             new Error(`weft: ${name} gave no answer within ${timeout}ms`),
             attempt,
-            'uncertain',
+            'unknown',
           ),
         )
         schedule(backoff())
@@ -230,9 +232,9 @@ export function source<T>(
           const fault = classify(error)
           state.set(refused(state.peek(), error, attempt, fault))
           // Only what can pass by itself is retried by itself. A source is a
-          // read, so uncertain is safe to repeat; permanent and rejected lie
+          // read, so unknown is safe to repeat; permanent and rejected lie
           // still until a new demand or an explicit refresh.
-          if (fault === 'transient' || fault === 'uncertain') schedule(backoff())
+          if (fault === 'transient' || fault === 'unknown') schedule(backoff())
         },
       )
       .finally(() => {

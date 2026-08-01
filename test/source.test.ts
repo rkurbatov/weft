@@ -309,7 +309,7 @@ test('a permanent refusal lies still: no retry by itself, a refresh asks anew', 
   stop()
 })
 
-test('no answer in time is uncertain, and the late answer is disowned', async () => {
+test('no answer in time is unknown, and the late answer is disowned', async () => {
   const world = fakeWorld()
   const gates: Array<(value: string) => void> = []
   const feed = source(() => new Promise<string>(resolve => gates.push(resolve)), {
@@ -323,7 +323,7 @@ test('no answer in time is uncertain, and the late answer is disowned', async ()
   await world.advance(1000)
   const state = feed.state.peek()
   assert.equal(state.kind, 'failed')
-  assert.equal(state.kind === 'failed' && state.fault, 'uncertain')
+  assert.equal(state.kind === 'failed' && state.fault, 'unknown')
 
   gates[0]?.('answered after everyone stopped waiting')
   await settle()

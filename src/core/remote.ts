@@ -8,12 +8,13 @@
 // way. The `kind` stays for whoever needs the exact story.
 
 /**
- * What kind of refusal it was — named, never guessed, because the right next
- * move differs: transient passes by itself and may be retried; permanent will
- * not; uncertain means the ask may have reached the world (retry only what is
- * safe to repeat); rejected is the world meaningfully saying no.
+ * What kind of trouble it was — named, never guessed, because the right next
+ * move differs. Three are sorts of a refusal: transient passes by itself,
+ * permanent will not, rejected is the world meaningfully saying no. The
+ * fourth, unknown, is a different outcome altogether: the ask may have
+ * reached the world and nobody knows — repeat only what is safe to repeat.
  */
-export type Fault = 'transient' | 'permanent' | 'uncertain' | 'rejected'
+export type Fault = 'transient' | 'permanent' | 'rejected' | 'unknown'
 
 export interface Held<T> {
   readonly value: T

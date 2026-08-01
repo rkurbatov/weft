@@ -57,7 +57,7 @@ export type { Reconciliation, ReconcileOptions } from './core/reconcile.ts'
 export { serve } from './link/serve.ts'
 export type { Surface, ServeOptions } from './link/serve.ts'
 
-export { link, UnknownOutcome } from './link/link.ts'
+export { link, Unknown } from './link/link.ts'
 export type { Link } from './link/link.ts'
 
 export { pairInMemory, channelOverPort } from './link/channels.ts'

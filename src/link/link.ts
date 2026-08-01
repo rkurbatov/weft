@@ -6,17 +6,19 @@ import { input, untracked } from '../core/graph.ts'
 import type { Input, Watchable } from '../core/graph.ts'
 import { EMPTY, arrived, refused } from '../core/remote.ts'
 import type { Remote } from '../core/remote.ts'
+import { wallClock } from '../core/time.ts'
+import type { Timers } from '../core/time.ts'
 import type { Channel, ToWatcher } from './channel.ts'
 
 /**
- * The call got no answer and never will — but the other side may have done the
- * work. Not a refusal: a refusal means the graph said no, this means nobody
- * knows. Retrying is safe only if the command itself is.
+ * The third outcome of an ask, told apart from a refusal: no answer came and
+ * none will, but the other side may have done the work. After a refusal a
+ * retry is safe; after Unknown — only with an idempotency key.
  */
-export class UnknownOutcome extends Error {
+export class Unknown extends Error {
   constructor(message: string) {
     super(message)
-    this.name = 'UnknownOutcome'
+    this.name = 'Unknown'
   }
 }
 
@@ -30,13 +32,44 @@ export interface Link {
   close(): void
 }
 
-export function link(channel: Channel): Link {
+export interface LinkOptions {
+  /**
+   * Every ask over the wire waits at most this long; past it the call rejects
+   * with Unknown — the graph may have done the work, nobody knows. Waiting is
+   * finite by design: an ask with no term would hang for as long as the wire
+   * stays politely silent.
+   */
+  within?: number
+  timers?: Timers
+}
+
+export function link(channel: Channel, options: LinkOptions = {}): Link {
+  const within = options.within ?? 10_000
+  const timers = options.timers ?? wallClock
   const mirrors = new Map<string, { id: number; cell: Input<Remote<unknown>> }>()
   const byId = new Map<number, Input<Remote<unknown>>>()
   const waiting = new Map<
     number,
-    { resolve: (value: never) => void; reject: (error: unknown) => void }
+    { resolve: (value: never) => void; reject: (error: unknown) => void; held?: unknown }
   >()
+
+  const settleCall = (
+    id: number,
+  ): { resolve: (value: never) => void; reject: (error: unknown) => void } | undefined => {
+    const waiter = waiting.get(id)
+    if (waiter === undefined) return undefined
+    waiting.delete(id)
+    if (waiter.held !== undefined) timers.clear(waiter.held)
+    return waiter
+  }
+
+  const rejectAll = (make: () => Error): void => {
+    for (const waiter of waiting.values()) {
+      if (waiter.held !== undefined) timers.clear(waiter.held)
+      waiter.reject(make())
+    }
+    waiting.clear()
+  }
   let next = 1
 
   const stopListening = channel.listen(raw => {
@@ -45,10 +78,7 @@ export function link(channel: Channel): Link {
       case 'up': {
         // A fresh graph knows nothing of calls sent to the old one. Their
         // answers died with it — which is not the same as a refusal.
-        for (const waiter of waiting.values()) {
-          waiter.reject(new UnknownOutcome('weft: the graph restarted before answering'))
-        }
-        waiting.clear()
+        rejectAll(() => new Unknown('weft: the graph restarted before answering'))
         rewatch()
         return
       }
@@ -58,15 +88,12 @@ export function link(channel: Channel): Link {
         }
         return
       case 'done': {
-        const waiter = waiting.get(message.id)
-        waiting.delete(message.id)
-        waiter?.resolve(message.value as never)
+        settleCall(message.id)?.resolve(message.value as never)
         return
       }
       case 'failed': {
-        const waiter = waiting.get(message.id)
+        const waiter = settleCall(message.id)
         if (waiter !== undefined) {
-          waiting.delete(message.id)
           waiter.reject(new Error(message.error))
           return
         }
@@ -124,7 +151,12 @@ export function link(channel: Channel): Link {
       return (...args: A): Promise<T> => {
         const id = next++
         const answer = new Promise<T>((resolve, reject) => {
-          waiting.set(id, { resolve: resolve as (value: never) => void, reject })
+          // Waiting is finite by design: past the term the outcome is unknown,
+          // and a late answer is not owed to anyone.
+          const held = timers.set(() => {
+            settleCall(id)?.reject(new Unknown(`weft: "${name}" gave no answer within ${within}ms`))
+          }, within)
+          waiting.set(id, { resolve: resolve as (value: never) => void, reject, held })
         })
         // An ignored answer must not look like a lost error.
         answer.catch(() => {})
@@ -144,10 +176,7 @@ export function link(channel: Channel): Link {
         // The other side is gone, then; there is nothing to release.
       }
       stopListening()
-      for (const waiter of waiting.values()) {
-        waiter.reject(new UnknownOutcome('weft: the link closed before an answer came'))
-      }
-      waiting.clear()
+      rejectAll(() => new Unknown('weft: the link closed before an answer came'))
       mirrors.clear()
       byId.clear()
     },
