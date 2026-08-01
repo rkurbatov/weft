@@ -57,7 +57,10 @@ test('firstOf: the first part that holds wins; order is priority, not a clock', 
 })
 
 test('firstOf: among the empty-handed, hope outranks refusal', () => {
-  const hoping = firstOf<string>(no(EMPTY as Remote<string>, 'down'), flight(EMPTY as Remote<string>, 5))
+  const hoping = firstOf<string>(
+    no(EMPTY as Remote<string>, 'down'),
+    flight(EMPTY as Remote<string>, 5),
+  )
   assert.equal(hoping.kind, 'loading')
 
   const done = firstOf<string>(no(EMPTY as Remote<string>, 'down'), EMPTY as Remote<string>)
