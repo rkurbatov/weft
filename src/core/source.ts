@@ -14,6 +14,13 @@ export interface SourceOptions {
   name?: string
   /** Ask again this often while watched. Without it, a source loads once per demand. */
   every?: number
+  /**
+   * The quiet a look must survive before it becomes a question. A demand that
+   * leaves during the wait asks nothing — which is the whole of debounce,
+   * stated as a passport property instead of an operator. Pace ticks and
+   * refresh() do not wait: the question is not changing there.
+   */
+  calm?: number
   /** How long an answer stays good. A new demand on a stale answer refetches. */
   shelfLife?: number
   /** Wait before a retry; doubles per failed attempt, capped by retryCap. */
@@ -73,7 +80,7 @@ export function source<T>(
   const name = options.name ?? 'source'
   const now = options.now ?? Date.now
   const timers = options.timers ?? wallClock
-  const { every, shelfLife, retry, floor, onUnmet, timeout } = options
+  const { every, shelfLife, retry, floor, onUnmet, timeout, calm } = options
   const classify =
     options.classify ??
     ((error: unknown): Fault =>
@@ -146,7 +153,8 @@ export function source<T>(
       return
     }
     if (stale()) {
-      void begin()
+      if (calm === undefined) void begin()
+      else schedule(calm) // the look waits out the quiet; leaving cancels it
       return
     }
     const interval = pace()

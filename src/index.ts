@@ -51,7 +51,7 @@ export type {
 export { wallClock } from './core/time.ts'
 export type { Timers } from './core/time.ts'
 
-export { EMPTY, heldOf, ageOf, isFresh, loading, arrived, refused } from './core/remote.ts'
+export { EMPTY, heldOf, ageOf, isFresh, loading, arrived, refused, together, firstOf } from './core/remote.ts'
 export type { Remote, Held } from './core/remote.ts'
 
 export { memoryStore, webStore } from './core/store.ts'

@@ -120,3 +120,89 @@ export function refused<T>(
     loading: false,
   }
 }
+
+// ── Combining outcomes ───────────────────────────────────────────────────────
+// Screens rarely wait for one thing. `together` is the whole of Promise.all
+// said for living values: value when every part holds, the first refusal in
+// declaration order speaks for the whole (первый отказ is a law of order, not
+// of clocks), and the summary is only as old as its oldest part. `firstOf` is
+// precedence among stand-ins: the first part that holds a value wins; hope
+// outranks refusal among the empty-handed.
+
+type Parts = readonly Remote<unknown>[] | Readonly<Record<string, Remote<unknown>>>
+
+type ValuesOf<P extends Parts> = {
+  -readonly [K in keyof P]: P[K] extends Remote<infer V> ? V : never
+}
+
+export function together<P extends Parts>(parts: P): Remote<ValuesOf<P>> {
+  const list: readonly Remote<unknown>[] = Array.isArray(parts)
+    ? (parts as readonly Remote<unknown>[])
+    : Object.values(parts)
+
+  const rebuild = (values: unknown[]): ValuesOf<P> => {
+    if (Array.isArray(parts)) return values as ValuesOf<P>
+    const names = Object.keys(parts)
+    const record: Record<string, unknown> = {}
+    names.forEach((name, i) => {
+      record[name] = values[i]
+    })
+    return record as ValuesOf<P>
+  }
+
+  const helds: Array<Held<unknown>> = []
+  let allHeld = true
+  for (const part of list) {
+    const h = heldOf(part)
+    if (h === undefined) allHeld = false
+    else helds.push(h)
+  }
+  const held: Held<ValuesOf<P>> | undefined =
+    allHeld && list.length > 0
+      ? { value: rebuild(helds.map(h => h.value)), at: Math.min(...helds.map(h => h.at)) }
+      : undefined
+
+  const bad = list.find(part => part.kind === 'failed')
+  if (bad !== undefined && bad.kind === 'failed') {
+    return {
+      kind: 'failed',
+      error: bad.error,
+      fault: bad.fault,
+      attempt: bad.attempt,
+      ...(held === undefined ? {} : { held }),
+      value: held?.value,
+      at: held?.at,
+      loading: false,
+    }
+  }
+
+  const flights = list.filter(part => part.kind === 'loading')
+  if (flights.length > 0) {
+    const since = Math.min(...flights.map(part => (part.kind === 'loading' ? part.since : 0)))
+    return {
+      kind: 'loading',
+      since,
+      ...(held === undefined ? {} : { held }),
+      value: held?.value,
+      at: held?.at,
+      error: undefined,
+      loading: true,
+    }
+  }
+
+  if (held === undefined) return EMPTY
+  return { kind: 'value', value: held.value, at: held.at, error: undefined, loading: false }
+}
+
+/** The first part that holds a value wins — order is priority, not a clock.
+ *  Among the empty-handed, hope outranks refusal: any flight keeps the whole
+ *  in flight; only when nobody holds and nobody flies does the first refusal
+ *  speak; nothing at all is nothing. */
+export function firstOf<T>(...parts: ReadonlyArray<Remote<T>>): Remote<T> {
+  for (const part of parts) if (heldOf(part) !== undefined) return part
+  const flight = parts.find(part => part.kind === 'loading')
+  if (flight !== undefined) return flight
+  const bad = parts.find(part => part.kind === 'failed')
+  if (bad !== undefined) return bad
+  return EMPTY
+}

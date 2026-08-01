@@ -2,6 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { subscribe } from '#core/graph.ts'
 import { query } from '#core/query.ts'
+import { heldOf } from '#core/remote.ts'
 import type { Timers } from '#core/time.ts'
 
 function fakeWorld(start = 1000) {
@@ -18,7 +19,27 @@ function fakeWorld(start = 1000) {
       jobs.delete(handle as number)
     },
   }
-  return { timers, now: () => time }
+  return {
+    timers,
+    now: () => time,
+    /** Move time forward, firing whatever comes due. */
+    async advance(ms: number) {
+      const until = time + ms
+      for (;;) {
+        const due = [...jobs.entries()]
+          .filter(([, job]) => job.at <= until)
+          .toSorted((a, b) => a[1].at - b[1].at)[0]
+        if (due === undefined) break
+        const [id, job] = due
+        jobs.delete(id)
+        time = job.at
+        job.fn()
+        await settle()
+      }
+      time = until
+      await settle()
+    },
+  }
 }
 
 function settle(): Promise<void> {
@@ -119,4 +140,56 @@ test('object keys need keyOf, and get their own member each', async () => {
 
   const bare = query(async (key: object) => key, { max: 10, now: world.now })
   assert.throws(() => bare({}), /keyOf/)
+})
+
+test('a churn of questions asks only the one that survived the calm', async () => {
+  const world = fakeWorld()
+  const asked: string[] = []
+  const find = query(
+    (key: string) => {
+      asked.push(key)
+      return Promise.resolve(`found ${key}`)
+    },
+    { name: 'find', max: 'unbounded', calm: 200, timers: world.timers, now: world.now },
+  )
+
+  // Typing: each keystroke moves the look to the next question.
+  let stop = subscribe(find('h').state, () => {})
+  await world.advance(50)
+  stop()
+  stop = subscribe(find('he').state, () => {})
+  await world.advance(50)
+  stop()
+  stop = subscribe(find('hel').state, () => {})
+  await world.advance(500)
+  stop()
+
+  assert.deepEqual(asked, ['hel']) // the abandoned questions were never asked
+})
+
+test('precedence: the answer to a devalued question is not accepted', async () => {
+  const world = fakeWorld()
+  let release: (value: string) => void = () => {}
+  const slow = new Promise<string>(resolve => {
+    release = resolve
+  })
+  const find = query((key: string) => (key === 'old' ? slow : Promise.resolve(`found ${key}`)), {
+    name: 'find',
+    max: 'unbounded',
+    timers: world.timers,
+    now: world.now,
+  })
+
+  const old = find('old')
+  let stop = subscribe(old.state, () => {})
+  await world.advance(10) // the old question is in flight
+  stop()
+  stop = subscribe(find('new').state, () => {}) // the look moved on
+  await world.advance(10)
+
+  release('found old') // the late answer limps in
+  await world.advance(10)
+  assert.equal(heldOf(old.state.peek()), undefined) // and is not accepted
+  assert.equal(heldOf(find('new').state.peek())?.value, 'found new')
+  stop()
 })

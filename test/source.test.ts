@@ -349,3 +349,45 @@ test('losing demand breaks the ask off: the loader is told through its signal', 
   await settle()
   assert.equal(seen?.aborted, true)
 })
+
+test('calm: a look that leaves during the quiet asks nothing', async () => {
+  const world = fakeWorld()
+  let asked = 0
+  const feed = source(
+    () => {
+      asked++
+      return Promise.resolve(asked)
+    },
+    { name: 'calmed', calm: 300, timers: world.timers, now: world.now },
+  )
+
+  const stop = subscribe(feed.state, () => {})
+  await world.advance(100)
+  stop() // the look left before the quiet ran out
+  await world.advance(1000)
+  assert.equal(asked, 0)
+
+  const again = subscribe(feed.state, () => {})
+  await world.advance(299)
+  assert.equal(asked, 0)
+  await world.advance(1)
+  assert.equal(asked, 1) // the look survived the quiet: one question
+  again()
+})
+
+test('calm delays the first ask only; the pace ticks without it', async () => {
+  const world = fakeWorld()
+  const times: number[] = []
+  const feed = source(
+    () => {
+      times.push(world.now())
+      return Promise.resolve(times.length)
+    },
+    { name: 'paced', calm: 100, every: 200, timers: world.timers, now: world.now },
+  )
+  const stop = subscribe(feed.state, () => {})
+  await world.advance(600)
+  stop()
+  // First at 1000+100 (after the quiet); then every 200, with no extra quiet.
+  assert.deepEqual(times, [1100, 1300, 1500])
+})
