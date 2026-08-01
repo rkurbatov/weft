@@ -1,0 +1,68 @@
+/* On top of ../common/style.css, shared by both search pages. */
+
+.search {
+    max-width: 560px;
+    margin: 0 auto;
+    padding: 24px 16px 48px;
+}
+
+.search h1 {
+    font-size: 18px;
+    margin: 0 0 4px;
+}
+
+.search .which {
+    color: var(--dim);
+    margin: 0 0 16px;
+}
+
+.search input[type='text'] {
+    width: 100%;
+    padding: 10px 12px;
+    font: inherit;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+}
+
+.search input[type='text']:focus {
+    outline: 2px solid var(--accent);
+    outline-offset: -1px;
+}
+
+.search .row {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    margin: 10px 0;
+    color: var(--dim);
+}
+
+.search .hints {
+    margin: 8px 0 0;
+    padding: 0;
+    list-style: none;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+}
+
+.search .hints:empty {
+    display: none;
+}
+
+.search .hints li {
+    padding: 8px 12px;
+    border-top: 1px solid var(--line);
+}
+
+.search .hints li:first-child {
+    border-top: 0;
+}
+
+.search .faded {
+    opacity: 0.6;
+}
+
+.search .bad {
+    color: #a33c2e;
+    font-weight: 600;
+}

@@ -1,43 +1,59 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>weft demos</title>
-    <link rel="stylesheet" href="./common/style.css" />
-  </head>
-  <body>
-    <main class="menu">
-      <h1>Two spreadsheets, one sheet</h1>
-      <p>
-        The same grid, the same formula language, the same instrumentation. What differs is who
-        keeps the values and who decides what has to be redrawn.
-      </p>
-      <ul>
-        <li>
-          <a href="./spreadsheet/">Classic</a> — state by hand: a dependency graph, a topological
-          order, invalidation.
-        </li>
-        <li>
-          <a href="./spreadsheet-weft/">On weft</a> — a cell is an input, a value is a formula;
-          dependencies come from reading.
-        </li>
-      </ul>
-      <p>Open them in two tabs and edit A1 in both.</p>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>weft demos</title>
+  <link rel="stylesheet" href="./common/style.css" />
+</head>
+<body>
+<main class="menu">
+  <h1>Two spreadsheets, one sheet</h1>
+  <p>
+    The same grid, the same formula language, the same instrumentation. What differs is who
+    keeps the values and who decides what has to be redrawn.
+  </p>
+  <ul>
+    <li>
+      <a href="./spreadsheet/">Classic</a> — state by hand: a dependency graph, a topological
+      order, invalidation.
+    </li>
+    <li>
+      <a href="./spreadsheet-weft/">On weft</a> — a cell is an input, a value is a formula;
+      dependencies come from reading.
+    </li>
+  </ul>
+  <p>Open them in two tabs and edit A1 in both.</p>
 
-      <h1>A draft that survives</h1>
-      <p>
-        One thing, honestly shown: type, reload the page, the text is still here — and a full store
-        refuses out loud instead of losing it in silence.
-      </p>
-      <ul>
-        <li><a href="./draft/">By hand</a> — restored on start, written on every change.</li>
-        <li>
-          <a href="./draft-weft/">On weft</a> — a stored cell with one keeping line; it lands in
-          IndexedDB, which by-hand code would need a queue and callbacks to reach.
-        </li>
-      </ul>
-      <p>Try: type and reload.</p>
-    </main>
-  </body>
+  <h1>A draft that survives</h1>
+  <p>
+    One thing, honestly shown: type, reload the page, the text is still here — and a full
+    store refuses out loud instead of losing it in silence.
+  </p>
+  <ul>
+    <li><a href="./draft/">By hand</a> — restored on start, written on every change.</li>
+    <li>
+      <a href="./draft-weft/">On weft</a> — a stored cell with one keeping line; it lands in
+      IndexedDB, which by-hand code would need a queue and callbacks to reach.
+    </li>
+  </ul>
+  <p>Try: type and reload.</p>
+
+  <h1>Search without races</h1>
+  <p>
+    Suggestions from a server where a shorter query answers slower — the classic race: the
+    answer for "s" lands after the answer for "sto". One page guards against it by hand and
+    lets you switch the guard off to watch the bug; the other has no guard to switch, because
+    an old answer has nowhere to land.
+  </p>
+  <ul>
+    <li><a href="./search/">By hand</a> — a generation counter, and a checkbox to disarm it.</li>
+    <li>
+      <a href="./search-weft/">On weft</a> — a different query is a different source; erase
+      back within half a minute and the answer is already there.
+    </li>
+  </ul>
+  <p>Try: type "sto" quickly on both pages, with the guard off on the first.</p>
+</main>
+</body>
 </html>

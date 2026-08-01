@@ -2,7 +2,7 @@ import { resolve } from 'node:path'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
-// One config, five pages: the menu, the two spreadsheets, the two drafts. The library is
+// One config, seven pages: the menu and three demo pairs. The library is
 // reached through the package's own subpath imports (#weft), the same way the
 // tests reach it — no alias to keep in step with tsconfig.
 export default defineConfig({
@@ -21,6 +21,8 @@ export default defineConfig({
         weft: resolve(import.meta.dirname, 'demo/spreadsheet-weft/index.html'),
         draft: resolve(import.meta.dirname, 'demo/draft/index.html'),
         draftWeft: resolve(import.meta.dirname, 'demo/draft-weft/index.html'),
+        search: resolve(import.meta.dirname, 'demo/search/index.html'),
+        searchWeft: resolve(import.meta.dirname, 'demo/search-weft/index.html'),
       },
     },
   },
