@@ -33,6 +33,18 @@ export type { Source, SourceOptions } from './core/source.ts'
 export { query } from './core/query.ts'
 export type { Query, QueryOptions } from './core/query.ts'
 
+export { table, alike } from './core/table.ts'
+export type {
+  Table,
+  SourceTable,
+  TableOptions,
+  Ordered,
+  FoldSpec,
+  Patch,
+  Change,
+  Key,
+} from './core/table.ts'
+
 export { wallClock } from './core/time.ts'
 export type { Timers } from './core/time.ts'
 
