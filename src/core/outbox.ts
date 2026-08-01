@@ -3,6 +3,7 @@
 // is not a second purchase, and leaves the book only when the world confirms.
 
 import { cell, input } from './graph.ts'
+import { owned } from './region.ts'
 import type { Readable } from './graph.ts'
 import { SAVING } from './keep.ts'
 import type { Saving } from './keep.ts'
@@ -285,6 +286,13 @@ export function outbox(options: OutboxOptions): Outbox {
       if (book.length > 0 || newborn.length > 0) write([...book, ...newborn])
       if (!held) void pump()
     })
+
+  // A region taking this outbox down holds the book: entries stay written,
+  // nothing more is sent, no timer stays on the clock.
+  owned(() => {
+    held = true
+    cancelTimer()
+  })
 
   return {
     ready,

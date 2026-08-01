@@ -4,14 +4,30 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { subscribe } from '#core/graph.ts'
 import { kanbanServer } from '../kanban-common/server.ts'
-import { kanban } from './state.ts'
+import { region } from '#core/region.ts'
+import { kanbanPorts } from './transport.ts'
+import { kanbanState } from './state.ts'
+import type { KanbanServer } from '../kanban-common/server.ts'
+
+// Assembled the way the root assembles it: ports into state, inside a region.
+const make = (server: KanbanServer, pollMs: number) => {
+  const box = region('kanban', () => kanbanState(kanbanPorts(server, pollMs)))
+  const app = box.value
+  return {
+    ...app,
+    dispose: () => {
+      app.dispose()
+      box.dispose()
+    },
+  }
+}
 
 const wait = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms))
-const column = (app: ReturnType<typeof kanban>, id: string): readonly string[] =>
+const column = (app: ReturnType<typeof make>, id: string): readonly string[] =>
   app.state.layout.peek().find(c => c.id === id)?.cardIds ?? []
 
 test('load fills the board', async () => {
-  const app = kanban(kanbanServer({ latency: 3 }), 60_000)
+  const app = make(kanbanServer({ latency: 3 }), 60_000)
   await app.actions.load()
   assert.deepEqual(
     app.state.layout.peek().map(c => c.id),
@@ -24,7 +40,7 @@ test('load fills the board', async () => {
 })
 
 test('a refused move shows up instantly and retreats: the entry leaves, nothing else', async () => {
-  const app = kanban(kanbanServer({ latency: 10, grumpiness: 1 }), 60_000)
+  const app = make(kanbanServer({ latency: 10, grumpiness: 1 }), 60_000)
   await app.actions.load()
   const before = column(app, 'backlog')
   const moved = before[2]
@@ -42,7 +58,7 @@ test('a refused move shows up instantly and retreats: the entry leaves, nothing 
 })
 
 test('an accepted move stays: first held over the base, then absorbed by it', async () => {
-  const app = kanban(kanbanServer({ latency: 3, grumpiness: 0 }), 60_000)
+  const app = make(kanbanServer({ latency: 3, grumpiness: 0 }), 60_000)
   await app.actions.load()
   const moved = column(app, 'backlog')[0]
   assert.ok(moved !== undefined)
@@ -60,7 +76,7 @@ test('an accepted move stays: first held over the base, then absorbed by it', as
 test('polling follows demand and picks up the bot', async () => {
   const server = kanbanServer({ latency: 2, grumpiness: 0, botEvery: 15 })
   const stopBot = server.startBot()
-  const app = kanban(server, 25)
+  const app = make(server, 25)
   const stop = subscribe(app.state.layout, () => {})
   await wait(200)
   stopBot()
@@ -72,7 +88,7 @@ test('polling follows demand and picks up the bot', async () => {
 
 test('fifth: a snapshot lands during an unfinished move — truth at once, the hope on top', async () => {
   const server = kanbanServer({ latency: 5, grumpiness: 0 })
-  const app = kanban(server, 60_000)
+  const app = make(server, 60_000)
   await app.actions.load()
   const ours = column(app, 'backlog')[0]
   const theirs = column(app, 'backlog')[1]

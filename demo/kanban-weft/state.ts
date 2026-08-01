@@ -1,13 +1,13 @@
-// The kanban in the library's own liturgy. Four visible phases: what things
-// are, the truth of the server, what reaches the world, what follows. Rollback
-// and poll guards do not exist as code: a refusal removes its entry, a snapshot
-// lands whenever it lands, and the visible board is always base plus replay.
+// The kanban state in four visible phases: what things are, what follows, and
+// what we ask of the world — through ports handed in from outside. This module
+// does not know the server exists. Rollback and poll guards do not exist as
+// code: a refusal removes its entry, a snapshot lands whenever it lands, and
+// the visible board is always base plus replay.
 
-import { cell, command, heldOf, input, memoryStore, outbox, source } from '#weft'
-import { alike } from '#weft'
+import { alike, cell, command, heldOf, input } from '#weft'
 import type { Outbox, Readable } from '#weft'
-import type { BoardSnapshot, Card, ColumnData } from '../kanban-common/types.ts'
-import type { KanbanServer } from '../kanban-common/server.ts'
+import type { Card, ColumnData } from '../kanban-common/types.ts'
+import type { KanbanPorts } from './transport.ts'
 
 export interface Kanban {
   state: {
@@ -74,9 +74,11 @@ function applyOp(columns: ColumnData[], known: ReadonlySet<string>, op: Op): Col
   }
 }
 
-export function kanban(server: KanbanServer, pollMs = 4000): Kanban {
+export function kanbanState(ports: KanbanPorts): Kanban {
+  const { board, post } = ports
+
   // ── What things are ──────────────────────────────────────────────────────
-  /** Confirmed but not yet absorbed: the server said yes, the base does not
+  /** Confirmed but not yet absorbed: the world said yes, the base does not
    *  know it yet. Removing these early would flash the screen backwards. */
   const settled = input<readonly SettledOp[]>([], { name: 'settled' })
   const notice = input<string | null>(null, { name: 'notice' })
@@ -89,64 +91,31 @@ export function kanban(server: KanbanServer, pollMs = 4000): Kanban {
     hush = setTimeout(() => notice.set(null), 4000)
   }
 
-  // ── The truth of the server ──────────────────────────────────────────────
-  // The answer carries the moment its question was asked: absorption of
-  // settled entries is judged against that, conservatively. A cheap version
-  // probe keeps an unchanged board from travelling again.
-  interface Base {
-    snapshot: BoardSnapshot
-    askedAt: number
-  }
-  let held: Base | undefined
-  const board = source<Base>(
-    async () => {
-      const askedAt = Date.now()
-      const version = await server.version()
-      if (held === undefined || held.snapshot.version !== version) {
-        held = { snapshot: await server.board(), askedAt }
-      } else {
-        held = { snapshot: held.snapshot, askedAt }
-      }
-      return held
-    },
-    { name: 'board', every: pollMs },
-  )
-
+  const askedNow = (): number =>
+    heldOf(board.state.peek())?.value.askedAt ?? Number.NEGATIVE_INFINITY
   const absorbedBy = (asked: number) => (s: SettledOp) => s.confirmedAt <= asked
   const settle = (op: Op): void => {
-    const asked = held?.askedAt ?? Number.NEGATIVE_INFINITY
-    const kept = settled.peek().filter(s => !absorbedBy(asked)(s))
+    const kept = settled.peek().filter(s => !absorbedBy(askedNow())(s))
     settled.set([...kept, { op, confirmedAt: Date.now() }])
   }
 
-  // ── What reaches the world ───────────────────────────────────────────────
-  const box = outbox({
-    key: 'kanban',
-    store: memoryStore(),
-    handlers: {
-      move: async raw => {
-        const op = raw as { id: string; into: string; at: number }
-        await server.moveCard(op.id, op.into, op.at)
-        settle({ kind: 'move', ...op })
-      },
-      drop: async raw => {
-        const op = raw as { id: string }
-        await server.deleteCard(op.id)
-        settle({ kind: 'drop', ...op })
-      },
-    },
-    // The server's "conflict" is the world meaningfully saying no: rejected,
-    // discarded at once, with a trace. Anything else would be transient.
-    classify: error =>
-      error instanceof Error && error.message.includes('conflict') ? 'rejected' : 'transient',
-    onRefused: entry => report(entry.lastError ?? 'refused'),
-  })
+  // ── What we ask of the world ─────────────────────────────────────────────
+  // The entry itself is the hope; its confirmation is held in `settled` until
+  // a snapshot taken after it absorbs it; its refusal arrives as a rejection
+  // and needs nothing undone — the entry is simply no longer there.
+  const move = (id: string, into: string, at: number): Promise<void> =>
+    post
+      .send('move', { id, into, at })
+      .done.then(() => settle({ kind: 'move', id, into, at }), report)
+
+  const remove = (id: string): Promise<void> =>
+    post.send('drop', { id }).done.then(() => settle({ kind: 'drop', id }), report)
 
   const add = command(
     async (into: string, title: string) => {
       addingIn.set(into)
       try {
-        const card = await server.addCard(into, title, 'feature')
+        const card = await ports.create(into, title)
         settle({ kind: 'add', card, into })
       } catch (refusal) {
         report(refusal)
@@ -164,9 +133,8 @@ export function kanban(server: KanbanServer, pollMs = 4000): Kanban {
     () => {
       const asked = base.get()?.askedAt ?? Number.NEGATIVE_INFINITY
       const confirmed = settled.get().filter(s => !absorbedBy(asked)(s))
-      const flying = box.entries.get()
       const ops: Op[] = confirmed.map(s => s.op)
-      for (const entry of flying) {
+      for (const entry of post.entries.get()) {
         if (entry.name === 'move')
           ops.push({ kind: 'move', ...(entry.args as { id: string; into: string; at: number }) })
         if (entry.name === 'drop') ops.push({ kind: 'drop', ...(entry.args as { id: string }) })
@@ -208,7 +176,7 @@ export function kanban(server: KanbanServer, pollMs = 4000): Kanban {
   const busy = cell<ReadonlySet<string>>(
     () => {
       const ids = new Set<string>()
-      for (const entry of box.entries.get()) {
+      for (const entry of post.entries.get()) {
         const args = entry.args as { id?: string }
         if (args.id !== undefined) ids.add(args.id)
       }
@@ -236,8 +204,8 @@ export function kanban(server: KanbanServer, pollMs = 4000): Kanban {
   return {
     state: { layout, cards, busy, addBusy, notice, coldStart, fault },
     actions: {
-      move: (id, into, at) => box.send('move', { id, into, at }).done.catch(() => {}),
-      remove: id => box.send('drop', { id }).done.catch(() => {}),
+      move,
+      remove,
       add: (into, title) =>
         add.run(into, title).then(
           () => undefined,
@@ -245,10 +213,7 @@ export function kanban(server: KanbanServer, pollMs = 4000): Kanban {
         ),
       load: () => board.refresh(),
     },
-    post: box,
-    dispose: () => {
-      box.pause()
-      clearTimeout(hush)
-    },
+    post,
+    dispose: () => clearTimeout(hush),
   }
 }

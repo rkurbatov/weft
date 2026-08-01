@@ -3,6 +3,7 @@
 // stops it — so an unwatched screen costs nothing.
 
 import { cell, input } from './graph.ts'
+import { owned } from './region.ts'
 import type { Readable } from './graph.ts'
 import { EMPTY, arrived, heldOf, loading, refused } from './remote.ts'
 import type { Fault, Remote } from './remote.ts'
@@ -263,6 +264,18 @@ export function source<T>(
     if (heldOf(state.peek()) !== undefined) return
     state.set(arrived(value, at))
   }
+
+  // A region taking this source down: the clock stops, the ask in flight is
+  // disowned, and nothing arrives late into a dead module.
+  owned(() => {
+    cancel()
+    generation++
+    inFlight = null
+    if (asking !== null) {
+      asking.abort()
+      asking = null
+    }
+  })
 
   return {
     name,

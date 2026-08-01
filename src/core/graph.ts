@@ -4,6 +4,8 @@
 // Demand is counted alongside the links: a source knows whether any live
 // watcher depends on it, which is how adapters learn when to start and stop.
 
+import { owned, regionName } from './region.ts'
+
 export type Equal<T> = (a: T, b: T) => boolean
 
 /** Node states. CHECK means "an ancestor may have changed" — resolved by walking up. */
@@ -212,7 +214,9 @@ export class Input<T> implements Source {
   constructor(initial: T, options: InputOptions<T> = {}) {
     this.current = initial
     this.equal = options.equal ?? Object.is
-    this.name = options.name ?? 'input'
+    const prefix = regionName()
+    const bare = options.name ?? 'input'
+    this.name = prefix === undefined ? bare : `${prefix}.${bare}`
     this.onDemand = options.onDemand
     this.onIdle = options.onIdle
   }
@@ -273,7 +277,9 @@ export class Cell<T> implements Source, Consumer {
   constructor(formula: () => T, options: CellOptions<T> = {}) {
     this.formula = formula
     this.equal = options.equal ?? Object.is
-    this.name = options.name ?? 'cell'
+    const prefix = regionName()
+    const bare = options.name ?? 'cell'
+    this.name = prefix === undefined ? bare : `${prefix}.${bare}`
   }
 
   contribution(): number {
@@ -420,11 +426,14 @@ export function input<T>(initial: T, options?: InputOptions<T>): Input<T> {
 }
 
 export function cell<T>(formula: () => T, options?: CellOptions<T>): Cell<T> {
-  return new Cell(formula, options)
+  const c = new Cell(formula, options)
+  owned(() => c.dispose())
+  return c
 }
 
 export function watch(body: () => void, options?: WatchOptions): () => void {
   const w = new Watcher(body, options)
+  owned(() => w.dispose())
   return () => w.dispose()
 }
 

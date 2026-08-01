@@ -33,6 +33,9 @@ export type { Source, SourceOptions } from './core/source.ts'
 export { query } from './core/query.ts'
 export type { Query, QueryOptions } from './core/query.ts'
 
+export { region, owned, regionName } from './core/region.ts'
+export type { Region } from './core/region.ts'
+
 export { table, alike } from './core/table.ts'
 export type {
   Table,

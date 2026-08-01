@@ -7,9 +7,9 @@ import { Loader2, WifiOff } from 'lucide-react'
 import { useCell } from '#weft/react'
 import { BoardView } from '../kanban-common/board.tsx'
 import { Button } from '../kanban-common/ui/button.tsx'
-import { app } from './app.ts'
+import type { Kanban } from './state.ts'
 
-function Screen(): ReactNode {
+function Screen({ app }: { app: Kanban }): ReactNode {
   const columns = useCell(app.state.layout)
   const cards = useCell(app.state.cards)
   const busy = useCell(app.state.busy)
@@ -54,6 +54,6 @@ function Screen(): ReactNode {
   )
 }
 
-export function App(): ReactNode {
-  return <Screen />
+export function App({ app }: { app: Kanban }): ReactNode {
+  return <Screen app={app} />
 }
