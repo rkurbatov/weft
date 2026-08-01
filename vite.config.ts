@@ -23,6 +23,7 @@ export default defineConfig({
         sheetTabs: resolve(import.meta.dirname, 'demo/spreadsheet-tabs/index.html'),
         rail: resolve(import.meta.dirname, 'demo/rail/index.html'),
         kanbanClassic: resolve(import.meta.dirname, 'demo/kanban-classic/index.html'),
+        kanbanWeft: resolve(import.meta.dirname, 'demo/kanban-weft/index.html'),
       },
     },
   },

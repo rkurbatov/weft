@@ -35,11 +35,20 @@
       </p>
       <h1>Kanban, twice</h1>
       <p>
-        <a href="./kanban-classic/">The classic side</a> — redux + redux-observable, written the
-        usual honest way: normalized state, optimistic moves with rollback bookkeeping, polling with
-        a hand guard. Drag cards; some writes get refused on purpose and roll back before your eyes.
-        The weft side comes after this one stands trial.
+        The same board, the same grumpy server, the same shadcn screen. What differs is the state
+        layer. Drag cards; every eighth write is refused on purpose and rolls back before your eyes;
+        a bot keeps editing the board so it goes stale on its own.
       </p>
+      <ul>
+        <li>
+          <a href="./kanban-classic/">Classic</a> — redux + redux-observable: actions, a reducer
+          with rollback bookkeeping, epics, selectors.
+        </li>
+        <li>
+          <a href="./kanban-weft/">On weft</a> — one state file: each action is one function holding
+          its hope, its ask and its retreat.
+        </li>
+      </ul>
 
       <h1>A rail that feeds itself</h1>
       <p>
