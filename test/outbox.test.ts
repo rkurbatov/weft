@@ -377,3 +377,42 @@ test('discarding leaves a trace through the same door as success', async () => {
   assert.deepEqual(discarded, ['pay: discarded by hand'])
   assert.equal(book.entries.peek().length, 0)
 })
+
+test('a permanent refusal discards the entry at once, with a trace', async () => {
+  const world = fakeWorld()
+  const refusals: Entry[] = []
+  const calls: string[] = []
+  const box = outbox({
+    key: 'k',
+    store: memoryStore(),
+    handlers: {
+      pay: (args => {
+        calls.push(String((args as { n: number }).n))
+        return Promise.reject(new Error('conflict: no such account'))
+      }) as Handler,
+    },
+    classify: error =>
+      error instanceof Error && error.message.startsWith('conflict') ? 'rejected' : 'transient',
+    timers: world.timers,
+    now: world.now,
+    onRefused: entry => refusals.push(entry),
+  })
+  await box.ready
+
+  const { done } = box.send('pay', { n: 1 })
+  await world.advance(1)
+  await assert.rejects(done)
+  assert.deepEqual(calls, ['1']) // one ask, no retries: the no was meaningful
+  assert.equal(box.entries.peek().length, 0)
+  assert.equal(refusals.length, 1)
+  assert.match(refusals[0]?.lastError ?? '', /conflict/)
+
+  // And the no is final: a second refused entry leaves the same way, and the
+  // clock holds nothing to retry. (Transient retries are covered above.)
+  const { done: second } = box.send('pay', { n: 2 })
+  await world.advance(1)
+  await assert.rejects(second)
+  await world.advance(1000)
+  assert.deepEqual(calls, ['1', '2'])
+  assert.equal(box.entries.peek().length, 0)
+})

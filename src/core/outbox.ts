@@ -54,6 +54,10 @@ export interface OutboxOptions {
   timers?: Timers
   newId?: () => string
   onStuck?: (entry: Entry) => void
+  /** Told when a permanent or rejected fault discards the entry at once: the
+   *  world said a no that retrying will not change. Discarding leaves a trace —
+   *  the entry arrives with its last error; silence is not an option here. */
+  onRefused?: (entry: Entry) => void
   /** Told when an entry is dropped by hand. Discarding goes through the same
    *  door as success — with a mark and a trace, never a silent erasure. */
   onDiscarded?: (entry: Entry) => void
@@ -101,7 +105,16 @@ function mendBook(raw: unknown): Entry[] {
 }
 
 export function outbox(options: OutboxOptions): Outbox {
-  const { key, store, handlers, retry = 1000, maxAttempts = 5, onStuck, onDiscarded } = options
+  const {
+    key,
+    store,
+    handlers,
+    retry = 1000,
+    maxAttempts = 5,
+    onStuck,
+    onRefused,
+    onDiscarded,
+  } = options
   const classify =
     options.classify ??
     ((error: unknown): Fault =>
@@ -220,7 +233,14 @@ export function outbox(options: OutboxOptions): Outbox {
       settle(head.id)
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
-      if (classify(error) === 'unknown') {
+      const fault = classify(error)
+      if (fault === 'permanent' || fault === 'rejected') {
+        // The world meaningfully said no; repeating will not change it. The
+        // entry leaves at once — through a door with a trace, never silently.
+        remove(head.id)
+        onRefused?.({ ...head, attempts: attempt, state: 'stuck', lastError: message })
+        settle(head.id, error)
+      } else if (fault === 'unknown') {
         // Sent, no answer. The world may have taken it, which is exactly what
         // the idempotency key is for — so the entry is repeated as a matter of
         // course and the poison count is not touched: a blinking network must

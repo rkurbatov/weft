@@ -1,71 +1,98 @@
-// The same four trials the classic side passes, against the same server.
+// The four trials the classic passes, plus the fifth it cannot.
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { subscribe } from '#core/graph.ts'
 import { kanbanServer } from '../kanban-common/server.ts'
 import { kanban } from './state.ts'
 
 const wait = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms))
+const column = (app: ReturnType<typeof kanban>, id: string): readonly string[] =>
+  app.state.layout.peek().find(c => c.id === id)?.cardIds ?? []
 
 test('load fills the board', async () => {
   const app = kanban(kanbanServer({ latency: 3 }), 60_000)
-  await app.load(true)
-  assert.equal(app.loading.peek(), false)
+  await app.actions.load()
   assert.deepEqual(
-    app.layout.peek().map(c => c.id),
+    app.state.layout.peek().map(c => c.id),
     ['backlog', 'progress', 'review', 'done'],
   )
-  assert.equal(app.layout.peek()[0]?.cardIds.length, 9)
-  assert.equal(app.cards.size.peek(), 20)
+  assert.equal(column(app, 'backlog').length, 9)
+  assert.equal(app.state.cards.peek().size, 20)
+  assert.equal(app.state.coldStart.peek(), false)
   app.dispose()
 })
 
-test('a refused move shows up instantly and rolls back to where it stood', async () => {
+test('a refused move shows up instantly and retreats: the entry leaves, nothing else', async () => {
   const app = kanban(kanbanServer({ latency: 10, grumpiness: 1 }), 60_000)
-  await app.load(true)
-  const before = app.layout.peek()[0]?.cardIds ?? []
+  await app.actions.load()
+  const before = column(app, 'backlog')
   const moved = before[2]
   assert.ok(moved !== undefined)
 
-  const done = app.move(moved, 'review', 0)
-  assert.equal(app.layout.peek().find(c => c.id === 'review')?.cardIds[0], moved) // no waiting
-  assert.ok(app.writes.peek().has(moved))
+  const done = app.actions.move(moved, 'review', 0)
+  assert.equal(column(app, 'review')[0], moved) // hope, no waiting
+  assert.ok(app.state.busy.peek().has(moved))
 
-  await done // the server refuses
-  assert.deepEqual(app.layout.peek()[0]?.cardIds, before)
-  assert.equal(app.writes.peek().size, 0)
-  assert.ok(app.notice.peek() !== null)
+  await done // the server refuses; the entry is discarded with a trace
+  assert.deepEqual(column(app, 'backlog'), before)
+  assert.equal(app.state.busy.peek().size, 0)
+  assert.ok(app.state.notice.peek() !== null)
   app.dispose()
 })
 
-test('an accepted move stays', async () => {
+test('an accepted move stays: first held over the base, then absorbed by it', async () => {
   const app = kanban(kanbanServer({ latency: 3, grumpiness: 0 }), 60_000)
-  await app.load(true)
-  const moved = app.layout.peek()[0]?.cardIds[0]
+  await app.actions.load()
+  const moved = column(app, 'backlog')[0]
   assert.ok(moved !== undefined)
-  await app.move(moved, 'progress', 1)
-  assert.equal(app.layout.peek().find(c => c.id === 'progress')?.cardIds[1], moved)
-  assert.equal(app.writes.peek().size, 0)
+
+  await app.actions.move(moved, 'progress', 1)
+  assert.equal(column(app, 'progress')[1], moved) // confirmed, base still old
+  assert.equal(app.state.busy.peek().size, 0)
+
+  await app.actions.load() // the base catches up and absorbs the entry
+  assert.equal(column(app, 'progress')[1], moved)
+  assert.ok(!column(app, 'backlog').includes(moved))
   app.dispose()
 })
 
-test('polling picks up the bot: the silent reload brings a newer board', async () => {
+test('polling follows demand and picks up the bot', async () => {
   const server = kanbanServer({ latency: 2, grumpiness: 0, botEvery: 15 })
   const stopBot = server.startBot()
   const app = kanban(server, 25)
-  await app.load(true)
-  const was = app.layout
-    .peek()
-    .flatMap(c => c.cardIds)
-    .join(' ')
-  await wait(150)
+  const stop = subscribe(app.state.layout, () => {})
+  await wait(200)
   stopBot()
+  const settledDown = app.state.layout.peek().flatMap(c => c.cardIds)
+  assert.ok(settledDown.length > 0) // the look alone loaded and kept the board fresh
+  stop()
   app.dispose()
-  assert.notEqual(
-    app.layout
-      .peek()
-      .flatMap(c => c.cardIds)
-      .join(' '),
-    was,
-  )
+})
+
+test('fifth: a snapshot lands during an unfinished move — truth at once, the hope on top', async () => {
+  const server = kanbanServer({ latency: 5, grumpiness: 0 })
+  const app = kanban(server, 60_000)
+  await app.actions.load()
+  const ours = column(app, 'backlog')[0]
+  const theirs = column(app, 'backlog')[1]
+  assert.ok(ours !== undefined && theirs !== undefined)
+
+  app.post.pause() // offline: our hope is written down, not sent
+  const hoped = app.actions.move(ours, 'review', 0)
+  assert.equal(column(app, 'review')[0], ours)
+
+  await server.moveCard(theirs, 'done', 0) // somebody else edits the world
+  await app.actions.load() // the snapshot arrives during our unfinished move
+
+  assert.equal(column(app, 'done')[0], theirs) // truth landed immediately, no guard
+  assert.equal(column(app, 'review')[0], ours) // the hope stayed on top
+  assert.ok(!column(app, 'backlog').includes(ours))
+
+  app.post.resume() // back online: the entry goes out
+  await hoped
+  await app.actions.load()
+  assert.equal(column(app, 'review')[0], ours) // now it is the base's own word
+  assert.equal(app.state.busy.peek().size, 0)
+  app.dispose()
 })
