@@ -7,6 +7,14 @@
 // refusal if there is one, `state.loading` says whether an answer is on its
 // way. The `kind` stays for whoever needs the exact story.
 
+/**
+ * What kind of refusal it was — named, never guessed, because the right next
+ * move differs: transient passes by itself and may be retried; permanent will
+ * not; uncertain means the ask may have reached the world (retry only what is
+ * safe to repeat); rejected is the world meaningfully saying no.
+ */
+export type Fault = 'transient' | 'permanent' | 'uncertain' | 'rejected'
+
 export interface Held<T> {
   readonly value: T
   readonly at: number
@@ -39,6 +47,7 @@ export type Remote<T> =
   | {
       readonly kind: 'failed'
       readonly error: unknown
+      readonly fault: Fault
       readonly attempt: number
       readonly held?: Held<T>
       readonly value: T | undefined
@@ -92,11 +101,17 @@ export function arrived<T>(value: T, at: number): Remote<T> {
   return { kind: 'value', value, at, error: undefined, loading: false }
 }
 
-export function refused<T>(previous: Remote<T>, error: unknown, attempt: number): Remote<T> {
+export function refused<T>(
+  previous: Remote<T>,
+  error: unknown,
+  attempt: number,
+  fault: Fault,
+): Remote<T> {
   const held = heldOf(previous)
   return {
     kind: 'failed',
     error,
+    fault,
     attempt,
     ...(held === undefined ? {} : { held }),
     value: held?.value,

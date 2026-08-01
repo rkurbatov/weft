@@ -73,7 +73,7 @@ export function link(channel: Channel): Link {
         // Not a call, then: a cell the other side does not have — a refusal,
         // told apart from "nothing arrived yet".
         const mirror = byId.get(message.id)
-        mirror?.set(refused(mirror.peek(), new Error(message.error), 1))
+        mirror?.set(refused(mirror.peek(), new Error(message.error), 1, 'rejected'))
         return
       }
       default:

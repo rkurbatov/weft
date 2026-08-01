@@ -192,23 +192,31 @@ test('refresh asks now, even unwatched', async () => {
   assert.equal(feed.demanded, false)
 })
 
-test('a second demand rides the flight already under way', async () => {
+test('demand at the same time shares one flight; demand after a break asks anew', async () => {
   const world = fakeWorld()
   const gates: Array<(v: string) => void> = []
   const feed = source(() => new Promise<string>(resolve => gates.push(resolve)), {
     now: world.now,
     timers: world.timers,
   })
-  const stop = subscribe(feed.state, () => {})
-  await settle()
-  stop()
+
+  // Two watchers at once: one request between them.
+  const first = subscribe(feed.state, () => {})
   const second = subscribe(feed.state, () => {})
   await settle()
-  assert.equal(gates.length, 1) // one request, not two
-  gates[0]?.('v')
+  assert.equal(gates.length, 1)
+
+  // Everybody leaves mid-flight: the ask is broken off, its answer disowned.
+  first()
+  second()
+  const third = subscribe(feed.state, () => {})
+  await settle()
+  assert.equal(gates.length, 2) // a fresh ask for the fresh demand
+  gates[0]?.('stale, cancelled')
+  gates[1]?.('v')
   await settle()
   assert.equal(feed.state.peek().value, 'v')
-  second()
+  third()
 })
 
 test('a forced refresh disowns the older answer', async () => {
@@ -269,4 +277,75 @@ test('retry wait carries the injected spread', async () => {
   await world.advance(1)
   assert.equal(calls, 2)
   stop()
+})
+
+test('a permanent refusal lies still: no retry by itself, a refresh asks anew', async () => {
+  const world = fakeWorld()
+  let calls = 0
+  const feed = source(
+    async () => {
+      calls++
+      throw new Error('404: no such thing')
+    },
+    {
+      retry: 100,
+      jitter: () => 0,
+      classify: () => 'permanent',
+      now: world.now,
+      timers: world.timers,
+    },
+  )
+  const stop = subscribe(feed.state, () => {})
+  await settle()
+  const refusal = feed.state.peek()
+  assert.equal(refusal.kind === 'failed' && refusal.fault, 'permanent')
+
+  await world.advance(10_000)
+  assert.equal(calls, 1) // nothing retried what cannot pass by itself
+
+  void feed.refresh() // a person or a fact asked again — that is allowed
+  await settle()
+  assert.equal(calls, 2)
+  stop()
+})
+
+test('no answer in time is uncertain, and the late answer is disowned', async () => {
+  const world = fakeWorld()
+  const gates: Array<(value: string) => void> = []
+  const feed = source(() => new Promise<string>(resolve => gates.push(resolve)), {
+    timeout: 1000,
+    now: world.now,
+    timers: world.timers,
+  })
+  const stop = subscribe(feed.state, () => {})
+  await settle()
+
+  await world.advance(1000)
+  const state = feed.state.peek()
+  assert.equal(state.kind, 'failed')
+  assert.equal(state.kind === 'failed' && state.fault, 'uncertain')
+
+  gates[0]?.('answered after everyone stopped waiting')
+  await settle()
+  assert.equal(feed.state.peek().kind, 'failed') // the late answer changed nothing
+  stop()
+})
+
+test('losing demand breaks the ask off: the loader is told through its signal', async () => {
+  const world = fakeWorld()
+  let seen: AbortSignal | undefined
+  const feed = source(
+    ({ signal }) =>
+      new Promise<string>(() => {
+        seen = signal
+      }),
+    { now: world.now, timers: world.timers },
+  )
+  const stop = subscribe(feed.state, () => {})
+  await settle()
+  assert.equal(seen?.aborted, false)
+
+  stop() // the last watcher leaves mid-flight
+  await settle()
+  assert.equal(seen?.aborted, true)
 })

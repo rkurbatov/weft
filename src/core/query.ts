@@ -29,7 +29,10 @@ export interface Query<K, T> {
   sweep(): number
 }
 
-export function query<K, T>(load: (key: K) => Promise<T>, options: QueryOptions<K>): Query<K, T> {
+export function query<K, T>(
+  load: (key: K, asked: { signal: AbortSignal }) => Promise<T>,
+  options: QueryOptions<K>,
+): Query<K, T> {
   const { keyOf, max, ...perSource } = options
   const held = new Map<string, { key: K; feed: Source<T> }>()
 
@@ -66,7 +69,7 @@ export function query<K, T>(load: (key: K) => Promise<T>, options: QueryOptions<
       held.set(name, known)
       return known.feed
     }
-    const feed = source(() => load(key), {
+    const feed = source(asked => load(key, asked), {
       ...perSource,
       name: `${perSource.name ?? 'query'}:${name}`,
     })
