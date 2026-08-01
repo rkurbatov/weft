@@ -4,7 +4,7 @@ import { MessageChannel } from 'node:worker_threads'
 import { cell, input, subscribe } from '#core/graph.ts'
 import type { Timers } from '#core/time.ts'
 import { atOnce } from '#link/channel.ts'
-import { busHub, channelOverBus } from '#link/bus.ts'
+import { busHub, channelOverBus, heartbeat } from '#link/bus.ts'
 import { channelToSharedWorker, sharedWorkerHub } from '#link/shared.ts'
 import type { SharedScope } from '#link/shared.ts'
 import type { Port } from '#link/ports.ts'
@@ -429,4 +429,22 @@ test('the shared-worker hub lets go of a tab that fell silent', async () => {
   live.port2.close()
   gone.port1.close()
   gone.port2.close()
+})
+
+test('the heartbeat introduces itself fast and settles down to its pace', async () => {
+  const clock = fakeTimers()
+  const beats: number[] = []
+  const stop = heartbeat(() => beats.push(beats.length), 5000, clock.timers)
+
+  await clock.advance(250)
+  // A lost first hello costs a fraction of a second, not a settled beat.
+  assert.equal(beats.length, 1)
+  await clock.advance(750)
+  assert.equal(beats.length, 2) // 200ms, then 600ms — doubling toward the pace
+
+  await clock.advance(6000) // the doubling runs its course
+  beats.length = 0
+  await clock.advance(15_000)
+  assert.equal(beats.length, 3) // settled: one beat per five seconds
+  stop()
 })

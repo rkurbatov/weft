@@ -35,6 +35,27 @@ export interface KeepAliveOptions {
 export const LEASE = 15_000
 export const KEEP_ALIVE = 5_000
 
+/**
+ * The heartbeat, with a fast introduction: the first beats come within a
+ * fraction of a second and slow down to the settled pace. A newborn channel
+ * whose first words were lost — a hub not yet born, a race at page start —
+ * must not wait a full settled beat to be met.
+ */
+export function heartbeat(say: () => void, keepAlive: number | false, timers: Timers): () => void {
+  if (keepAlive === false) return () => {}
+  let held: unknown
+  let pace = Math.min(200, keepAlive)
+  const beat = (): void => {
+    say()
+    pace = Math.min(pace * 2, keepAlive)
+    held = timers.set(beat, pace)
+  }
+  held = timers.set(beat, pace)
+  return () => {
+    if (held !== undefined) timers.clear(held)
+  }
+}
+
 interface Envelope {
   readonly weft: true
   readonly from: string
@@ -121,6 +142,10 @@ export function busHub(name: string, bus: Bus = openBus(name), options: HubOptio
       }
 
       bus.addEventListener('message', onMessage)
+      // Say we are here to the whole bus at once: watchers that outlived the
+      // last graph re-ask immediately instead of waiting out their heartbeat,
+      // and their watches introduce them before any command of theirs flies.
+      bus.postMessage({ weft: true, from: me, to: 'all', body: { kind: 'up' } })
 
       return () => {
         bus.removeEventListener('message', onMessage)
@@ -152,23 +177,16 @@ export function channelOverBus(
     listen: handler => {
       const onMessage = (event: { data: unknown }): void => {
         const envelope = event.data
-        if (!isEnvelope(envelope) || envelope.to !== me) return
+        if (!isEnvelope(envelope) || (envelope.to !== me && envelope.to !== 'all')) return
         handler(envelope.body)
       }
       bus.addEventListener('message', onMessage)
       // The heartbeat lives with the listener: while somebody listens on this
       // end, the hub's lease on us is kept; stop listening and it runs out.
-      let beating: unknown
-      if (keepAlive !== false) {
-        const beat = (): void => {
-          send(HELLO)
-          beating = timers.set(beat, keepAlive)
-        }
-        beating = timers.set(beat, keepAlive)
-      }
+      const stopBeating = heartbeat(() => send(HELLO), keepAlive, timers)
       return () => {
         bus.removeEventListener('message', onMessage)
-        if (beating !== undefined) timers.clear(beating)
+        stopBeating()
       }
     },
   }

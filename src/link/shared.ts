@@ -8,7 +8,7 @@
 import { channelOverPort } from './ports.ts'
 import type { Port } from './ports.ts'
 import type { Channel } from './channel.ts'
-import { HELLO, LEASE, KEEP_ALIVE, isHello } from './bus.ts'
+import { HELLO, LEASE, KEEP_ALIVE, heartbeat, isHello } from './bus.ts'
 import type { Hub, HubOptions, KeepAliveOptions } from './bus.ts'
 import { wallClock } from '../core/time.ts'
 
@@ -77,17 +77,10 @@ export function channelToSharedWorker(port: Port, options: KeepAliveOptions = {}
     send: raw.send,
     listen: handler => {
       const stop = raw.listen(handler)
-      let beating: unknown
-      if (keepAlive !== false) {
-        const beat = (): void => {
-          raw.send(HELLO)
-          beating = timers.set(beat, keepAlive)
-        }
-        beating = timers.set(beat, keepAlive)
-      }
+      const stopBeating = heartbeat(() => raw.send(HELLO), keepAlive, timers)
       return () => {
         stop()
-        if (beating !== undefined) timers.clear(beating)
+        stopBeating()
       }
     },
   }
