@@ -5,8 +5,8 @@
 // fires. So the hub holds each tab by a lease, renewed by anything the tab
 // says; the tab's channel keeps a heartbeat while somebody listens on it.
 
-import { channelOverPort } from './channels.ts'
-import type { Port } from './channels.ts'
+import { channelOverPort } from './ports.ts'
+import type { Port } from './ports.ts'
 import type { Channel } from './channel.ts'
 import { HELLO, LEASE, KEEP_ALIVE, isHello } from './bus.ts'
 import type { Hub, HubOptions, KeepAliveOptions } from './bus.ts'

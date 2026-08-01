@@ -60,8 +60,8 @@ export type { Surface, ServeOptions } from './link/serve.ts'
 export { link, Unknown } from './link/link.ts'
 export type { Link } from './link/link.ts'
 
-export { pairInMemory, channelOverPort } from './link/channels.ts'
-export type { Pair, Port } from './link/channels.ts'
+export { pairInMemory, channelOverPort } from './link/ports.ts'
+export type { Pair, Port } from './link/ports.ts'
 
 export { busHub, channelOverBus } from './link/bus.ts'
 export type { Bus, Hub, HubOptions, KeepAliveOptions } from './link/bus.ts'

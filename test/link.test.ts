@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { MessageChannel } from 'node:worker_threads'
 import { cell, input, subscribe } from '#core/graph.ts'
 import { atOnce } from '#link/channel.ts'
-import { channelOverPort, pairInMemory } from '#link/channels.ts'
+import { channelOverPort, pairInMemory } from '#link/ports.ts'
 import { link, Unknown } from '#link/link.ts'
 import { serve } from '#link/serve.ts'
 
