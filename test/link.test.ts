@@ -5,7 +5,7 @@ import { cell, input, subscribe } from '#core/graph.ts'
 import { atOnce, valueOf } from '#link/channel.ts'
 import type { Mirrored } from '#link/channel.ts'
 import { channelOverPort, pairInMemory } from '#link/channels.ts'
-import { link } from '#link/link.ts'
+import { link, UnknownOutcome } from '#link/link.ts'
 import { serve } from '#link/serve.ts'
 
 function settle(): Promise<void> {
@@ -295,12 +295,32 @@ test('a mirror forgets what it knew when the last watcher goes', async () => {
   stopServing()
 })
 
-test('closing the link refuses the calls still waiting', async () => {
+test('closing the link leaves waiting calls unknown, not refused', async () => {
   const wire = pairInMemory()
   const seen = link(wire.watcher)
   const slow = seen.command<[], void>('add')()
   seen.close()
-  await assert.rejects(slow, /closed/)
+  // The command may have run on the other side; closing our end cannot unsay it.
+  await assert.rejects(slow, UnknownOutcome)
+})
+
+test('a graph restart leaves waiting calls unknown, not refused', async () => {
+  const wire = pairInMemory()
+  const never = serve({ commands: { forever: () => new Promise(() => {}) } }, wire.graph, {
+    schedule: atOnce,
+  })
+  const seen = link(wire.watcher)
+
+  const slow = seen.command<[], void>('forever')()
+  await settle()
+
+  // The graph comes back knowing nothing of the call it was answering.
+  never()
+  const again = serve({ commands: {} }, wire.graph, { schedule: atOnce })
+  await assert.rejects(slow, UnknownOutcome)
+
+  seen.close()
+  again()
 })
 
 test('Mirrored reads plainly', () => {
@@ -308,4 +328,55 @@ test('Mirrored reads plainly', () => {
   const something: Mirrored<number> = { known: true, value: 7 }
   assert.equal(valueOf(nothing), undefined)
   assert.equal(valueOf(something), 7)
+})
+
+test('one value that cannot cross does not cost the others theirs', async () => {
+  const good = input(1)
+  const bad = input<unknown>(() => 'a function cannot be cloned')
+  const wire = pairInMemory()
+  const complaints: string[] = []
+  const stopServing = serve({ cells: { good, bad } }, wire.graph, {
+    schedule: atOnce,
+    onUnsendable: cell => complaints.push(cell),
+  })
+  const seen = link(wire.watcher)
+
+  const mirror = seen.cell<number>('good')
+  const stopGood = subscribe(mirror, () => {})
+  const stopBad = subscribe(seen.cell('bad'), () => {})
+  await settle()
+  assert.equal(valueOf(mirror.peek()), 1)
+  assert.deepEqual(complaints, ['bad'])
+
+  // Both change in one batch: the good one still gets through.
+  good.set(2)
+  bad.set(() => 'still not cloneable')
+  await settle()
+  assert.equal(valueOf(mirror.peek()), 2)
+  assert.deepEqual(complaints, ['bad', 'bad'])
+
+  stopGood()
+  stopBad()
+  seen.close()
+  stopServing()
+})
+
+test('closing the link lets the graph go: unwatch for every mirror still watched', async () => {
+  const { surface, awake } = world()
+  const wire = pairInMemory()
+  const stopServing = serve(surface, wire.graph, { schedule: atOnce })
+  const seen = link(wire.watcher)
+
+  const stop = subscribe(seen.cell<number>('count'), () => {})
+  await settle()
+  assert.deepEqual(awake, ['start'])
+
+  // The tab side is done; the graph must not keep the source warm for a wire
+  // nobody is on any more.
+  seen.close()
+  await settle()
+  assert.deepEqual(awake, ['start', 'stop'])
+
+  stop()
+  stopServing()
 })

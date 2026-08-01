@@ -55,14 +55,14 @@ export type { Reconciliation, ReconcileOptions } from './core/reconcile.ts'
 export { serve } from './link/serve.ts'
 export type { Surface, ServeOptions } from './link/serve.ts'
 
-export { link } from './link/link.ts'
+export { link, UnknownOutcome } from './link/link.ts'
 export type { Link } from './link/link.ts'
 
 export { pairInMemory, channelOverPort } from './link/channels.ts'
 export type { Pair, Port } from './link/channels.ts'
 
 export { busHub, channelOverBus } from './link/bus.ts'
-export type { Bus, Hub } from './link/bus.ts'
+export type { Bus, Hub, HubOptions, KeepAliveOptions } from './link/bus.ts'
 
 export { sharedWorkerHub, channelToSharedWorker, sharedWorkersExist } from './link/shared.ts'
 export type { SharedScope } from './link/shared.ts'

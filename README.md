@@ -42,13 +42,15 @@ Two more arrangements come with it. `busHub(name)` and `channelOverBus(name)` pu
 
 The graph announces itself when it starts, and a watcher that outlived the last one asks again for everything it is still watching — a worker restart or a change of leader costs a round trip, not a stale screen.
 
+A tab that dies cannot say goodbye, so both hubs hold each tab by a lease: anything the tab says renews it, the tab's channel keeps a heartbeat while somebody listens on its end, and a lease that runs out releases that tab's watches — and the demand they held. A tab let go by mistake recovers on its own: its next message earns it a fresh channel, whose serve announces itself. Closing a link releases its watches at once rather than by lease. And a call still waiting when the graph restarts, or when the link closes, is rejected with `UnknownOutcome` rather than an ordinary error — the other side may have done the work, and pretending it refused would license a retry that is only safe if the command is.
+
 `pairInMemory()` is the two ends in one process, and it clones messages on the way exactly as a real boundary would, so a value that could not survive the crossing fails in the tests rather than in the browser. `channelOverPort(port)` covers a browser worker or any message port that behaves like one; the test suite runs the whole protocol over a real `MessageChannel` as well as in memory.
 
 **`src/react/hooks.ts` — the seam,** deliberately thin. `useCell` subscribes a component to one value through `useSyncExternalStore`. `useCommand` hands a command to the tree with a stable `start` reference, so it can go straight into handlers and dependency arrays.
 
 ## Where it stands
 
-The line of work this repository set out to do is done: graph, commands, families, remote state, sources with demand-driven delivery, freshness requirements, persistence, an outbox, reconciliation — 87 tests, no build step, no runtime dependencies. `src/index.ts` is the front door; React lives behind `#react/hooks.ts` so the graph stays usable and testable without it.
+The line of work this repository set out to do is done: graph, commands, families, remote state, sources with demand-driven delivery, freshness requirements, persistence, an outbox, reconciliation — 164 tests, no build step, no runtime dependencies. `src/index.ts` is the front door; React lives behind `#weft/react` so the graph stays usable and testable without it.
 
 What is not done, and should be said plainly: none of this has met a real application yet. The next honest step is one domain of a live product moved over whole — not a demo — and the numbers that come out of it. After that, the parts a library cannot reach: purity by construction, a verdict before the program runs, and incremental recomputation inside a formula rather than around it.
 
@@ -66,7 +68,7 @@ The graph does not know what is in a cell, and does not want to. What it does re
 
 `demo/` holds the same spreadsheet twice: `spreadsheet/` keeps its state by hand, `spreadsheet-weft/` keeps it on this library. The grid, the formula language, the sample sheet and the instrumentation are shared in `demo/common/`, so what differs is only who keeps the values.
 
-The hand-written one needs 208 lines for that: a store of texts, what each cell reads and who reads it kept in both directions, the transitive stain of a change, Kahn's order over it, a loop search for whatever the order leaves out, and a subscription per cell. The weft one needs 84, and none of those words appear in it — a cell's text is an `input`, its value is a `family` member whose formula reads its neighbours, and reading is what records the dependency. A loop is not searched for: reading a cell that is busy computing throws, and that becomes `#CYCLE!`.
+The hand-written one needs 175 lines for that — a 146-line store and a 29-line dependency scan it cannot do without: a store of texts, what each cell reads and who reads it kept in both directions, the transitive stain of a change, Kahn's order over it, a loop search for whatever the order leaves out, and a subscription per cell. The weft one needs 99, and none of those words appear in it — a cell's text is an `input`, its value is a `family` member whose formula reads its neighbours, and reading is what records the dependency. A loop is not searched for: reading a cell that is busy computing throws, and that becomes `#CYCLE!`.
 
 Both pass the same seven questions (`store.test.ts`, `sheet.test.ts`) — the same values, the same cells told, the same recovery when a loop is cut. What differs is the bill. On a sheet of 26,000 cells with 780 on screen, measured by `pnpm demo:bench`:
 
@@ -85,7 +87,7 @@ Run it yourself rather than trusting the figures — they are one machine's, and
 
 It is worth building here and nowhere else. Each partial is a cell, so what depends on what — and what has to be redone — is the graph's business; the hand-written sheet could keep the same tree, but would have to invalidate it level by level, by hand. And it is only correct because the arithmetic underneath is exact: a total assembled from blocks is the same number as a total added left to right, which floating point would not give.
 
-Measured with the totals row on screen, so the long column sums are live — the same run, second scene:
+Measured with the totals row on screen, so the long column sums are live — the bench's second scene, a run of its own (so the classic row differs from the table above):
 
 ```
                      open   first look   edit A1   worked out   told   vs classic

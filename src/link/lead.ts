@@ -19,23 +19,38 @@ export function webLocks(): Lock {
   if (locks === undefined) throw new Error('weft: no Web Locks here')
   return {
     hold(name, onHeld) {
+      const asked = new AbortController()
       let release: (() => void) | undefined
       let given = false
-      void locks.request(name, () => {
-        if (given) return Promise.resolve()
-        given = true
-        onHeld()
-        return new Promise<void>(resolve => {
-          release = resolve
+      let dropped = false
+      void locks
+        .request(name, { signal: asked.signal }, () => {
+          // Given after we let go: hand it straight back instead of leading.
+          if (dropped || given) return Promise.resolve()
+          given = true
+          onHeld()
+          return new Promise<void>(resolve => {
+            release = resolve
+          })
         })
-      })
-      return () => release?.()
+        .catch(() => {}) // dropped while still queued; the request rejects
+      return () => {
+        dropped = true
+        // Still queued means there is nothing to release — take the ask back,
+        // or the lock is ours the moment it frees up and nobody ever lets go.
+        if (release === undefined) asked.abort()
+        else release()
+      }
     },
   }
 }
 
 interface LockManagerish {
-  request(name: string, body: () => Promise<void>): Promise<unknown>
+  request(
+    name: string,
+    options: { signal: AbortSignal },
+    body: () => Promise<void>,
+  ): Promise<unknown>
 }
 
 export interface LeadOptions {

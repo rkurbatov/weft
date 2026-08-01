@@ -7,6 +7,18 @@ import type { Input, Watchable } from '../core/graph.ts'
 import { NOT_YET } from './channel.ts'
 import type { Channel, Mirrored, ToWatcher } from './channel.ts'
 
+/**
+ * The call got no answer and never will — but the other side may have done the
+ * work. Not a refusal: a refusal means the graph said no, this means nobody
+ * knows. Retrying is safe only if the command itself is.
+ */
+export class UnknownOutcome extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'UnknownOutcome'
+  }
+}
+
 export interface Link {
   /** Ask again for everything being watched. Called for you when the other side announces itself. */
   rewatch(): void
@@ -29,9 +41,16 @@ export function link(channel: Channel): Link {
   const stopListening = channel.listen(raw => {
     const message = raw as ToWatcher
     switch (message?.kind) {
-      case 'up':
+      case 'up': {
+        // A fresh graph knows nothing of calls sent to the old one. Their
+        // answers died with it — which is not the same as a refusal.
+        for (const waiter of waiting.values()) {
+          waiter.reject(new UnknownOutcome('weft: the graph restarted before answering'))
+        }
+        waiting.clear()
         rewatch()
         return
+      }
       case 'values':
         for (const { id, value } of message.changed) {
           byId.get(id)?.set({ known: true, value })
@@ -112,8 +131,19 @@ export function link(channel: Channel): Link {
     },
 
     close() {
+      // Let the graph go: watches we leave behind would hold demand there
+      // forever. A dead wire may refuse the send — closing must not fail on it.
+      try {
+        for (const { id, cell } of mirrors.values()) {
+          if (cell.demanded) channel.send({ kind: 'unwatch', id })
+        }
+      } catch {
+        // The other side is gone, then; there is nothing to release.
+      }
       stopListening()
-      for (const waiter of waiting.values()) waiter.reject(new Error('weft: link closed'))
+      for (const waiter of waiting.values()) {
+        waiter.reject(new UnknownOutcome('weft: the link closed before an answer came'))
+      }
       waiting.clear()
       mirrors.clear()
       byId.clear()

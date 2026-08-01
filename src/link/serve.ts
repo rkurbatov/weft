@@ -29,6 +29,8 @@ export function serve(surface: Surface, channel: Channel, options: ServeOptions 
   // The latest value per watch, not a queue of them: a slow reader gets what is
   // true now, not a history of what was.
   const pending = new Map<number, unknown>()
+  // Which cell each watch is on, so a complaint can name it.
+  const named = new Map<number, string>()
   let flushing = false
 
   function flush(): void {
@@ -38,9 +40,23 @@ export function serve(surface: Surface, channel: Channel, options: ServeOptions 
     pending.clear()
     try {
       channel.send({ kind: 'values', changed })
-    } catch (error) {
-      for (const { id } of changed) options.onUnsendable?.(String(id), error)
+    } catch {
+      // One value that will not clone must not cost the others theirs: send them
+      // one at a time and complain only about those that really fail.
+      for (const one of changed) sendAlone(one)
     }
+  }
+
+  function sendAlone(one: { id: number; value: unknown }): void {
+    try {
+      channel.send({ kind: 'values', changed: [one] })
+    } catch (error) {
+      complain(one.id, error)
+    }
+  }
+
+  function complain(id: number, error: unknown): void {
+    options.onUnsendable?.(named.get(id) ?? String(id), error)
   }
 
   function later(): void {
@@ -68,6 +84,7 @@ export function serve(surface: Surface, channel: Channel, options: ServeOptions 
       later()
     })
     watching.set(message.id, stop)
+    named.set(message.id, message.cell)
     // The first value goes at once: a screen should not wait a frame to show.
     pending.set(
       message.id,
@@ -104,6 +121,7 @@ export function serve(surface: Surface, channel: Channel, options: ServeOptions 
         watching.get(message.id)?.()
         watching.delete(message.id)
         pending.delete(message.id)
+        named.delete(message.id)
         return
       }
       case 'call':
@@ -122,5 +140,6 @@ export function serve(surface: Surface, channel: Channel, options: ServeOptions 
     for (const stop of watching.values()) stop()
     watching.clear()
     pending.clear()
+    named.clear()
   }
 }
