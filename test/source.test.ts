@@ -146,7 +146,7 @@ test('refusal is a state, and it retries with growing waits', async () => {
       if (calls < 3) throw new Error(`no ${calls}`)
       return 'finally'
     },
-    { retry: 100, now: world.now, timers: world.timers },
+    { retry: 100, jitter: () => 0, now: world.now, timers: world.timers },
   )
   const stop = subscribe(feed.state, () => {})
   await settle()
@@ -249,5 +249,25 @@ test('a formula over a source sees only its own value change', async () => {
   assert.ok(calls >= 3, `calls ${calls}`)
   assert.equal(woke, 1) // hits kept changing; id did not
   assert.equal(id.peek(), 1)
+  stop()
+})
+
+test('retry wait carries the injected spread', async () => {
+  const world = fakeWorld()
+  let calls = 0
+  const feed = source(
+    async () => {
+      calls++
+      throw new Error('down')
+    },
+    { retry: 100, jitter: () => 0.5, now: world.now, timers: world.timers },
+  )
+  const stop = subscribe(feed.state, () => {})
+  await settle()
+  assert.equal(calls, 1)
+  await world.advance(49) // full jitter: wait is 100 * (1 - 0.5) = 50
+  assert.equal(calls, 1)
+  await world.advance(1)
+  assert.equal(calls, 2)
   stop()
 })

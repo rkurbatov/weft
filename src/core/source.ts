@@ -26,6 +26,10 @@ export interface SourceOptions {
   /** Wait before a retry; doubles per failed attempt, capped by retryCap. */
   retry?: number
   retryCap?: number
+  /** Random in [0,1) spreading each retry wait (full jitter), so clients
+   *  synchronized by a shared outage don't retry in lockstep. Injectable
+   *  so tests stay deterministic; defaults to Math.random. */
+  jitter?: () => number
   /** The source will not be asked more often than this, however strict a requirement is. */
   floor?: number
   /** Told when a requirement asks for more than the floor allows. */
@@ -66,6 +70,7 @@ export function source<T>(load: () => Promise<T>, options: SourceOptions = {}): 
   const now = options.now ?? Date.now
   const timers = options.timers ?? wallClock
   const { every, shelfLife, retry, floor, onUnmet } = options
+  const jitter = options.jitter ?? Math.random
   const retryCap = options.retryCap ?? (retry === undefined ? undefined : retry * 32)
 
   // Live requirements, one entry per consumer that stated one.
@@ -152,7 +157,10 @@ export function source<T>(load: () => Promise<T>, options: SourceOptions = {}): 
   function backoff(): number | undefined {
     if (retry === undefined) return undefined
     const wait = retry * 2 ** Math.max(0, attempt - 1)
-    return retryCap === undefined ? wait : Math.min(wait, retryCap)
+    const capped = retryCap === undefined ? wait : Math.min(wait, retryCap)
+    // Full jitter: uniform in (0, capped]. 1 - jitter() keeps the wait
+    // strictly positive whatever the injected randomness returns.
+    return capped * (1 - jitter())
   }
 
   function begin(force = false): Promise<void> {
