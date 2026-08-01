@@ -6,7 +6,8 @@
 // at once, and each of them gets a channel of its own.
 
 import type { Channel } from './channel.ts'
-import type { Timers } from '../core/source.ts'
+import { wallClock } from '../core/time.ts'
+import type { Timers } from '../core/time.ts'
 
 /** A place new watchers arrive at. Each one is handed its own channel. */
 export interface Hub {
@@ -33,11 +34,6 @@ export interface KeepAliveOptions {
 
 export const LEASE = 15_000
 export const KEEP_ALIVE = 5_000
-
-export const wallClock: Timers = {
-  set: (fn, ms) => setTimeout(fn, ms),
-  clear: handle => clearTimeout(handle as ReturnType<typeof setTimeout>),
-}
 
 interface Envelope {
   readonly weft: true

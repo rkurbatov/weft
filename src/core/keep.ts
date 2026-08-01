@@ -6,7 +6,7 @@
 // first show: the screen starts on the initial value, and what the disk held
 // arrives as an ordinary write — unless a human or the network got there first,
 // because what was done while the disk was thinking is newer than what it
-// holds. And a refusal to write is a declared state, not a silence: `keeping`
+// holds. And a refusal to write is a declared state, not a silence: `saving`
 // says whether writes are landing, and why not.
 
 import { input, subscribe } from './graph.ts'
@@ -18,12 +18,10 @@ import type { Store } from './store.ts'
 /** Why something on disk was not put back. */
 export type Dropped = 'version' | 'age' | 'unreadable'
 
-/** Whether what happens here is reaching the disk. */
-export type Keeping =
-  | { readonly kind: 'keeping' }
-  | { readonly kind: 'without'; readonly reason: string }
+/** Whether what happens here is reaching the store. */
+export type Saving = { readonly ok: true } | { readonly ok: false; readonly reason: string }
 
-export const KEEPING: Keeping = { kind: 'keeping' }
+export const SAVING: Saving = { ok: true }
 
 interface Envelope {
   v: number
@@ -47,8 +45,8 @@ export interface KeepOptions<T> {
 export interface Kept {
   /** Resolves once the disk has been asked: true if something was put back. */
   readonly restored: Promise<boolean>
-  /** Are writes reaching the disk. `without` names the reason they are not. */
-  readonly keeping: Watchable<Keeping>
+  /** Are writes landing. `ok: false` names the reason they are not. */
+  readonly saving: Watchable<Saving>
   /** Stop keeping it; what is on disk stays. */
   stop(): void
   /** Stop keeping it and wipe what is on disk. */
@@ -62,12 +60,12 @@ function describe(error: unknown): string {
 /**
  * One writer per kept key. Changes coalesce while a write is in flight — the
  * queue is never lost, and the disk always ends on the latest value. A refusal
- * turns `keeping` to `without`; the next change simply tries again, so a store
+ * turns `saving` off with a reason; the next change simply tries again, so a store
  * that comes back (quota freed, private mode left) is picked up by itself.
  */
 function pumpFor(options: { key: string; store: Store; version?: number }) {
   const { key, store, version = 1 } = options
-  const keeping = input<Keeping>(KEEPING, { name: `${key}.keeping` })
+  const saving = input<Saving>(SAVING, { name: `${key}.saving` })
   let pending: Envelope | undefined
   let flying = false
 
@@ -79,12 +77,12 @@ function pumpFor(options: { key: string; store: Store; version?: number }) {
     store.write(key, load).then(
       () => {
         flying = false
-        keeping.set(KEEPING)
+        saving.set(SAVING)
         drain()
       },
       (error: unknown) => {
         flying = false
-        keeping.set({ kind: 'without', reason: describe(error) })
+        saving.set({ ok: false, reason: describe(error) })
         // A newer value may be waiting; it gets its try — one per change, so a
         // dead disk costs one refusal per edit, not a loop.
         drain()
@@ -93,7 +91,7 @@ function pumpFor(options: { key: string; store: Store; version?: number }) {
   }
 
   return {
-    keeping,
+    saving,
     push: (value: unknown, at: number): void => {
       pending = { v: version, at, value }
       drain()
@@ -103,7 +101,7 @@ function pumpFor(options: { key: string; store: Store; version?: number }) {
 
 async function readEnvelope<T>(
   options: KeepOptions<T>,
-  keeping: Input<Keeping>,
+  saving: Input<Saving>,
 ): Promise<{ value: unknown; at: number } | undefined> {
   const { key, store, version = 1, maxAge, migrate, onDropped } = options
   const now = options.now ?? Date.now
@@ -114,7 +112,7 @@ async function readEnvelope<T>(
   } catch (error) {
     // The disk did not answer. Nothing to put back — and writes are not likely
     // to land either, which is the same declared state.
-    keeping.set({ kind: 'without', reason: describe(error) })
+    saving.set({ ok: false, reason: describe(error) })
     return undefined
   }
   if (raw === undefined || raw === null) return undefined
@@ -170,7 +168,7 @@ export function keepInput<T>(target: Input<T>, options: KeepOptions<T>): Kept {
     { demand: false },
   )
 
-  const restored = readEnvelope(options, writes.keeping).then(found => {
+  const restored = readEnvelope(options, writes.saving).then(found => {
     // A human got there while the disk was thinking; theirs is newer.
     if (found === undefined || touched) return false
     restoring = true
@@ -184,7 +182,7 @@ export function keepInput<T>(target: Input<T>, options: KeepOptions<T>): Kept {
 
   return {
     restored,
-    keeping: writes.keeping,
+    saving: writes.saving,
     stop,
     forget: () => {
       stop()
@@ -214,7 +212,7 @@ export function keepSource<T>(feed: Source<T>, options: KeepOptions<T>): Kept {
     { demand: false },
   )
 
-  const restored = readEnvelope(options, writes.keeping).then(found => {
+  const restored = readEnvelope(options, writes.saving).then(found => {
     if (found === undefined) return false
     // The network answered while the disk was thinking; the answer is newer.
     if (heldOf(feed.state.peek()) !== undefined) return false
@@ -229,7 +227,7 @@ export function keepSource<T>(feed: Source<T>, options: KeepOptions<T>): Kept {
 
   return {
     restored,
-    keeping: writes.keeping,
+    saving: writes.saving,
     stop,
     forget: () => {
       stop()

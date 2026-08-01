@@ -2,8 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { cell, subscribe } from '#core/graph.ts'
 import { source } from '#core/source.ts'
-import { valueOf } from '#core/remote.ts'
-import type { Timers } from '#core/source.ts'
+import type { Timers } from '#core/time.ts'
 
 /** A clock and a timer queue the test drives by hand. */
 function fakeWorld() {
@@ -60,7 +59,7 @@ test('no demand, no delivery', async () => {
     { now: world.now, timers: world.timers },
   )
   feed.state.peek()
-  const derived = cell(() => valueOf(feed.state.get()))
+  const derived = cell(() => feed.state.get().value)
   derived.peek() // computed on request; nobody live behind it
   await settle()
   assert.equal(calls, 0)
@@ -130,10 +129,10 @@ test('a value is kept through the next flight, so screens do not blank', async (
   })
   const stop = subscribe(feed.state, () => {})
   await settle()
-  assert.equal(valueOf(feed.state.peek()), 'answer 1')
+  assert.equal(feed.state.peek().value, 'answer 1')
   await world.advance(100)
   assert.equal(calls, 2)
-  assert.equal(valueOf(feed.state.peek()), 'answer 2')
+  assert.equal(feed.state.peek().value, 'answer 2')
   stop()
 })
 
@@ -159,7 +158,7 @@ test('refusal is a state, and it retries with growing waits', async () => {
   assert.equal(calls, 2)
   await world.advance(100)
   assert.equal(calls, 3)
-  assert.equal(valueOf(feed.state.peek()), 'finally')
+  assert.equal(feed.state.peek().value, 'finally')
   stop()
 })
 
@@ -179,7 +178,7 @@ test('a refusal keeps the previous value beside it', async () => {
   await world.advance(100)
   const state = feed.state.peek()
   assert.equal(state.kind, 'failed')
-  assert.equal(valueOf(state), 'answer 1')
+  assert.equal(state.value, 'answer 1')
   stop()
 })
 
@@ -189,7 +188,7 @@ test('refresh asks now, even unwatched', async () => {
   const feed = source(async () => ++calls, { now: world.now, timers: world.timers })
   await feed.refresh()
   assert.equal(calls, 1)
-  assert.equal(valueOf(feed.state.peek()), 1)
+  assert.equal(feed.state.peek().value, 1)
   assert.equal(feed.demanded, false)
 })
 
@@ -208,7 +207,7 @@ test('a second demand rides the flight already under way', async () => {
   assert.equal(gates.length, 1) // one request, not two
   gates[0]?.('v')
   await settle()
-  assert.equal(valueOf(feed.state.peek()), 'v')
+  assert.equal(feed.state.peek().value, 'v')
   second()
 })
 
@@ -221,14 +220,14 @@ test('a forced refresh disowns the older answer', async () => {
   })
   const stop = subscribe(feed.state, () => {})
   await settle()
-  void feed.refresh({ force: true })
+  void feed.refresh()
   await settle()
   assert.equal(gates.length, 2)
   gates[1]?.('fresh')
   await settle()
   gates[0]?.('stale')
   await settle()
-  assert.equal(valueOf(feed.state.peek()), 'fresh')
+  assert.equal(feed.state.peek().value, 'fresh')
   stop()
 })
 
@@ -240,7 +239,7 @@ test('a formula over a source sees only its own value change', async () => {
     now: world.now,
     timers: world.timers,
   })
-  const id = cell(() => valueOf(feed.state.get())?.id)
+  const id = cell(() => feed.state.get().value?.id)
   let woke = 0
   const stop = subscribe(id, () => woke++)
   await settle()

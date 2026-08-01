@@ -25,19 +25,6 @@ export type ToWatcher =
   | { readonly kind: 'done'; readonly id: number; readonly value: unknown }
   | { readonly kind: 'failed'; readonly id: number; readonly error: string }
 
-/** What a mirrored cell holds: nothing yet, or the last value that arrived. */
-export type Mirrored<T> = { readonly known: false } | { readonly known: true; readonly value: T }
-
-export const NOT_YET: Mirrored<never> = { known: false }
-
-export function valueOf<T>(seen: Mirrored<T>): T | undefined {
-  return seen.known ? seen.value : undefined
-}
-
-export function valueOr<T>(seen: Mirrored<T>, fallback: T): T {
-  return seen.known ? seen.value : fallback
-}
-
 /** What to do with work that must not happen more than once a frame. */
 export type Schedule = (work: () => void) => void
 

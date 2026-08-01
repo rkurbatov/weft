@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>weft demo — two spreadsheets</title>
+    <title>weft demos</title>
     <link rel="stylesheet" href="./common/style.css" />
   </head>
   <body>
@@ -24,6 +24,20 @@
         </li>
       </ul>
       <p>Open them in two tabs and edit A1 in both.</p>
+
+      <h1>A draft that survives</h1>
+      <p>
+        One thing, honestly shown: type, reload the page, the text is still here — and a full store
+        refuses out loud instead of losing it in silence.
+      </p>
+      <ul>
+        <li><a href="./draft/">By hand</a> — restored on start, written on every change.</li>
+        <li>
+          <a href="./draft-weft/">On weft</a> — a stored cell with one keeping line; it lands in
+          IndexedDB, which by-hand code would need a queue and callbacks to reach.
+        </li>
+      </ul>
+      <p>Try: type and reload.</p>
     </main>
   </body>
 </html>

@@ -1,0 +1,43 @@
+/* On top of ../common/style.css. Both draft pages share it, or the comparison
+   turns into a comparison of stylesheets. */
+
+.draft {
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 24px 16px 48px;
+}
+
+.draft h1 {
+  font-size: 18px;
+  margin: 0 0 4px;
+}
+
+.draft .which {
+  color: var(--dim);
+  margin: 0 0 20px;
+}
+
+.draft textarea {
+  width: 100%;
+  min-height: 88px;
+  padding: 10px 12px;
+  font: inherit;
+  color: inherit;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  resize: vertical;
+}
+
+.draft textarea:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.draft .status {
+  color: var(--dim);
+  min-height: 1.4em;
+}
+
+.draft .status .bad {
+  color: #a33c2e;
+}

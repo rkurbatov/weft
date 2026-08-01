@@ -4,7 +4,7 @@ import { cell, subscribe } from '#core/graph.ts'
 import { outbox } from '#core/outbox.ts'
 import { memoryStore } from '#core/store.ts'
 import type { Entry, Handler } from '#core/outbox.ts'
-import type { Timers } from '#core/source.ts'
+import type { Timers } from '#core/time.ts'
 
 function fakeWorld(start = 1000) {
   let time = start

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { cell, input, subscribe } from '#core/graph.ts'
 import { source } from '#core/source.ts'
 import { reconcile } from '#core/reconcile.ts'
-import type { Timers } from '#core/source.ts'
+import type { Timers } from '#core/time.ts'
 
 function fakeWorld(start = 1000) {
   let time = start

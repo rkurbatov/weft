@@ -2,8 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { cell, subscribe } from '#core/graph.ts'
 import { source, fresh } from '#core/source.ts'
-import { valueOf } from '#core/remote.ts'
-import type { Timers } from '#core/source.ts'
+import type { Timers } from '#core/time.ts'
 
 function fakeWorld() {
   let time = 1000
@@ -186,7 +185,7 @@ test('fresh(): the value reads through, formulas depend on it as usual', async (
   const world = fakeWorld()
   const { feed } = counting(world, { every: 100 })
   const view = fresh(feed, 100)
-  const doubled = cell(() => (valueOf(view.get()) ?? 0) * 2)
+  const doubled = cell(() => (view.get().value ?? 0) * 2)
   const stop = subscribe(doubled, () => {})
   await settle()
   assert.equal(doubled.peek(), 2)

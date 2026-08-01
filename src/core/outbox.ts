@@ -4,10 +4,11 @@
 
 import { cell, input } from './graph.ts'
 import type { Readable } from './graph.ts'
-import { KEEPING } from './keep.ts'
-import type { Keeping } from './keep.ts'
+import { SAVING } from './keep.ts'
+import type { Saving } from './keep.ts'
 import type { Store } from './store.ts'
-import type { Timers } from './source.ts'
+import { wallClock } from './time.ts'
+import type { Timers } from './time.ts'
 
 export type EntryState = 'waiting' | 'sending' | 'stuck'
 
@@ -51,8 +52,8 @@ export interface OutboxOptions {
 export interface Outbox {
   /** Resolves when what a previous run left behind has been lifted off the disk. */
   readonly ready: Promise<void>
-  /** Are writes of the book reaching the disk. `without` names the reason. */
-  readonly keeping: Readable<Keeping>
+  /** Are writes of the book landing. `ok: false` names the reason. */
+  readonly saving: Readable<Saving>
   /** Everything not yet confirmed by the world, in the order it was written down. */
   readonly entries: Readable<readonly Entry[]>
   /** How many are still owed to the world. */
@@ -68,11 +69,6 @@ export interface Outbox {
   pause(): void
   resume(): void
   readonly paused: boolean
-}
-
-const wallClock: Timers = {
-  set: (fn, ms) => setTimeout(fn, ms),
-  clear: handle => clearTimeout(handle as ReturnType<typeof setTimeout>),
 }
 
 function randomId(): string {
@@ -102,7 +98,7 @@ export function outbox(options: OutboxOptions): Outbox {
   const newId = options.newId ?? randomId
 
   const entries = input<readonly Entry[]>([], { name: `${key}.entries` })
-  const keeping = input<Keeping>(KEEPING, { name: `${key}.keeping` })
+  const saving = input<Saving>(SAVING, { name: `${key}.saving` })
   const waiting = new Map<string, { resolve: () => void; reject: (error: unknown) => void }>()
   let held = options.paused ?? false
   let timer: unknown = null
@@ -121,13 +117,13 @@ export function outbox(options: OutboxOptions): Outbox {
     store.write(key, book).then(
       () => {
         writing = false
-        keeping.set(KEEPING)
+        saving.set(SAVING)
         drainBook()
       },
       (error: unknown) => {
         writing = false
         const reason = error instanceof Error ? `${error.name}: ${error.message}` : String(error)
-        keeping.set({ kind: 'without', reason })
+        saving.set({ ok: false, reason })
         drainBook()
       },
     )
@@ -232,7 +228,7 @@ export function outbox(options: OutboxOptions): Outbox {
     .catch((error: unknown) => {
       // The disk did not answer: nothing to lift, and the book is not landing.
       const reason = error instanceof Error ? `${error.name}: ${error.message}` : String(error)
-      keeping.set({ kind: 'without', reason })
+      saving.set({ ok: false, reason })
       return [] as Entry[]
     })
     .then(book => {
@@ -244,7 +240,7 @@ export function outbox(options: OutboxOptions): Outbox {
 
   return {
     ready,
-    keeping,
+    saving,
     entries,
     owed: cell(() => entries.get().filter(entry => entry.state !== 'stuck').length, {
       name: `${key}.owed`,

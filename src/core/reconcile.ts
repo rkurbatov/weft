@@ -5,12 +5,8 @@
 
 import { cell, input, untracked, watch } from './graph.ts'
 import type { Readable } from './graph.ts'
-import type { Timers } from './source.ts'
-
-const wallClock: Timers = {
-  set: (fn, ms) => setTimeout(fn, ms),
-  clear: handle => clearTimeout(handle as ReturnType<typeof setTimeout>),
-}
+import { wallClock } from './time.ts'
+import type { Timers } from './time.ts'
 
 export interface ReconcileOptions<T> {
   name?: string

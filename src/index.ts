@@ -28,19 +28,12 @@ export { family } from './core/family.ts'
 export type { Family, FamilyOptions } from './core/family.ts'
 
 export { source, fresh } from './core/source.ts'
-export type { Source, SourceOptions, Timers } from './core/source.ts'
+export type { Source, SourceOptions } from './core/source.ts'
 
-export {
-  valueOf,
-  heldOf,
-  ageOf,
-  isFresh,
-  isLoading,
-  isFailed,
-  loading,
-  arrived,
-  refused,
-} from './core/remote.ts'
+export { wallClock } from './core/time.ts'
+export type { Timers } from './core/time.ts'
+
+export { EMPTY, heldOf, ageOf, isFresh, loading, arrived, refused } from './core/remote.ts'
 export type { Remote, Held } from './core/remote.ts'
 
 export { memoryStore, webStore } from './core/store.ts'
@@ -50,7 +43,7 @@ export { idbStore } from './core/idb.ts'
 export type { IdbOptions } from './core/idb.ts'
 
 export { keepInput, keepSource } from './core/keep.ts'
-export type { Kept, KeepOptions, Keeping, Dropped } from './core/keep.ts'
+export type { Kept, KeepOptions, Saving, Dropped } from './core/keep.ts'
 
 export { outbox } from './core/outbox.ts'
 export type { Outbox, OutboxOptions, Entry, EntryState, Handler } from './core/outbox.ts'
@@ -76,5 +69,5 @@ export type { SharedScope } from './link/shared.ts'
 export { leadOrFollow, webLocks } from './link/lead.ts'
 export type { Lock, LeadOptions } from './link/lead.ts'
 
-export { valueOf as seenValue, valueOr, atOnce, perFrame, NOT_YET } from './link/channel.ts'
-export type { Channel, Mirrored, Schedule, ToGraph, ToWatcher } from './link/channel.ts'
+export { atOnce, perFrame } from './link/channel.ts'
+export type { Channel, Schedule, ToGraph, ToWatcher } from './link/channel.ts'

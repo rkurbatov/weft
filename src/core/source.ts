@@ -4,18 +4,10 @@
 
 import { cell, input } from './graph.ts'
 import type { Readable } from './graph.ts'
-import { arrived, heldOf, loading, refused } from './remote.ts'
+import { EMPTY, arrived, heldOf, loading, refused } from './remote.ts'
 import type { Remote } from './remote.ts'
-
-export interface Timers {
-  set(fn: () => void, ms: number): unknown
-  clear(handle: unknown): void
-}
-
-const wallClock: Timers = {
-  set: (fn, ms) => setTimeout(fn, ms),
-  clear: handle => clearTimeout(handle as ReturnType<typeof setTimeout>),
-}
+import { wallClock } from './time.ts'
+import type { Timers } from './time.ts'
 
 export interface SourceOptions {
   name?: string
@@ -58,11 +50,10 @@ export interface Source<T> {
    */
   restore(value: T, at: number): void
   /**
-   * Ask now, watched or not. Resolves when the answer has landed in the cell.
-   * A flight already under way is ridden rather than duplicated; `force` starts
-   * a new one and disowns the old answer.
+   * Ask again now, watched or not; the answer already under way, if any, is
+   * disowned. Resolves when the fresh answer has landed in the cell.
    */
-  refresh(options?: { force?: boolean }): Promise<void>
+  refresh(): Promise<void>
 }
 
 export function source<T>(load: () => Promise<T>, options: SourceOptions = {}): Source<T> {
@@ -80,18 +71,15 @@ export function source<T>(load: () => Promise<T>, options: SourceOptions = {}): 
   let attempt = 0
   let inFlight: Promise<void> | null = null
 
-  const state = input<Remote<T>>(
-    { kind: 'empty' },
-    {
-      name,
-      onDemand: () => {
-        reschedule()
-      },
-      onIdle: () => {
-        cancel()
-      },
+  const state = input<Remote<T>>(EMPTY, {
+    name,
+    onDemand: () => {
+      reschedule()
     },
-  )
+    onIdle: () => {
+      cancel()
+    },
+  })
 
   function cancel(): void {
     if (timer === null) return
@@ -186,7 +174,7 @@ export function source<T>(load: () => Promise<T>, options: SourceOptions = {}): 
         error => {
           if (mine !== generation) return
           attempt++
-          state.set(refused(state.peek(), error, now(), attempt))
+          state.set(refused(state.peek(), error, attempt))
           schedule(backoff())
         },
       )
@@ -225,7 +213,7 @@ export function source<T>(load: () => Promise<T>, options: SourceOptions = {}): 
     get pace() {
       return pace()
     },
-    refresh: (asked = {}) => begin(asked.force ?? false),
+    refresh: () => begin(true),
   }
 }
 

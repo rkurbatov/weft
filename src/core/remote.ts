@@ -1,5 +1,11 @@
 // The state of a value that comes from outside: empty, in flight, a value with
 // an age, or a refusal. One shape instead of a value plus flags beside it.
+//
+// Every variant carries the same flat fields, so a screen reads it without
+// helpers: `state.value` is what to show (a flight and a refusal keep showing
+// what they hold), `state.at` is when that arrived, `state.error` is the
+// refusal if there is one, `state.loading` says whether an answer is on its
+// way. The `kind` stays for whoever needs the exact story.
 
 export interface Held<T> {
   readonly value: T
@@ -7,31 +13,49 @@ export interface Held<T> {
 }
 
 export type Remote<T> =
-  | { readonly kind: 'empty' }
-  | { readonly kind: 'loading'; readonly since: number; readonly held?: Held<T> }
-  | { readonly kind: 'value'; readonly value: T; readonly at: number }
+  | {
+      readonly kind: 'empty'
+      readonly value: undefined
+      readonly at: undefined
+      readonly error: undefined
+      readonly loading: false
+    }
+  | {
+      readonly kind: 'loading'
+      readonly since: number
+      readonly held?: Held<T>
+      readonly value: T | undefined
+      readonly at: number | undefined
+      readonly error: undefined
+      readonly loading: true
+    }
+  | {
+      readonly kind: 'value'
+      readonly value: T
+      readonly at: number
+      readonly error: undefined
+      readonly loading: false
+    }
   | {
       readonly kind: 'failed'
       readonly error: unknown
-      readonly at: number
       readonly attempt: number
       readonly held?: Held<T>
+      readonly value: T | undefined
+      readonly at: number | undefined
+      readonly loading: false
     }
 
-/** The value if there is one, including one held under a later failure or refresh. */
-export function valueOf<T>(state: Remote<T>): T | undefined {
-  switch (state.kind) {
-    case 'value':
-      return state.value
-    case 'loading':
-    case 'failed':
-      return state.held?.value
-    default:
-      return undefined
-  }
+export const EMPTY: Remote<never> = {
+  kind: 'empty',
+  value: undefined,
+  at: undefined,
+  error: undefined,
+  loading: false,
 }
 
-/** What is held right now, with the moment it arrived. */
+/** What is held right now, with the moment it arrived. Exact where `value`
+ *  would be ambiguous — a held `undefined` and nothing held read the same. */
 export function heldOf<T>(state: Remote<T>): Held<T> | undefined {
   if (state.kind === 'value') return { value: state.value, at: state.at }
   if (state.kind === 'loading' || state.kind === 'failed') return state.held
@@ -50,32 +74,33 @@ export function isFresh<T>(state: Remote<T>, within: number, now: number): boole
   return age !== undefined && age < within
 }
 
-export function isLoading<T>(state: Remote<T>): boolean {
-  return state.kind === 'loading'
-}
-
-export function isFailed<T>(state: Remote<T>): boolean {
-  return state.kind === 'failed'
-}
-
 /** Move to "in flight" while keeping whatever is held. */
 export function loading<T>(previous: Remote<T>, since: number): Remote<T> {
   const held = heldOf(previous)
-  return held === undefined ? { kind: 'loading', since } : { kind: 'loading', since, held }
+  return {
+    kind: 'loading',
+    since,
+    ...(held === undefined ? {} : { held }),
+    value: held?.value,
+    at: held?.at,
+    error: undefined,
+    loading: true,
+  }
 }
 
 export function arrived<T>(value: T, at: number): Remote<T> {
-  return { kind: 'value', value, at }
+  return { kind: 'value', value, at, error: undefined, loading: false }
 }
 
-export function refused<T>(
-  previous: Remote<T>,
-  error: unknown,
-  at: number,
-  attempt: number,
-): Remote<T> {
+export function refused<T>(previous: Remote<T>, error: unknown, attempt: number): Remote<T> {
   const held = heldOf(previous)
-  return held === undefined
-    ? { kind: 'failed', error, at, attempt }
-    : { kind: 'failed', error, at, attempt, held }
+  return {
+    kind: 'failed',
+    error,
+    attempt,
+    ...(held === undefined ? {} : { held }),
+    value: held?.value,
+    at: held?.at,
+    loading: false,
+  }
 }

@@ -2,8 +2,8 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { MessageChannel } from 'node:worker_threads'
 import { cell, input, subscribe } from '#core/graph.ts'
-import type { Timers } from '#core/source.ts'
-import { atOnce, valueOf } from '#link/channel.ts'
+import type { Timers } from '#core/time.ts'
+import { atOnce } from '#link/channel.ts'
 import { busHub, channelOverBus } from '#link/bus.ts'
 import { channelToSharedWorker, sharedWorkerHub } from '#link/shared.ts'
 import type { SharedScope } from '#link/shared.ts'
@@ -63,13 +63,13 @@ test('two tabs watch one graph over the bus, each served on its own', async () =
   const stopTwo = subscribe(mirrorTwo, () => {})
   await settle()
 
-  assert.equal(valueOf(mirrorOne.peek()), 1)
-  assert.equal(valueOf(mirrorTwo.peek()), 2)
+  assert.equal(mirrorOne.peek().value, 1)
+  assert.equal(mirrorTwo.peek().value, 2)
 
   count.set(4)
   await settle()
-  assert.equal(valueOf(mirrorOne.peek()), 4)
-  assert.equal(valueOf(mirrorTwo.peek()), 8)
+  assert.equal(mirrorOne.peek().value, 4)
+  assert.equal(mirrorTwo.peek().value, 8)
 
   stopOne()
   stopTwo()
@@ -94,7 +94,7 @@ test('a command from one tab is seen by the other', async () => {
 
   await writer.command<[number], void>('add')(9)
   await settle()
-  assert.equal(valueOf(mirror.peek()), 10)
+  assert.equal(mirror.peek().value, 10)
 
   stop()
   writer.close()
@@ -112,14 +112,14 @@ test('a watcher asks again when the graph announces itself', async () => {
   const mirror = seen.cell<number>('count')
   const stop = subscribe(mirror, () => {})
   await settle()
-  assert.equal(valueOf(mirror.peek()), 1)
+  assert.equal(mirror.peek().value, 1)
 
   // The graph goes away and comes back knowing nothing of who was watching.
   stopServing()
   count.set(7)
   stopServing = serve(surface, wire.graph, { schedule: atOnce })
   await settle()
-  assert.equal(valueOf(mirror.peek()), 7)
+  assert.equal(mirror.peek().value, 7)
 
   stop()
   seen.close()
@@ -340,8 +340,8 @@ test('the hub lets go of a tab that fell silent, and keeps serving the live one'
   const stopAlive = subscribe(aliveMirror, () => {})
   const stopDead = subscribe(deadMirror, () => {})
   await settle()
-  assert.equal(valueOf(aliveMirror.peek()), 10)
-  assert.equal(valueOf(deadMirror.peek()), 1)
+  assert.equal(aliveMirror.peek().value, 10)
+  assert.equal(deadMirror.peek().value, 1)
   assert.deepEqual(awake, ['start'])
 
   await clock.advance(16_000)
@@ -351,7 +351,7 @@ test('the hub lets go of a tab that fell silent, and keeps serving the live one'
   // The tab that kept beating is still served.
   silent.set(11)
   await settle()
-  assert.equal(valueOf(aliveMirror.peek()), 11)
+  assert.equal(aliveMirror.peek().value, 11)
 
   // A tab let go by mistake recovers by speaking: the hub hands it a fresh
   // channel, whose serve announces itself, and the link re-asks on its own.
@@ -359,7 +359,7 @@ test('the hub lets go of a tab that fell silent, and keeps serving the live one'
   await settle()
   talking.set(2)
   await settle()
-  assert.equal(valueOf(deadMirror.peek()), 2)
+  assert.equal(deadMirror.peek().value, 2)
 
   stopAlive()
   stopDead()
@@ -409,8 +409,8 @@ test('the shared-worker hub lets go of a tab that fell silent', async () => {
   const stopAlive = subscribe(aliveMirror, () => {})
   const stopDead = subscribe(deadMirror, () => {})
   await settle()
-  assert.equal(valueOf(aliveMirror.peek()), 1)
-  assert.equal(valueOf(deadMirror.peek()), 10)
+  assert.equal(aliveMirror.peek().value, 1)
+  assert.equal(deadMirror.peek().value, 10)
   assert.deepEqual(awake, ['start', 'lonely starts'])
 
   await clock.advance(16_000)
@@ -418,7 +418,7 @@ test('the shared-worker hub lets go of a tab that fell silent', async () => {
   assert.deepEqual(awake, ['start', 'lonely starts', 'lonely stops'])
   talking.set(2)
   await settle()
-  assert.equal(valueOf(aliveMirror.peek()), 2)
+  assert.equal(aliveMirror.peek().value, 2)
 
   stopAlive()
   stopDead()

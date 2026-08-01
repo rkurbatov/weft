@@ -4,10 +4,9 @@ import { input, subscribe } from '#core/graph.ts'
 import { source } from '#core/source.ts'
 import { keepInput, keepSource } from '#core/keep.ts'
 import { memoryStore } from '#core/store.ts'
-import { valueOf } from '#core/remote.ts'
 import type { Dropped } from '#core/keep.ts'
 import type { Store } from '#core/store.ts'
-import type { Timers } from '#core/source.ts'
+import type { Timers } from '#core/time.ts'
 
 function fakeWorld(start = 1000) {
   let time = start
@@ -145,18 +144,18 @@ test('a refusal to write is declared, and the next change recovers by itself', a
   const target = input('a')
   const kept = keepInput(target, { key: 'note', store: disk.store, now: world.now })
   await disk.release() // the read
-  assert.equal(kept.keeping.peek().kind, 'keeping')
+  assert.equal(kept.saving.peek().ok, true)
 
   target.set('b')
   await disk.release(new Error('QuotaExceededError'))
-  const state = kept.keeping.peek()
-  assert.equal(state.kind, 'without')
+  const state = kept.saving.peek()
+  assert.equal(state.ok, false)
   assert.match((state as { reason: string }).reason, /QuotaExceededError/)
 
   // The quota was freed; the next edit simply tries again.
   target.set('c')
   await disk.release()
-  assert.equal(kept.keeping.peek().kind, 'keeping')
+  assert.equal(kept.saving.peek().ok, true)
   assert.equal((disk.cells.get('note') as { value: unknown }).value, 'c')
   kept.stop()
 })
@@ -167,7 +166,7 @@ test('a disk that cannot even be read is the same declared state', async () => {
   const kept = keepInput(target, { key: 'note', store: disk.store })
   await disk.release(new Error('InvalidStateError'))
   assert.equal(await kept.restored, false)
-  assert.equal(kept.keeping.peek().kind, 'without')
+  assert.equal(kept.saving.peek().ok, false)
   assert.equal(target.peek(), 'draft')
   kept.stop()
 })
@@ -335,7 +334,7 @@ test('an answer kept from the last run comes back with its real age', async () =
   })
   const keptAgain = keepSource(revived, { key: 'feed', store, now: soon.now })
   assert.equal(await keptAgain.restored, true)
-  assert.equal(valueOf(revived.state.peek()), 'answer 1')
+  assert.equal(revived.state.peek().value, 'answer 1')
   const watching = subscribe(revived.state, () => {})
   await settle()
   assert.equal(laterCalls, 0)
@@ -365,12 +364,12 @@ test('past its shelf life the restored answer is shown and refreshed at once', a
   )
   const keptLate = keepSource(revived, { key: 'feed', store, now: late.now })
   assert.equal(await keptLate.restored, true)
-  assert.equal(valueOf(revived.state.peek()), 'old') // shown while the new one is fetched
+  assert.equal(revived.state.peek().value, 'old') // shown while the new one is fetched
   const watching = subscribe(revived.state, () => {})
-  assert.equal(valueOf(revived.state.peek()), 'old')
+  assert.equal(revived.state.peek().value, 'old')
   await settle()
   assert.equal(calls, 1)
-  assert.equal(valueOf(revived.state.peek()), 'new')
+  assert.equal(revived.state.peek().value, 'new')
   watching()
   keptLate.stop()
 })
@@ -404,12 +403,12 @@ test('the network answering before the disk wins: nothing is put over a live ans
   const feed = source(async () => 'from the world', { now: world.now, timers: world.timers })
   const stop = subscribe(feed.state, () => {})
   await settle()
-  assert.equal(valueOf(feed.state.peek()), 'from the world')
+  assert.equal(feed.state.peek().value, 'from the world')
 
   const kept = keepSource(feed, { key: 'feed', store: disk.store, now: world.now })
   await disk.release() // the read arrives after the network already has
   assert.equal(await kept.restored, false)
-  assert.equal(valueOf(feed.state.peek()), 'from the world')
+  assert.equal(feed.state.peek().value, 'from the world')
   stop()
   kept.stop()
 })

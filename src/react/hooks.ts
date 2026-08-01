@@ -24,8 +24,8 @@ export function useCell<T>(source: Watchable<T>): T {
 }
 
 export interface CommandHandle<A extends unknown[], T> {
-  /** Start it; await the returned promise if the caller needs the answer. */
-  start: (...args: A) => Promise<T>
+  /** Start it — the same word as on the command itself. Await if the answer matters. */
+  run: (...args: A) => Promise<T>
   pending: boolean
   error: unknown
   result: T | undefined
@@ -36,13 +36,13 @@ export interface CommandHandle<A extends unknown[], T> {
 /** Hand a command to the tree: one function to start, plus its observable state. */
 export function useCommand<A extends unknown[], T>(cmd: Command<A, T>): CommandHandle<A, T> {
   const state = useCell(cmd.state)
-  // The identity of start must not change across renders: it goes into handlers and deps.
+  // The identity of run must not change across renders: it goes into handlers and deps.
   const ref = useRef(cmd)
   ref.current = cmd
-  const start = useCallback((...args: A) => ref.current.run(...args), [])
+  const run = useCallback((...args: A) => ref.current.run(...args), [])
   const reset = useCallback(() => ref.current.reset(), [])
   return {
-    start,
+    run,
     reset,
     state,
     pending: state.kind === 'running',

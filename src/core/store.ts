@@ -54,7 +54,7 @@ export function webStore(area: 'local' | 'session' = 'local'): Store {
     },
     write: (key, value) => {
       // A full or blocked store is a refusal, not a shrug: the caller turns it
-      // into a visible "working without keeping", so it must not be swallowed.
+      // into a visible "not saving", so it must not be swallowed.
       try {
         backing.setItem(key, JSON.stringify(value))
         return Promise.resolve()

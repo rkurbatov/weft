@@ -4,8 +4,9 @@
 
 import { input, untracked } from '../core/graph.ts'
 import type { Input, Watchable } from '../core/graph.ts'
-import { NOT_YET } from './channel.ts'
-import type { Channel, Mirrored, ToWatcher } from './channel.ts'
+import { EMPTY, arrived, refused } from '../core/remote.ts'
+import type { Remote } from '../core/remote.ts'
+import type { Channel, ToWatcher } from './channel.ts'
 
 /**
  * The call got no answer and never will — but the other side may have done the
@@ -23,15 +24,15 @@ export interface Link {
   /** Ask again for everything being watched. Called for you when the other side announces itself. */
   rewatch(): void
   /** A cell of the other side, by name; a family needs its key as well. */
-  cell<T>(name: string, key?: unknown): Watchable<Mirrored<T>>
+  cell<T>(name: string, key?: unknown): Watchable<Remote<T>>
   /** A command of the other side. Arguments and the answer must be cloneable. */
   command<A extends readonly unknown[], T>(name: string): (...args: A) => Promise<T>
   close(): void
 }
 
 export function link(channel: Channel): Link {
-  const mirrors = new Map<string, { id: number; cell: Input<Mirrored<unknown>> }>()
-  const byId = new Map<number, Input<Mirrored<unknown>>>()
+  const mirrors = new Map<string, { id: number; cell: Input<Remote<unknown>> }>()
+  const byId = new Map<number, Input<Remote<unknown>>>()
   const waiting = new Map<
     number,
     { resolve: (value: never) => void; reject: (error: unknown) => void }
@@ -53,7 +54,7 @@ export function link(channel: Channel): Link {
       }
       case 'values':
         for (const { id, value } of message.changed) {
-          byId.get(id)?.set({ known: true, value })
+          byId.get(id)?.set(arrived(value, Date.now()))
         }
         return
       case 'done': {
@@ -69,8 +70,10 @@ export function link(channel: Channel): Link {
           waiter.reject(new Error(message.error))
           return
         }
-        // Not a call, then: a cell the other side does not have.
-        byId.get(message.id)?.set({ known: false })
+        // Not a call, then: a cell the other side does not have — a refusal,
+        // told apart from "nothing arrived yet".
+        const mirror = byId.get(message.id)
+        mirror?.set(refused(mirror.peek(), new Error(message.error), 1))
         return
       }
       default:
@@ -92,19 +95,19 @@ export function link(channel: Channel): Link {
     }
   }
 
-  function mirrorOf(name: string, key: unknown): Input<Mirrored<unknown>> {
+  function mirrorOf(name: string, key: unknown): Input<Remote<unknown>> {
     const at = key === undefined ? name : `${name}\u0000${JSON.stringify(key)}`
     const known = mirrors.get(at)
     if (known !== undefined) return known.cell
 
     const id = next++
-    const cell = input<Mirrored<unknown>>(NOT_YET, {
+    const cell = input<Remote<unknown>>(EMPTY, {
       name: at,
       // Watching here is asking there; nobody watching is nobody asking.
       onDemand: () => channel.send({ kind: 'watch', id, cell: name, key }),
       onIdle: () => {
         channel.send({ kind: 'unwatch', id })
-        untracked(() => cell.set(NOT_YET))
+        untracked(() => cell.set(EMPTY))
       },
     })
     mirrors.set(at, { id, cell })
@@ -115,7 +118,7 @@ export function link(channel: Channel): Link {
   return {
     rewatch,
     cell: <T>(name: string, key?: unknown) =>
-      mirrorOf(name, key) as unknown as Watchable<Mirrored<T>>,
+      mirrorOf(name, key) as unknown as Watchable<Remote<T>>,
 
     command<A extends readonly unknown[], T>(name: string) {
       return (...args: A): Promise<T> => {

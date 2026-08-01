@@ -2,8 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { MessageChannel } from 'node:worker_threads'
 import { cell, input, subscribe } from '#core/graph.ts'
-import { atOnce, valueOf } from '#link/channel.ts'
-import type { Mirrored } from '#link/channel.ts'
+import { atOnce } from '#link/channel.ts'
 import { channelOverPort, pairInMemory } from '#link/channels.ts'
 import { link, UnknownOutcome } from '#link/link.ts'
 import { serve } from '#link/serve.ts'
@@ -52,11 +51,11 @@ test('a mirrored cell shows what the other side holds, and follows it', async ()
   const mirror = seen.cell<number>('count')
   const stop = subscribe(mirror, () => {})
   await settle()
-  assert.equal(valueOf(mirror.peek()), 1)
+  assert.equal(mirror.peek().value, 1)
 
   count.set(5)
   await settle()
-  assert.equal(valueOf(mirror.peek()), 5)
+  assert.equal(mirror.peek().value, 5)
 
   stop()
   seen.close()
@@ -70,9 +69,9 @@ test('nothing is known until somebody watches', async () => {
   const seen = link(wire.watcher)
 
   const mirror = seen.cell<number>('count')
-  assert.equal(mirror.peek().known, false)
+  assert.equal(mirror.peek().kind, 'empty')
   await settle()
-  assert.equal(mirror.peek().known, false) // asking is watching, and nobody watches
+  assert.equal(mirror.peek().kind, 'empty') // asking is watching, and nobody watches
 
   seen.close()
   stopServing()
@@ -125,7 +124,7 @@ test('a slow reader gets the latest value, not a queue of stale ones', async () 
   assert.equal(sent.length, 1)
   const message = sent[0] as { changed: Array<{ value: unknown }> }
   assert.equal(message.changed.length, 1)
-  assert.equal(valueOf(mirror.peek()), 4)
+  assert.equal(mirror.peek().value, 4)
 
   stop()
   seen.close()
@@ -141,7 +140,7 @@ test('a family is watched by name and key', async () => {
   const mirror = seen.cell<{ id: number; title: string }>('row', 1)
   const stop = subscribe(mirror, () => {})
   await settle()
-  assert.deepEqual(valueOf(mirror.peek()), { id: 1, title: 'one' })
+  assert.deepEqual(mirror.peek().value, { id: 1, title: 'one' })
 
   stop()
   seen.close()
@@ -174,7 +173,7 @@ test('asking for a cell the other side does not have says so', async () => {
   const mirror = seen.cell<number>('nonesuch')
   const stop = subscribe(mirror, () => {})
   await settle()
-  assert.equal(mirror.peek().known, false)
+  assert.equal(mirror.peek().kind, 'failed') // told apart from "nothing yet"
 
   stop()
   seen.close()
@@ -209,11 +208,11 @@ test('the same over a real port, with real cloning', async () => {
   const mirror = seen.cell<number>('doubled')
   const stop = subscribe(mirror, () => {})
   await settle()
-  assert.equal(valueOf(mirror.peek()), 2)
+  assert.equal(mirror.peek().value, 2)
 
   count.set(10)
   await settle()
-  assert.equal(valueOf(mirror.peek()), 20)
+  assert.equal(mirror.peek().value, 20)
 
   const add = seen.command<[number], number>('add')
   assert.equal(await add(1), 11)
@@ -243,7 +242,7 @@ test('a mirrored value keeps its shape through the wire', async () => {
   const mirror = seen.cell<Array<{ id: number; tags: string[]; at: Date }>>('rows')
   const stop = subscribe(mirror, () => {})
   await settle()
-  const value = valueOf(mirror.peek()) as Array<{ id: number; tags: string[]; at: Date }>
+  const value = mirror.peek().value as Array<{ id: number; tags: string[]; at: Date }>
   assert.deepEqual(value[0]?.tags, ['a', 'b'])
   assert.ok(value[0]?.at instanceof Date)
 
@@ -285,11 +284,11 @@ test('a mirror forgets what it knew when the last watcher goes', async () => {
   const mirror = seen.cell<number>('count')
   const stop = subscribe(mirror, () => {})
   await settle()
-  assert.equal(mirror.peek().known, true)
+  assert.equal(mirror.peek().kind, 'value')
   stop()
   await settle()
   // Stale is worse than unknown: nothing is watching, so nothing is being told.
-  assert.equal(mirror.peek().known, false)
+  assert.equal(mirror.peek().kind, 'empty')
 
   seen.close()
   stopServing()
@@ -323,13 +322,6 @@ test('a graph restart leaves waiting calls unknown, not refused', async () => {
   again()
 })
 
-test('Mirrored reads plainly', () => {
-  const nothing: Mirrored<number> = { known: false }
-  const something: Mirrored<number> = { known: true, value: 7 }
-  assert.equal(valueOf(nothing), undefined)
-  assert.equal(valueOf(something), 7)
-})
-
 test('one value that cannot cross does not cost the others theirs', async () => {
   const good = input(1)
   const bad = input<unknown>(() => 'a function cannot be cloned')
@@ -345,14 +337,14 @@ test('one value that cannot cross does not cost the others theirs', async () => 
   const stopGood = subscribe(mirror, () => {})
   const stopBad = subscribe(seen.cell('bad'), () => {})
   await settle()
-  assert.equal(valueOf(mirror.peek()), 1)
+  assert.equal(mirror.peek().value, 1)
   assert.deepEqual(complaints, ['bad'])
 
   // Both change in one batch: the good one still gets through.
   good.set(2)
   bad.set(() => 'still not cloneable')
   await settle()
-  assert.equal(valueOf(mirror.peek()), 2)
+  assert.equal(mirror.peek().value, 2)
   assert.deepEqual(complaints, ['bad', 'bad'])
 
   stopGood()

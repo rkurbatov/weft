@@ -8,8 +8,9 @@
 import { channelOverPort } from './channels.ts'
 import type { Port } from './channels.ts'
 import type { Channel } from './channel.ts'
-import { HELLO, LEASE, KEEP_ALIVE, isHello, wallClock } from './bus.ts'
+import { HELLO, LEASE, KEEP_ALIVE, isHello } from './bus.ts'
 import type { Hub, HubOptions, KeepAliveOptions } from './bus.ts'
+import { wallClock } from '../core/time.ts'
 
 /** What a shared worker's global scope offers: a connection per tab. */
 export interface SharedScope {
