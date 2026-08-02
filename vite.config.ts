@@ -24,6 +24,7 @@ export default defineConfig({
         rail: resolve(import.meta.dirname, 'demo/rail/index.html'),
         kanbanClassic: resolve(import.meta.dirname, 'demo/kanban-classic/index.html'),
         kanbanWeft: resolve(import.meta.dirname, 'demo/kanban-weft/index.html'),
+        kanbanTabs: resolve(import.meta.dirname, 'demo/kanban-tabs/index.html'),
       },
     },
   },

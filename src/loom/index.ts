@@ -20,5 +20,5 @@ export { together, firstOf } from '../core/remote.ts'
 // The assembly word: the root wraps its domains in a region and owns their life.
 export { region } from '../core/region.ts'
 
-export { offer, adopt } from './carry.ts'
-export type { Offering, OfferOptions, Adopted } from './carry.ts'
+export { offer, adopt, carry } from './carry.ts'
+export type { Offering, OfferOptions, Adopted, Carried, CarrySpec } from './carry.ts'

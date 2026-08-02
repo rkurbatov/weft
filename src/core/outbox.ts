@@ -87,7 +87,10 @@ export interface Outbox {
   /** Are any stuck waiting for a person. */
   readonly stuck: Readable<readonly Entry[]>
   /** Write a command down and send it. Resolves when it leaves the book; rejects if it gets stuck. */
-  send(name: string, args: unknown): { id: string; done: Promise<void> }
+  /** With opts.key the caller names the note: a repeat under the same key
+   *  returns the very note already in the book instead of writing a second —
+   *  the law of the key on this boundary. */
+  send(name: string, args: unknown, opts?: { key?: string }): { id: string; done: Promise<void> }
   /** Write down a fait accompli: confirmed elsewhere, never sent. Born 'done',
    *  it lays over the base until absorb() says the base has caught up.
    *  Meaningful with `retain`; without it the base has nothing to catch up to,
@@ -149,7 +152,10 @@ export function outbox(options: OutboxOptions): Outbox {
 
   const entries = input<readonly Entry[]>([], { name: `${key}.entries` })
   const saving = input<Saving>(SAVING, { name: `${key}.saving` })
-  const waiting = new Map<string, { resolve: () => void; reject: (error: unknown) => void }>()
+  const waiting = new Map<
+    string,
+    { resolve: () => void; reject: (error: unknown) => void; promise?: Promise<void> }
+  >()
   let held = options.paused ?? false
   let timer: unknown = null
   let sending = false
@@ -332,14 +338,30 @@ export function outbox(options: OutboxOptions): Outbox {
       equal: (a, b) => a.length === b.length && a.every((entry, i) => entry === b[i]),
     }),
 
-    send(name, args) {
-      const id = newId()
+    send(name, args, opts) {
+      const id = opts?.key ?? newId()
+      const known = entries.peek().find(entry => entry.id === id)
+      if (known !== undefined) {
+        // The key names a note already written: answer with that very note.
+        if (known.state === 'done') return { id, done: Promise.resolve() }
+        const pending = waiting.get(id)
+        if (pending?.promise !== undefined) return { id, done: pending.promise }
+        let arm: { resolve: () => void; reject: (error: unknown) => void } | undefined
+        const done = new Promise<void>((resolve, reject) => {
+          arm = { resolve, reject }
+        })
+        if (arm !== undefined) waiting.set(id, { ...arm, promise: done })
+        done.catch(() => {})
+        return { id, done }
+      }
       const entry: Entry = { id, name, args, at: now(), attempts: 0, state: 'waiting' }
       // Written down before it is sent: a death between the two loses nothing.
       write([...entries.peek(), entry])
+      let arm: { resolve: () => void; reject: (error: unknown) => void } | undefined
       const done = new Promise<void>((resolve, reject) => {
-        waiting.set(id, { resolve, reject })
+        arm = { resolve, reject }
       })
+      if (arm !== undefined) waiting.set(id, { ...arm, promise: done })
       // The caller may ignore `done`; a refusal is already reported through the
       // entry itself, so an ignored promise must not look like a lost error.
       done.catch(() => {})

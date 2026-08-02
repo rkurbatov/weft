@@ -27,7 +27,7 @@ export function serveKanban(app: Kanban, channel: Channel, options: OfferOptions
       acts: {
         move: (id: string, into: string, at: number) => app.actions.move(id, into, at),
         remove: (id: string) => app.actions.remove(id),
-        add: (into: string, title: string) => app.actions.add(into, title),
+        add: (into: string, title: string, key?: string) => app.actions.add(into, title, key),
         load: () => app.actions.load(),
         pause: () => app.post.pause(),
         resume: () => app.post.resume(),
@@ -49,7 +49,7 @@ export function kanbanMirror(channel: Channel): Kanban {
 
   const move = tab.act<[string, string, number]>('move')
   const remove = tab.act<[string]>('remove')
-  const add = tab.act<[string, string]>('add')
+  const add = tab.act<[string, string, string | undefined]>('add')
   const load = tab.act<[]>('load')
   const pause = tab.act<[]>('pause')
   const resume = tab.act<[]>('resume')
@@ -67,7 +67,7 @@ export function kanbanMirror(channel: Channel): Kanban {
     actions: {
       move: (id, into, at) => move(id, into, at).catch(() => {}),
       remove: id => remove(id).catch(() => {}),
-      add: (into, title) => add(into, title).catch(() => {}),
+      add: (into, title, key) => add(into, title, key).catch(() => {}),
       load: () => load().catch(() => {}),
     },
     post: {

@@ -49,7 +49,7 @@ type OpOf<S> = S extends Sends<infer T> ? T : S extends Notes<infer T> ? T : nev
 
 export type Speak<D extends WillDict> = {
   readonly [K in keyof D]: D[K] extends Sends<infer T>
-    ? (op: T) => Promise<void>
+    ? (op: T, key?: string) => Promise<void>
     : D[K] extends Notes<infer T>
       ? (op: T) => void
       : never
@@ -122,7 +122,8 @@ export function will<D extends WillDict>(dict: D, passport: WillPassport = {}): 
   for (const [kind, spec] of Object.entries(dict)) {
     speak[kind] =
       spec.kind === 'sends'
-        ? (op: unknown) => box.send(kind, op).done.catch(() => {})
+        ? (op: unknown, key?: string) =>
+            box.send(kind, op, key === undefined ? undefined : { key }).done.catch(() => {})
         : (op: unknown) => {
             box.note(kind, op)
           }

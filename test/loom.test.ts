@@ -169,3 +169,34 @@ test('truth.suspend: a cold start throws the landing, anything held returns', as
   }
   assert.throws(() => sour.suspend(), /cold no/) // a cold refusal goes to the boundary
 })
+
+test('carry: without talking tabs the station lives inline, and the mirror cannot tell', async () => {
+  const { carry, adopt } = await import('#loom')
+  const { kanbanServer } = await import('../demo/kanban-common/server.ts')
+  const { kanban } = await import('../demo/kanban-weft/state.ts')
+  const { serveKanban, kanbanMirror } = await import('../demo/kanban-weft/mirror.ts')
+  const { atOnce } = await import('#link/channel.ts')
+  void adopt
+
+  const carried = carry({
+    name: 'kanban-carried',
+    station: () => {
+      const app = kanban(kanbanServer({ latency: 3, grumpiness: 0 }), 60_000)
+      return {
+        serve: channel => serveKanban(app, channel, { schedule: atOnce }),
+        dispose: app.dispose,
+      }
+    },
+  })
+  assert.equal(carried.role.peek(), 'inline') // node: no locks, no election
+
+  const tab = kanbanMirror(carried.channel)
+  const { subscribe } = await import('#core/graph.ts')
+  const warm = subscribe(tab.state.cards, () => {})
+  await tab.actions.load()
+  await new Promise(resolve => setTimeout(resolve, 5))
+  assert.equal(tab.state.cards.peek().size, 20)
+  warm()
+  tab.dispose()
+  carried.stop()
+})

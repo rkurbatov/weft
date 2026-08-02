@@ -32,6 +32,8 @@ export interface Link {
   command<A extends readonly unknown[], T>(name: string): (...args: A) => Promise<T>
   /** Write into a fact the other side published. */
   write(fact: string, value: unknown): void
+  /** How many mirrors are held right now. */
+  held(): number
   close(): void
 }
 
@@ -43,11 +45,15 @@ export interface LinkOptions {
    * stays politely silent.
    */
   within?: number
+  /** An idle mirror lingers this long before it is let go of; a fresh look
+   *  re-creates it. Keeps a family of mirrors from growing immortal. */
+  linger?: number
   timers?: Timers
 }
 
 export function link(channel: Channel, options: LinkOptions = {}): Link {
   const within = options.within ?? 10_000
+  const linger = options.linger ?? 15_000
   const timers = options.timers ?? wallClock
   const mirrors = new Map<string, { id: number; cell: Input<Remote<unknown>> }>()
   const byId = new Map<number, Input<Remote<unknown>>>()
@@ -136,13 +142,26 @@ export function link(channel: Channel, options: LinkOptions = {}): Link {
     if (known !== undefined) return known.cell
 
     const id = next++
+    let letGo: unknown
     const cell = input<Remote<unknown>>(EMPTY, {
       name: at,
       // Watching here is asking there; nobody watching is nobody asking.
-      onDemand: () => channel.send({ kind: 'watch', id, cell: name, key }),
+      onDemand: () => {
+        timers.clear(letGo as never)
+        // A look may return after the mirror was let go of: register again.
+        mirrors.set(at, { id, cell })
+        byId.set(id, cell)
+        channel.send({ kind: 'watch', id, cell: name, key })
+      },
       onIdle: () => {
         channel.send({ kind: 'unwatch', id })
         untracked(() => cell.set(EMPTY))
+        // Not dropped at once — a linger, then let go. The handle out there
+        // stays valid: its next look re-registers the very same mirror.
+        letGo = timers.set(() => {
+          mirrors.delete(at)
+          byId.delete(id)
+        }, linger)
       },
     })
     mirrors.set(at, { id, cell })
@@ -152,6 +171,8 @@ export function link(channel: Channel, options: LinkOptions = {}): Link {
 
   return {
     rewatch,
+    /** How many mirrors are held right now. For the instruments' eyes. */
+    held: () => mirrors.size,
     cell: <T>(name: string, key?: unknown) =>
       mirrorOf(name, key) as unknown as Watchable<Remote<T>>,
 

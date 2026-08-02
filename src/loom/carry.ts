@@ -112,3 +112,74 @@ export function adopt(channel: Channel, options: LinkOptions = {}): Adopted {
     close: () => wire.close(),
   }
 }
+
+// ── The carrier's choice ────────────────────────────────────────────────────
+// Where the station lives is a deployment mode, not an architecture: with tabs
+// able to talk and to elect (BroadcastChannel + web locks), one of them leads
+// and serves the rest; without them the station lives right here, inline.
+// A SharedWorker carrier stays an explicit two-entry wiring for now.
+
+import { busHub, channelOverBus } from '../link/bus.ts'
+import { leadOrFollow, webLocks } from '../link/lead.ts'
+import { pairInMemory } from '../link/ports.ts'
+
+export interface Carried {
+  /** This side's channel to whoever carries the station. */
+  channel: Channel
+  role: Watchable<'inline' | 'leading' | 'following'>
+  stop(): void
+}
+
+export interface CarrySpec {
+  name: string
+  /** Build the station; called only where it comes to live. */
+  station: () => { serve: (channel: Channel) => () => void; dispose?: () => void }
+}
+
+export function carry(spec: CarrySpec): Carried {
+  const tabsCanTalk =
+    typeof BroadcastChannel !== 'undefined' &&
+    typeof navigator !== 'undefined' &&
+    'locks' in navigator
+
+  if (!tabsCanTalk) {
+    const built = spec.station()
+    const pair = pairInMemory()
+    const stopServe = built.serve(pair.graph)
+    const role = input<'inline' | 'leading' | 'following'>('inline', { name: `${spec.name}.role` })
+    return {
+      channel: pair.watcher,
+      role,
+      stop: () => {
+        stopServe()
+        built.dispose?.()
+      },
+    }
+  }
+
+  const role = input<'inline' | 'leading' | 'following'>('following', { name: `${spec.name}.role` })
+  const hub = busHub(spec.name)
+  const stopLead = leadOrFollow({
+    name: spec.name,
+    lock: webLocks(),
+    lead: () => {
+      role.set('leading')
+      const built = spec.station()
+      const stopHub = hub.accept(channel => built.serve(channel))
+      return () => {
+        stopHub()
+        built.dispose?.()
+      }
+    },
+    follow: () => {
+      role.set('following')
+      return () => {}
+    },
+  })
+
+  return {
+    channel: channelOverBus(spec.name),
+    role,
+    stop: stopLead,
+  }
+}

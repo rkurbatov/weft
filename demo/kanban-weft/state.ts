@@ -26,7 +26,7 @@ export interface Kanban {
   actions: {
     move(id: string, into: string, at: number): Promise<void>
     remove(id: string): Promise<void>
-    add(into: string, title: string): Promise<void>
+    add(into: string, title: string, key?: string): Promise<void>
     load(): Promise<void>
   }
   post: { pause(): void; resume(): void; owed: View<number> }
@@ -112,7 +112,7 @@ export function kanban(io: KanbanServer, pollMs = 4000): Kanban {
     actions: {
       move: (id, into, at) => post.move({ id, into, at }),
       remove: id => post.drop({ id }),
-      add: (into, title) => post.add({ into, title }),
+      add: (into, title, key) => post.add({ into, title }, key),
       load: () => board.refresh(),
     },
     post: { pause: () => post.pause(), resume: () => post.resume(), owed: post.owed },

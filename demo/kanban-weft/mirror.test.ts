@@ -202,3 +202,23 @@ test("instruments cross the wire: the tab sees the station's waves", async () =>
   box.value.dispose()
   box.dispose()
 })
+
+test('the law of the key on the tab seam: a repeat under one key is one note, one card', async () => {
+  const server = kanbanServer({ latency: 4, grumpiness: 0 })
+  const app = make(server, 60_000)
+  await app.actions.load()
+  await wait(1)
+  const before = app.state.cards.peek().size
+
+  const key = 'tab-add-1'
+  // The tab does not know whether its first call landed — it repeats by key.
+  await Promise.all([
+    app.actions.add('backlog', 'once only', key),
+    app.actions.add('backlog', 'once only', key),
+  ])
+  await wait(30)
+  await app.actions.load()
+  await wait(1)
+  assert.equal(app.state.cards.peek().size, before + 1) // one key — one card
+  app.dispose()
+})

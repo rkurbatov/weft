@@ -437,3 +437,28 @@ test('perFrame does not wait for a frame that never comes: a background tab stil
     else Object.defineProperty(globalThis, 'requestAnimationFrame', had)
   }
 })
+
+test('an idle mirror lingers, then is let go; a fresh look brings it back', async () => {
+  const { heldOf } = await import('#core/remote.ts')
+  const rest = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms))
+  const pair = pairInMemory()
+  const feed = input(1, { name: 'n' })
+  const stopServe = serve({ cells: { n: feed } }, pair.graph, { schedule: atOnce })
+  const wire = link(pair.watcher, { linger: 40 })
+
+  const face = wire.cell<number>('n')
+  const stop = subscribe(face, () => {})
+  assert.equal(wire.held(), 1)
+  stop()
+  assert.equal(wire.held(), 1) // idle, but lingering
+  await rest(60)
+  assert.equal(wire.held(), 0) // let go
+
+  const again = subscribe(face, () => {}) // the old handle looks again
+  assert.equal(wire.held(), 1) // the very same mirror re-registered
+  await rest(5)
+  assert.equal(heldOf(face.peek())?.value, 1) // and values flow to it again
+  again()
+  stopServe()
+  wire.close()
+})
