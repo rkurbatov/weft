@@ -5,7 +5,7 @@
 import { command, input, table, watch } from '#weft'
 import type { Command, Input, Ordered, SourceTable, Watchable } from '#weft'
 import { fact, truthBy } from '#loom'
-import type { Truth } from '#loom'
+import type { Fact, Truth } from '#loom'
 import type { Game, GameDetails, GameOdds, RailServer, Status } from './server.ts'
 
 export type Shelf = Status | 'all'
@@ -25,10 +25,10 @@ export interface Rail {
   loaded: Input<number>
   nextPage: Command<[], void>
   /** What the person is typing. The question with a calm in its passport. */
-  searchText: Input<string>
+  searchText: Fact<string>
   find: (text: string) => Truth<Game[]>
   /** The opened game, if any; its details come from two services at once. */
-  picked: Input<number | null>
+  picked: Fact<number | null>
   gameInfo: (id: number) => Truth<GameDetails | null>
   gameOdds: (id: number) => Truth<GameOdds | null>
   dispose(): void

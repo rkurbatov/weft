@@ -14,6 +14,8 @@ export interface Surface {
   families?: Readonly<Record<string, (key: never) => Watchable<unknown>>>
   /** What the other side may ask for. Arguments and answers must be cloneable. */
   commands?: Readonly<Record<string, (...args: never[]) => unknown>>
+  /** Facts the other side may write into. Writing outside these is refused. */
+  facts?: Readonly<Record<string, { set(value: never): void }>>
 }
 
 export interface ServeOptions {
@@ -127,6 +129,10 @@ export function serve(surface: Surface, channel: Channel, options: ServeOptions 
       case 'call':
         void onCall(message)
         return
+      case 'write': {
+        surface.facts?.[message.fact]?.set(message.value as never)
+        return
+      }
       default:
         return
     }

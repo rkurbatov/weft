@@ -40,6 +40,7 @@ export interface Probe {
 }
 
 let probe: Probe | null = null
+let hushed = false
 let open: WaveSummary | null = null
 let waveId = 0
 let openedAt = 0
@@ -52,6 +53,17 @@ export function attachProbe(next: Probe | null): void {
   open = null
 }
 
+/** Writes made in here are the probe's own plumbing: no probe sees itself. */
+export function quietly(work: () => void): void {
+  const was = hushed
+  hushed = true
+  try {
+    work()
+  } finally {
+    hushed = was
+  }
+}
+
 export const waves = {
   /** Whether anything listens — hot paths use it to skip the timing calls. */
   get on(): boolean {
@@ -61,7 +73,7 @@ export const waves = {
   now: clock,
 
   write(node: string, value: unknown): void {
-    if (probe === null) return
+    if (probe === null || hushed) return
     if (open === null) {
       openedAt = clock()
       open = { id: ++waveId, at: Date.now(), ms: 0, writes: [], computed: [], gated: [], woke: 0 }
@@ -71,7 +83,7 @@ export const waves = {
   },
 
   compute(node: string, ms: number, changed: boolean, hadValue: boolean): void {
-    if (probe === null) return
+    if (probe === null || hushed) return
     probe.compute?.(node, ms, changed)
     const gated = hadValue && !changed
     if (gated) probe.gate?.(node)
@@ -81,7 +93,7 @@ export const waves = {
   },
 
   wake(): void {
-    if (probe === null) return
+    if (probe === null || hushed) return
     probe.wake?.()
     if (open !== null) open.woke++
   },

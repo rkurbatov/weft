@@ -42,7 +42,7 @@ export interface LaidShape<S, R> {
 }
 
 interface WillSide {
-  entries: Watchable<readonly Entry[]>
+  notes: Watchable<readonly Entry[]>
   absorb(before: number): void
 }
 
@@ -102,7 +102,7 @@ export function laid<S, R>(
           return b
         },
       }
-      for (const entry of post.entries.get()) {
+      for (const entry of post.notes.get()) {
         if (entry.state === 'stuck') continue
         const rule = spec.rules[entry.name]
         rule?.(b, entry.args as never)

@@ -11,6 +11,9 @@ import { memoryStore } from '../core/store.ts'
 import type { Store } from '../core/store.ts'
 import { outbox } from '../core/outbox.ts'
 import type { Entry, Handler } from '../core/outbox.ts'
+
+/** The dialect's word for what the book holds: a note of intent. */
+export type Note = Entry
 import type { Fault } from '../core/remote.ts'
 import type { Timers } from '../core/time.ts'
 
@@ -69,8 +72,8 @@ export interface WillPassport {
 }
 
 export interface WillBase<D extends WillDict> {
-  /** The whole book, for pictures to lay over. */
-  entries: Watchable<readonly Entry[]>
+  /** The whole book of notes, for pictures to lay over. */
+  notes: Watchable<readonly Note[]>
   /** Keys of subjects with an intent still owed to the world. */
   pending(
     pick: (kind: keyof D & string, op: OpOf<D[keyof D]>) => string | undefined,
@@ -126,7 +129,7 @@ export function will<D extends WillDict>(dict: D, passport: WillPassport = {}): 
   }
 
   const base: WillBase<D> = {
-    entries: box.entries,
+    notes: box.entries,
     pending: pick =>
       cell(
         () => {

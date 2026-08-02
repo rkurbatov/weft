@@ -7,7 +7,7 @@
 import { cell } from '../core/graph.ts'
 import type { Watchable } from '../core/graph.ts'
 import { heldOf } from '../core/remote.ts'
-import { source } from '../core/source.ts'
+import { arrivalOf, source } from '../core/source.ts'
 import { query } from '../core/query.ts'
 import type { Timers } from '../core/time.ts'
 
@@ -30,6 +30,9 @@ export interface TruthPassport<T> {
 export interface Truth<T> {
   get(): T
   peek(): T
+  /** For a tree that suspends: only a cold start suspends — anything held,
+   *  however stale, is returned; a cold refusal is thrown to the boundary. */
+  suspend(): T
   /** An ask is under way. */
   flight: Watchable<boolean>
   /** The last refusal, or null. A fault does not take away what is held. */
@@ -45,11 +48,12 @@ interface Carried<T> {
 }
 
 function faceOf<T>(
-  state: Watchable<import('../core/remote.ts').Remote<Carried<T>>>,
+  feed: { state: Watchable<import('../core/remote.ts').Remote<Carried<T>>> },
   empty: T,
   refresh: () => Promise<void>,
   name: string,
 ): Truth<T> {
+  const state = feed.state
   const value = cell(() => heldOf(state.get())?.value.value ?? empty, { name: `${name}.value` })
   const flight = cell(() => state.get().loading, { name: `${name}.flight` })
   const fault = cell(
@@ -63,6 +67,13 @@ function faceOf<T>(
   return {
     get: () => value.get(),
     peek: () => value.peek(),
+    suspend: () => {
+      const s = state.get() // the look itself is the demand
+      const held = heldOf(s)
+      if (held !== undefined) return held.value.value // stale shows while the fresh travels
+      if (s.kind === 'failed') throw s.error // a cold refusal goes to the boundary
+      throw arrivalOf(feed) // a cold start suspends on the landing
+    },
     flight,
     fault,
     asked,
@@ -86,7 +97,7 @@ export function truth<T>(ask: () => Promise<T>, passport: TruthPassport<T>): Tru
       ...(passport.now === undefined ? {} : { now: passport.now }),
     },
   )
-  return faceOf(feed.state, passport.empty, () => feed.refresh(), name)
+  return faceOf(feed, passport.empty, () => feed.refresh(), name)
 }
 
 /** Keyed truth: the same door, a family behind it. */
@@ -115,7 +126,7 @@ export function truthBy<K, T>(
     const known = faces.get(at)
     if (known !== undefined) return known
     const feed = family(key)
-    const face = faceOf(feed.state, passport.empty, () => feed.refresh(), `${name}:${at}`)
+    const face = faceOf(feed, passport.empty, () => feed.refresh(), `${name}:${at}`)
     faces.set(at, face)
     return face
   }

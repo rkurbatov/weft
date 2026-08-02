@@ -2,7 +2,8 @@
 // It runs only while somebody live is watching it — demand starts it, idleness
 // stops it — so an unwatched screen costs nothing.
 
-import { cell, input } from './graph.ts'
+import { cell, input, subscribe, untracked } from './graph.ts'
+import type { Watchable } from './graph.ts'
 import { owned } from './region.ts'
 import type { Readable } from './graph.ts'
 import { EMPTY, arrived, heldOf, loading, refused } from './remote.ts'
@@ -324,4 +325,33 @@ export function fresh<T>(feed: Source<T>, within: number): Readable<Remote<T>> {
     },
     { name: `${feed.name}@${within}` },
   )
+}
+
+// The promise of the answer under way. Subscribing is what raises the demand,
+// so asking for the promise is what starts the load — nothing is forced and no
+// flight is restarted. One promise per source while it is unsettled. Landing
+// is a property of the graph, not of any screen library.
+const landings = new WeakMap<object, Promise<void>>()
+
+/** Resolves when the source holds a value or a refusal has settled. The first
+ *  refusal decides, whatever its sort — what to do next is the caller's
+ *  business, usually a boundary offering refresh(). */
+export function arrivalOf<T>(feed: { state: Watchable<Remote<T>> }): Promise<void> {
+  const settled = (): boolean => {
+    const state = untracked(() => feed.state.peek())
+    return heldOf(state) !== undefined || state.kind === 'failed'
+  }
+  if (settled()) return Promise.resolve()
+  const known = landings.get(feed)
+  if (known !== undefined) return known
+  const landing = new Promise<void>(resolve => {
+    const stop = subscribe(feed.state, () => {
+      if (!settled()) return
+      stop()
+      landings.delete(feed)
+      resolve()
+    })
+  })
+  landings.set(feed, landing)
+  return landing
 }

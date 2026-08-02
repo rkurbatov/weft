@@ -5,7 +5,7 @@ import { useCallback, useDebugValue, useMemo, useRef, useSyncExternalStore } fro
 import { subscribe, untracked } from '#core/graph.ts'
 import type { Input, Watchable } from '#core/graph.ts'
 import type { Command, CommandState } from '#core/command.ts'
-import { fresh } from '#core/source.ts'
+import { arrivalOf, fresh } from '#core/source.ts'
 import type { Source } from '#core/source.ts'
 import { heldOf } from '#core/remote.ts'
 import type { Remote } from '#core/remote.ts'
@@ -83,34 +83,6 @@ export function useInputBinding(field: Input<string>): InputBinding {
   return { value, onChange }
 }
 
-// The promise of the answer under way. Subscribing is what raises the demand,
-// so asking for the promise is what starts the load — nothing is forced and no
-// flight is restarted. One promise per source while it is unsettled.
-const landings = new WeakMap<Source<unknown>, Promise<void>>()
-
-/** Resolves when the source holds a value or a refusal has settled. The first
- *  refusal decides, whatever its sort — what to do next is the caller's
- *  business, usually a boundary offering refresh(). */
-export function arrivalOf<T>(feed: Source<T>): Promise<void> {
-  const settled = (): boolean => {
-    const state = untracked(() => feed.state.peek())
-    return heldOf(state) !== undefined || state.kind === 'failed'
-  }
-  if (settled()) return Promise.resolve()
-  const known = landings.get(feed as Source<unknown>)
-  if (known !== undefined) return known
-  const landing = new Promise<void>(resolve => {
-    const stop = subscribe(feed.state, () => {
-      if (!settled()) return
-      stop()
-      landings.delete(feed as Source<unknown>)
-      resolve()
-    })
-  })
-  landings.set(feed as Source<unknown>, landing)
-  return landing
-}
-
 /**
  * The source's value for a tree that suspends. Only a cold start suspends:
  * once anything is held, the stale keeps showing while the fresh travels, and
@@ -125,3 +97,5 @@ export function useSourceValue<T>(feed: Source<T>, options: { within?: number } 
   if (state.kind === 'failed') throw state.error
   throw arrivalOf(feed)
 }
+
+export { arrivalOf } from '#core/source.ts'

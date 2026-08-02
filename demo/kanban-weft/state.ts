@@ -4,7 +4,7 @@
 // repeat: under the floor.
 
 import { fact, laid, notes, sends, truth, view, will } from '#loom'
-import type { Refusal, Truth, Watchable } from '#loom'
+import type { Refusal, Truth, View } from '#loom'
 import type { BoardSnapshot, Card, ColumnData } from '../kanban-common/types.ts'
 import type { KanbanServer } from '../kanban-common/server.ts'
 
@@ -15,13 +15,13 @@ type Added = { card: Card; into: string }
 
 export interface Kanban {
   state: {
-    layout: Watchable<ColumnData[]>
-    cards: Watchable<ReadonlyMap<string, Card>>
-    busy: Watchable<ReadonlySet<string>>
-    addBusy: Watchable<string | null>
-    refused: Watchable<Refusal | null>
-    coldStart: Watchable<boolean>
-    fault: Watchable<string | null>
+    layout: View<ColumnData[]>
+    cards: View<ReadonlyMap<string, Card>>
+    busy: View<ReadonlySet<string>>
+    addBusy: View<string | null>
+    refused: View<Refusal | null>
+    coldStart: View<boolean>
+    fault: View<string | null>
   }
   actions: {
     move(id: string, into: string, at: number): Promise<void>
@@ -29,7 +29,7 @@ export interface Kanban {
     add(into: string, title: string): Promise<void>
     load(): Promise<void>
   }
-  post: { pause(): void; resume(): void; owed: Watchable<number> }
+  post: { pause(): void; resume(): void; owed: View<number> }
   dispose(): void
 }
 
@@ -98,8 +98,8 @@ export function kanban(io: KanbanServer, pollMs = 4000): Kanban {
       ),
       addBusy: view(
         () => {
-          for (const entry of post.entries.get()) {
-            if (entry.name === 'add' && entry.state !== 'done') return (entry.args as Add).into
+          for (const note of post.notes.get()) {
+            if (note.name === 'add' && note.state !== 'done') return (note.args as Add).into
           }
           return null
         },

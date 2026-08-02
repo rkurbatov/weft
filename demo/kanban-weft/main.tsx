@@ -5,7 +5,7 @@
 
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import { region } from '#weft'
+import { region } from '#loom'
 import '../kanban-common/kanban.css'
 import { kanbanServer } from '../kanban-common/server.ts'
 import { kanban } from './state.ts'

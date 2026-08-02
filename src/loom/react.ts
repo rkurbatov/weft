@@ -7,7 +7,7 @@ import { cell, subscribe } from '../core/graph.ts'
 import type { Cell } from '../core/graph.ts'
 import { alike } from '../core/table.ts'
 
-export { useInputBinding as useField, useSourceValue, arrivalOf } from '../react/hooks.ts'
+export { useInputBinding as useField } from '../react/hooks.ts'
 
 export function useLive<T>(formula: () => T): T {
   const body = useRef(formula)

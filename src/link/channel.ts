@@ -17,6 +17,8 @@ export type ToGraph =
       readonly command: string
       readonly args: readonly unknown[]
     }
+  /** Write into a published fact. Writing is allowed only into the declared. */
+  | { readonly kind: 'write'; readonly fact: string; readonly value: unknown }
 
 export type ToWatcher =
   /** The graph's side is up. Anyone watching should ask again — it knows nothing of what came before. */

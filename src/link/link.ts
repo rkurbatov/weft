@@ -4,7 +4,8 @@
 
 import { input, untracked } from '../core/graph.ts'
 import type { Input, Watchable } from '../core/graph.ts'
-import { EMPTY, arrived, refused } from '../core/remote.ts'
+import { EMPTY, arrived, heldOf, refused } from '../core/remote.ts'
+import { preserve } from '../core/project.ts'
 import type { Remote } from '../core/remote.ts'
 import { wallClock } from '../core/time.ts'
 import type { Timers } from '../core/time.ts'
@@ -29,6 +30,8 @@ export interface Link {
   cell<T>(name: string, key?: unknown): Watchable<Remote<T>>
   /** A command of the other side. Arguments and the answer must be cloneable. */
   command<A extends readonly unknown[], T>(name: string): (...args: A) => Promise<T>
+  /** Write into a fact the other side published. */
+  write(fact: string, value: unknown): void
   close(): void
 }
 
@@ -84,7 +87,12 @@ export function link(channel: Channel, options: LinkOptions = {}): Link {
       }
       case 'values':
         for (const { id, value } of message.changed) {
-          byId.get(id)?.set(arrived(value, Date.now()))
+          const mirror = byId.get(id)
+          if (mirror === undefined) continue
+          // The identity of unchanged pieces survives the crossing: the same
+          // piece stays the very same object, so gating works past the wire.
+          const was = heldOf(mirror.peek())?.value
+          mirror.set(arrived(was === undefined ? value : preserve(was, value), Date.now()))
         }
         return
       case 'done': {
@@ -163,6 +171,10 @@ export function link(channel: Channel, options: LinkOptions = {}): Link {
         channel.send({ kind: 'call', id, command: name, args })
         return answer
       }
+    },
+
+    write(fact, value) {
+      channel.send({ kind: 'write', fact, value })
     },
 
     close() {

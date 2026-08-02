@@ -1,0 +1,114 @@
+// The carrier's converter. A domain's face crosses the wire in dialect terms:
+// the station offers its views, facts and acts; a tab adopts them and gets the
+// same face back — views read plain (the mirror's Remote is unwrapped here,
+// under the floor), facts write through, acts return promises. The book, the
+// laying and the truths live in the station only; a tab holds nothing but
+// mirrors.
+
+import { cell, input } from '../core/graph.ts'
+import type { Input, Watchable } from '../core/graph.ts'
+import { heldOf } from '../core/remote.ts'
+import { preserve } from '../core/project.ts'
+import { journal } from '../core/journal.ts'
+import { quietly } from '../core/waves.ts'
+import type { WaveSummary } from '../core/waves.ts'
+import { serve } from '../link/serve.ts'
+import type { ServeOptions } from '../link/serve.ts'
+import { link } from '../link/link.ts'
+import type { LinkOptions } from '../link/link.ts'
+import type { Channel } from '../link/channel.ts'
+import { subscribe } from '../core/graph.ts'
+
+export interface Offering {
+  views?: Readonly<Record<string, Watchable<unknown>>>
+  facts?: Readonly<Record<string, Input<never>>>
+  acts?: Readonly<Record<string, (...args: never[]) => unknown>>
+}
+
+export interface OfferOptions extends ServeOptions {
+  /** Publish the station's waves as a view, for instruments on the other side. */
+  instruments?: boolean | { keep?: number }
+}
+
+/** The station's side: put a face on the wire. */
+export function offer(handles: Offering, channel: Channel, options: OfferOptions = {}): () => void {
+  const cells: Record<string, Watchable<unknown>> = { ...handles.views }
+  let stopInstruments = (): void => {}
+
+  if (options.instruments !== undefined && options.instruments !== false) {
+    const keep = options.instruments === true ? 64 : (options.instruments.keep ?? 64)
+    const tail = input<readonly WaveSummary[]>([], { name: 'loom.waves' })
+    const book = journal(keep, () => quietly(() => tail.set([...book.waves()])))
+    book.start()
+    stopInstruments = () => book.stop()
+    cells['loom.waves'] = tail
+  }
+
+  const stop = serve(
+    {
+      cells,
+      ...(handles.facts === undefined
+        ? {}
+        : { facts: handles.facts as Readonly<Record<string, { set(value: never): void }>> }),
+      ...(handles.acts === undefined ? {} : { commands: handles.acts }),
+    },
+    channel,
+    options,
+  )
+  return () => {
+    stop()
+    stopInstruments()
+  }
+}
+
+export interface Adopted {
+  /** The station's views, read plain: undefined until the first value lands. */
+  view<T>(name: string): Watchable<T | undefined>
+  /** The station's facts: write-through. */
+  write(fact: string, value: unknown): void
+  /** The station's acts. */
+  act<A extends readonly unknown[], T = void>(name: string): (...args: A) => Promise<T>
+  /** Hold demand on the named views (what a mounted screen would do). */
+  warm(names: readonly string[]): () => void
+  close(): void
+}
+
+/** The tab's side: take a face off the wire. */
+export function adopt(channel: Channel, options: LinkOptions = {}): Adopted {
+  const wire = link(channel, options)
+  const faces = new Map<string, Watchable<unknown>>()
+
+  const view = <T>(name: string): Watchable<T | undefined> => {
+    const known = faces.get(name)
+    if (known !== undefined) return known as Watchable<T | undefined>
+    const mirror = wire.cell<T>(name)
+    // The unwrapping lives here, under the floor: a screen reads plain — and
+    // an unchanged piece keeps being the very same object across flushes.
+    let previous: T | undefined
+    const face = cell(
+      () => {
+        const held = heldOf(mirror.get())
+        if (held === undefined) return undefined
+        const kept = previous === undefined ? held.value : preserve(previous, held.value)
+        previous = kept
+        return kept
+      },
+      { name: `adopted.${name}` },
+    )
+    faces.set(name, face)
+    return face
+  }
+
+  return {
+    view,
+    write: (fact, value) => wire.write(fact, value),
+    act: name => wire.command(name),
+    warm(names) {
+      const stops = names.map(name => subscribe(view(name), () => {}))
+      return () => {
+        for (const stop of stops) stop()
+      }
+    },
+    close: () => wire.close(),
+  }
+}
