@@ -4,8 +4,7 @@
 // repeat: under the floor.
 
 import { fact, laid, notes, sends, truth, view, will } from '#loom'
-import type { Refusal, Truth } from '#loom'
-import type { Watchable } from '#weft'
+import type { Refusal, Truth, Watchable } from '#loom'
 import type { BoardSnapshot, Card, ColumnData } from '../kanban-common/types.ts'
 import type { KanbanServer } from '../kanban-common/server.ts'
 

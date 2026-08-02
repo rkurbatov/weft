@@ -2,8 +2,10 @@
 // bookkeeping and no merge code: what things are is declared here, how changes
 // travel is the library's business.
 
-import { command, input, query, table, watch } from '#weft'
-import type { Command, Input, Ordered, Query, SourceTable, Watchable } from '#weft'
+import { command, input, table, watch } from '#weft'
+import type { Command, Input, Ordered, SourceTable, Watchable } from '#weft'
+import { fact, truthBy } from '#loom'
+import type { Truth } from '#loom'
 import type { Game, GameDetails, GameOdds, RailServer, Status } from './server.ts'
 
 export type Shelf = Status | 'all'
@@ -24,11 +26,11 @@ export interface Rail {
   nextPage: Command<[], void>
   /** What the person is typing. The question with a calm in its passport. */
   searchText: Input<string>
-  find: Query<string, Game[]>
+  find: (text: string) => Truth<Game[]>
   /** The opened game, if any; its details come from two services at once. */
   picked: Input<number | null>
-  gameInfo: Query<number, GameDetails>
-  gameOdds: Query<number, GameOdds>
+  gameInfo: (id: number) => Truth<GameDetails | null>
+  gameOdds: (id: number) => Truth<GameOdds | null>
   dispose(): void
 }
 
@@ -99,16 +101,29 @@ export function rail(server: RailServer): Rail {
 
   // Search: the churn of typing asks only the question that survives the calm,
   // and a question abandoned mid-flight is disowned by the move itself.
-  const searchText = input('', { name: 'searchText' })
-  const find = query((text: string) => server.search(text), {
+  // Search and details are spoken in the dialect: keyed truth, calm in the
+  // passport, plain values with adjectives beside. The games table above stays
+  // an engine word on purpose — the dialect has no word for delta-fed
+  // collections yet; that word is on order.
+  const searchText = fact('', { name: 'searchText' })
+  const find = truthBy((text: string) => server.search(text), {
     name: 'find',
-    max: 32,
     calm: 250,
+    keep: 32,
+    empty: [] as Game[],
   })
 
-  const picked = input<number | null>(null, { name: 'picked' })
-  const gameInfo = query((id: number) => server.details(id), { name: 'gameInfo', max: 16 })
-  const gameOdds = query((id: number) => server.odds(id), { name: 'gameOdds', max: 16 })
+  const picked = fact<number | null>(null, { name: 'picked' })
+  const gameInfo = truthBy((id: number) => server.details(id), {
+    name: 'gameInfo',
+    keep: 16,
+    empty: null as GameDetails | null,
+  })
+  const gameOdds = truthBy((id: number) => server.odds(id), {
+    name: 'gameOdds',
+    keep: 16,
+    empty: null as GameOdds | null,
+  })
 
   return {
     games,

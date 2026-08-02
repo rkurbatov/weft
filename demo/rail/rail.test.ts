@@ -1,7 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { subscribe } from '#core/graph.ts'
-import { together } from '#core/remote.ts'
 import { railServer } from './server.ts'
 import { rail } from './state.ts'
 
@@ -62,17 +61,17 @@ test('typing churn asks the search once: the calm holds the abandoned questions'
   const app = rail(server)
 
   // Three keystrokes, each look shorter than the calm (250ms in the passport).
-  let stop = subscribe(app.find('no').state, () => {})
+  let stop = subscribe(app.find('no').flight, () => {})
   await wait(60)
   stop()
-  stop = subscribe(app.find('nor').state, () => {})
+  stop = subscribe(app.find('nor').flight, () => {})
   await wait(60)
   stop()
-  stop = subscribe(app.find('north').state, () => {})
+  stop = subscribe(app.find('north').flight, () => {})
   await wait(400)
 
   assert.equal(server.searches(), 1) // only the survivor asked
-  const found = app.find('north').state.peek().value ?? []
+  const found = app.find('north').peek()
   assert.ok(found.length > 0)
   assert.ok(found.every(g => `${g.home} ${g.away}`.toLowerCase().includes('north')))
   stop()
@@ -84,17 +83,16 @@ test('details come from two services and meet in one outcome', async () => {
   const app = rail(server)
   const someId = 3
 
-  const stopInfo = subscribe(app.gameInfo(someId).state, () => {})
-  const stopOdds = subscribe(app.gameOdds(someId).state, () => {})
+  const info = app.gameInfo(someId)
+  const odds = app.gameOdds(someId)
+  const stopInfo = subscribe(info.flight, () => {})
+  const stopOdds = subscribe(odds.flight, () => {})
   await wait(40)
 
-  const both = together({
-    info: app.gameInfo(someId).state.peek(),
-    odds: app.gameOdds(someId).state.peek(),
-  })
-  assert.equal(both.kind, 'value')
-  assert.ok(both.value.info.venue.length > 0)
-  assert.ok(both.value.odds.h > 1)
+  // Under the law of the adjective, meeting two truths is a plain read.
+  assert.ok(info.peek() !== null && info.peek()!.venue.length > 0)
+  assert.ok(odds.peek() !== null && odds.peek()!.h > 1)
+  assert.equal(info.flight.peek(), false)
   stopInfo()
   stopOdds()
   app.dispose()

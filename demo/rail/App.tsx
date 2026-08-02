@@ -4,8 +4,7 @@
 
 import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { together } from '#weft'
-import { useCell, useInputBinding, useSource } from '#weft/react'
+import { useField, useLive } from '#loom/react'
 import { WavesPanel } from '../common/waves.ts'
 import { countCellRender, useCounters } from '../common/stats.ts'
 import { railServer } from './server.ts'
@@ -23,7 +22,7 @@ const clock = (ts: number): string =>
 
 const Card = memo(function Card({ id }: { id: number }): ReactNode {
   countCellRender()
-  const game = useCell(app.games.row(id))
+  const game = useLive(() => app.games.row(id).get())
   if (game === undefined) return null
   const fresh = Date.now() - game.born < 15_000
   return (
@@ -50,8 +49,8 @@ const Card = memo(function Card({ id }: { id: number }): ReactNode {
 })
 
 function Tab({ name }: { name: Shelf }): ReactNode {
-  const picked = useCell(app.shelf) === name
-  const count = useCell(app.counts[name])
+  const live = useLive(() => ({ picked: app.shelf.get() === name, count: app.counts[name].get() }))
+  const { picked, count } = live
   return (
     <button className={picked ? 'tab on' : 'tab'} onClick={() => app.shelf.set(name)}>
       {name} <b>{count}</b>
@@ -60,7 +59,7 @@ function Tab({ name }: { name: Shelf }): ReactNode {
 }
 
 function Search(): ReactNode {
-  const box = useInputBinding(app.searchText) // the two-way seam, spread and done
+  const box = useField(app.searchText) // the two-way seam, spread and done
   const text = box.value.trim()
   return (
     <span className="search">
@@ -71,55 +70,68 @@ function Search(): ReactNode {
 }
 
 function Matches({ text }: { text: string }): ReactNode {
-  // The calm in the passport means the churn of typing asks once; the flat
-  // fields of Remote mean the old list keeps showing while the new travels.
-  const found = useSource(app.find(text))
+  // The calm in the passport means the churn of typing asks once; the law of
+  // the adjective means the old list keeps showing while the new travels.
+  const found = app.find(text)
+  const live = useLive(() => ({
+    games: found.get(),
+    flight: found.flight.get(),
+    asked: found.asked.get(),
+  }))
   return (
     <span className="matches">
-      {found.loading && <span className="dim">…</span>}
-      {(found.value ?? []).slice(0, 6).map(game => (
+      {live.flight && <span className="dim">…</span>}
+      {live.games.slice(0, 6).map(game => (
         <button key={game.id} onClick={() => app.picked.set(game.id)}>
           {game.home} — {game.away}
         </button>
       ))}
-      {found.value !== undefined && found.value.length === 0 && <span className="dim">nobody</span>}
+      {live.asked > 0 && live.games.length === 0 && <span className="dim">nobody</span>}
     </span>
   )
 }
 
 function Details({ id }: { id: number }): ReactNode {
-  // Two services answer at their own pace; `together` is the whole story of
-  // both: value when both hold, in flight while either travels, the first
-  // refusal speaking for the pair.
-  const info = useSource(app.gameInfo(id))
-  const odds = useSource(app.gameOdds(id))
-  const game = useCell(app.games.row(id))
-  const both = together({ info, odds })
+  // Two services answer at their own pace. Under the law of the adjective,
+  // joining them is an ordinary formula over plain values — no combinator,
+  // no unwrapping: both here when both are here, in flight while either flies.
+  const info = app.gameInfo(id)
+  const odds = app.gameOdds(id)
+  const live = useLive(() => ({
+    game: app.games.row(id).get(),
+    info: info.get(),
+    odds: odds.get(),
+    flight: info.flight.get() || odds.flight.get(),
+    fault: info.fault.get() ?? odds.fault.get(),
+  }))
   return (
     <aside className="details">
       <header>
-        <b>{game === undefined ? `game ${id}` : `${game.home} — ${game.away}`}</b>
+        <b>{live.game === undefined ? `game ${id}` : `${live.game.home} — ${live.game.away}`}</b>
         <button onClick={() => app.picked.set(null)}>×</button>
       </header>
-      {both.loading && both.value === undefined && <p className="dim">asking two services…</p>}
-      {both.value !== undefined && (
+      {live.flight && (live.info === null || live.odds === null) && (
+        <p className="dim">asking two services…</p>
+      )}
+      {live.info !== null && live.odds !== null && (
         <p>
-          {both.value.info.venue} · {both.value.info.attendance.toLocaleString()} seats
+          {live.info.venue} · {live.info.attendance.toLocaleString()} seats
           <br />
-          odds {both.value.odds.h.toFixed(2)} / {both.value.odds.x.toFixed(2)} /{' '}
-          {both.value.odds.a.toFixed(2)}
+          odds {live.odds.h.toFixed(2)} / {live.odds.x.toFixed(2)} / {live.odds.a.toFixed(2)}
         </p>
       )}
-      {both.error !== undefined && <p className="gate">{String(both.error)}</p>}
+      {live.fault !== null && <p className="gate">{live.fault}</p>}
     </aside>
   )
 }
 
 function Meter(): ReactNode {
   const { cellRenders } = useCounters()
-  const goals = useCell(app.goals)
-  const loaded = useCell(app.loaded)
-  const arrivals = useCell(app.arrivals)
+  const { goals, loaded, arrivals } = useLive(() => ({
+    goals: app.goals.get(),
+    loaded: app.loaded.get(),
+    arrivals: app.arrivals.get(),
+  }))
   return (
     <p className="meter">
       rows loaded {loaded} · born since open {arrivals} · goals on air {goals} · card renders{' '}
@@ -129,9 +141,9 @@ function Meter(): ReactNode {
 }
 
 function Rail(): ReactNode {
-  const name = useCell(app.shelf)
+  const name = useLive(() => app.shelf.get())
   const shelfView = app.shelves[name]
-  const size = useCell(shelfView.size)
+  const size = useLive(() => shelfView.size.get())
 
   const box = useRef<HTMLDivElement>(null)
   const frame = useRef(0)
@@ -169,7 +181,7 @@ function Rail(): ReactNode {
     })
   }
 
-  const rows = useCell(shelfView.slice(first, first + span))
+  const rows = useLive(() => shelfView.slice(first, first + span).get())
 
   // The list is alive: games are born and leave above the window, and every
   // such move shifts the indices the window is positioned by. The anchor keeps
@@ -205,7 +217,7 @@ function Rail(): ReactNode {
 }
 
 export function App(): ReactNode {
-  const picked = useCell(app.picked)
+  const picked = useLive(() => app.picked.get())
   const [waves, setWaves] = useState(false)
   return (
     <div className="rail">

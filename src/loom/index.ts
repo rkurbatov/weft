@@ -3,6 +3,7 @@
 // doors and the laying, with the machinery under the floor.
 
 export { input as fact, cell as view } from '../core/graph.ts'
+export type { Input, Watchable, Readable } from '../core/graph.ts'
 export { truth, truthBy } from './truth.ts'
 export type { Truth, TruthPassport } from './truth.ts'
 export { will, sends, notes } from './will.ts'
