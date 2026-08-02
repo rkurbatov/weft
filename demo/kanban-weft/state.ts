@@ -1,23 +1,28 @@
-// The kanban state, finally in the shape a developer solves his task in:
-// declare what the base is, declare what each note does to it, hand the
-// actions to the screen. Rollback, the three states of a note, absorption
-// and referential identity are the library's business — none of it is here.
+// The kanban, spoken in the dialect: three doors and two formulas. What the
+// board is, what we say to the world, how a note looks on the picture — and
+// nothing else. Queues, retries, retreat, absorption, identity, the key of a
+// repeat: under the floor.
 
-import { cell, command, heldOf, input, laneAppend, laneDrop, lanePlace, projected } from '#weft'
-import type { Lanes, Outbox, Readable } from '#weft'
-import type { Card, ColumnData } from '../kanban-common/types.ts'
-import type { KanbanPorts } from './transport.ts'
+import { fact, laid, notes, sends, truth, view, will } from '#loom'
+import type { Refusal, Truth } from '#loom'
+import type { Watchable } from '#weft'
+import type { BoardSnapshot, Card, ColumnData } from '../kanban-common/types.ts'
+import type { KanbanServer } from '../kanban-common/server.ts'
+
+type Move = { id: string; into: string; at: number }
+type Drop = { id: string }
+type Add = { into: string; title: string }
+type Added = { card: Card; into: string }
 
 export interface Kanban {
   state: {
-    layout: Readable<ColumnData[]>
-    cards: Readable<ReadonlyMap<string, Card>>
-    /** Cards with our own note still owed to the world. */
-    busy: Readable<ReadonlySet<string>>
-    addBusy: Readable<string | null>
-    notice: Readable<string | null>
-    coldStart: Readable<boolean>
-    fault: Readable<string | null>
+    layout: Watchable<ColumnData[]>
+    cards: Watchable<ReadonlyMap<string, Card>>
+    busy: Watchable<ReadonlySet<string>>
+    addBusy: Watchable<string | null>
+    refused: Watchable<Refusal | null>
+    coldStart: Watchable<boolean>
+    fault: Watchable<string | null>
   }
   actions: {
     move(id: string, into: string, at: number): Promise<void>
@@ -25,138 +30,93 @@ export interface Kanban {
     add(into: string, title: string): Promise<void>
     load(): Promise<void>
   }
-  /** The letter carrier: pause() is going offline, resume() is coming back. */
-  post: Outbox
+  post: { pause(): void; resume(): void; owed: Watchable<number> }
   dispose(): void
 }
 
-/** What the board is, as the projection sees it. */
-interface Board {
-  lanes: Lanes<string>
-  cards: Readonly<Record<string, Card>>
-}
+export function kanban(io: KanbanServer, pollMs = 4000): Kanban {
+  const board: Truth<BoardSnapshot> = truth(() => io.board(), {
+    name: 'board',
+    poll: pollMs,
+    empty: { columns: [], cards: [], version: 0 },
+  })
 
-export function kanbanState(ports: KanbanPorts): Kanban {
-  const { board, post } = ports
-
-  const notice = input<string | null>(null, { name: 'notice' })
-  const addingIn = input<string | null>(null, { name: 'addingIn' })
-
-  let hush: ReturnType<typeof setTimeout> | undefined
-  const report = (what: unknown): void => {
-    notice.set(what instanceof Error ? what.message : String(what))
-    clearTimeout(hush)
-    hush = setTimeout(() => notice.set(null), 4000)
-  }
-
-  // ── The base, and what each note does to it ──────────────────────────────
-  const base = cell<Board>(
-    () => {
-      const snapshot = heldOf(board.state.get())?.value.snapshot
-      const lanes: Record<string, readonly string[]> = {}
-      const cards: Record<string, Card> = {}
-      for (const column of snapshot?.columns ?? []) lanes[column.id] = column.cardIds
-      for (const card of snapshot?.cards ?? []) cards[card.id] = card
-      return { lanes, cards }
-    },
-    { name: 'base' },
-  )
-
-  const visible = projected(base, post.entries, {
-    name: 'visible',
-    apply: {
-      move: (b: Board, op: { id: string; into: string; at: number }) =>
-        op.id in b.cards ? { ...b, lanes: lanePlace(b.lanes, op.id, op.into, op.at) } : b,
-      drop: (b: Board, op: { id: string }) => ({ ...b, lanes: laneDrop(b.lanes, op.id) }),
-      add: (b: Board, op: { card: Card; into: string }) => ({
-        lanes: laneAppend(b.lanes, op.card.id, op.into),
-        cards: { ...b.cards, [op.card.id]: op.card },
+  let noteAdded: (op: Added) => void = () => {}
+  const post = will(
+    {
+      move: sends<Move>(op => io.moveCard(op.id, op.into, op.at)),
+      drop: sends<Drop>(op => io.deleteCard(op.id)),
+      // The key of the note rides to the server: a lost reply retried under
+      // the same key answers with the very same card, never a second one.
+      add: sends<Add>(async (op, key) => {
+        const card = await io.addCard(op.into, op.title, 'feature', key)
+        noteAdded({ card, into: op.into })
       }),
+      added: notes<Added>(),
+    },
+    {
+      name: 'kanban',
+      judge: error =>
+        error instanceof Error && error.message.includes('conflict') ? 'rejected' : 'transient',
+      retry: 30,
+    },
+  )
+  noteAdded = op => post.added(op)
+
+  const seen = laid(board, post, {
+    name: 'seen',
+    shape: {
+      rows: (s: BoardSnapshot) => s.cards,
+      key: (c: Card) => c.id,
+      lanes: (s: BoardSnapshot) => s.columns.map(({ id, cardIds }) => ({ id, items: cardIds })),
+    },
+    rules: {
+      move: (b, op: Move) => b.place(op.id, op.into, op.at),
+      drop: (b, op: Drop) => b.take(op.id),
+      added: (b, op: Added) => b.put(op.card).place(op.card.id, op.into, 'end'),
     },
   })
 
-  // ── What the screen reads ────────────────────────────────────────────────
-  const meta = cell(
-    () =>
-      (heldOf(board.state.get())?.value.snapshot.columns ?? []).map(({ id, title, limit }) => ({
+  const layout = view<ColumnData[]>(
+    () => {
+      const lanes = new Map(seen.get().lanes.map(lane => [lane.id, lane.items]))
+      return board.get().columns.map(({ id, title, limit }) => ({
         id,
         title,
         limit,
-      })),
-    { name: 'meta' },
-  )
-
-  const layout = cell<ColumnData[]>(
-    () => {
-      const lanes = visible.get().lanes
-      return meta.get().map(column => ({ ...column, cardIds: [...(lanes[column.id] ?? [])] }))
+        cardIds: [...(lanes.get(id) ?? [])],
+      }))
     },
     { name: 'layout' },
   )
 
-  const cards = cell<ReadonlyMap<string, Card>>(
-    () => new Map(Object.entries(visible.get().cards)),
-    { name: 'cards' },
-  )
-
-  const busy = cell<ReadonlySet<string>>(
-    () => {
-      const ids = new Set<string>()
-      for (const entry of post.entries.get()) {
-        if (entry.state === 'done') continue
-        const args = entry.args as { id?: string }
-        if (args.id !== undefined) ids.add(args.id)
-      }
-      return ids
-    },
-    { name: 'busy' },
-  )
-
-  // ── What reaches the world ───────────────────────────────────────────────
-  const add = command(
-    async (into: string, title: string) => {
-      addingIn.set(into)
-      try {
-        const card = await ports.create(into, title)
-        post.note('add', { card, into }) // a fait accompli: lays over until the base absorbs it
-      } catch (refusal) {
-        report(refusal)
-      } finally {
-        addingIn.set(null)
-      }
-    },
-    { name: 'add' },
-  )
-
-  const addBusy = cell(() => (add.pending.get() ? addingIn.get() : null), { name: 'addBusy' })
-  const coldStart = cell(
-    () => {
-      const s = board.state.get()
-      return s.value === undefined && s.loading
-    },
-    { name: 'coldStart' },
-  )
-  const fault = cell(
-    () => {
-      const s = board.state.get()
-      return s.kind === 'failed' && s.value === undefined ? String(s.error) : null
-    },
-    { name: 'fault' },
-  )
-
   return {
-    state: { layout, cards, busy, addBusy, notice, coldStart, fault },
+    state: {
+      layout,
+      cards: view(() => seen.get().rows, { name: 'cards' }),
+      busy: post.pending((kind, op) =>
+        kind === 'move' || kind === 'drop' ? (op as Move | Drop).id : undefined,
+      ),
+      addBusy: view(
+        () => {
+          for (const entry of post.entries.get()) {
+            if (entry.name === 'add' && entry.state !== 'done') return (entry.args as Add).into
+          }
+          return null
+        },
+        { name: 'addBusy' },
+      ),
+      refused: post.refused,
+      coldStart: view(() => board.get().version === 0 && board.flight.get(), { name: 'coldStart' }),
+      fault: view(() => (board.get().version === 0 ? board.fault.get() : null), { name: 'fault' }),
+    },
     actions: {
-      move: (id, into, at) => post.send('move', { id, into, at }).done.catch(report),
-      remove: id => post.send('drop', { id }).done.catch(report),
-      add: (into, title) =>
-        add.run(into, title).then(
-          () => undefined,
-          () => undefined,
-        ),
+      move: (id, into, at) => post.move({ id, into, at }),
+      remove: id => post.drop({ id }),
+      add: (into, title) => post.add({ into, title }),
       load: () => board.refresh(),
     },
-    post,
-    dispose: () => clearTimeout(hush),
+    post: { pause: () => post.pause(), resume: () => post.resume(), owed: post.owed },
+    dispose: () => post.pause(),
   }
 }

@@ -8,7 +8,9 @@
     "#core/*": "./src/core/*",
     "#link/*": "./src/link/*",
     "#weft": "./src/index.ts",
-    "#weft/react": "./src/react/hooks.ts"
+    "#weft/react": "./src/react/hooks.ts",
+    "#loom": "./src/loom/index.ts",
+    "#loom/react": "./src/loom/react.ts"
   },
   "scripts": {
     "test": "node --test \"test/*.test.ts\" \"demo/**/*.test.ts\"",

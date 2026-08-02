@@ -8,12 +8,11 @@ import { createRoot } from 'react-dom/client'
 import { region } from '#weft'
 import '../kanban-common/kanban.css'
 import { kanbanServer } from '../kanban-common/server.ts'
-import { kanbanPorts } from './transport.ts'
-import { kanbanState } from './state.ts'
+import { kanban } from './state.ts'
 import { App } from './App.tsx'
 
 const server = kanbanServer()
-const board = region('kanban', () => kanbanState(kanbanPorts(server)))
+const board = region('kanban', () => kanban(server))
 server.startBot()
 
 createRoot(document.getElementById('root') as HTMLElement).render(

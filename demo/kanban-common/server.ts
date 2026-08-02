@@ -9,7 +9,12 @@ export interface KanbanServer {
   /** Cheap: for polling. */
   version(): Promise<number>
   moveCard(id: string, toColumn: string, toIndex: number): Promise<void>
-  addCard(column: string, title: string, tag: Tag): Promise<Card>
+  /** `key` is the client's idempotency key: the server answers a repeat with
+   *  the very card it already made for that key. */
+  addCard(column: string, title: string, tag: Tag, key?: string): Promise<Card>
+  /** Lose the next reply of the named call once: the work happens, the answer
+   *  does not arrive. For trials of the law of the key. */
+  tripwire(call: 'addCard'): void
   deleteCard(id: string): Promise<void>
   /** The bot: somebody else's edits. Runs until stopped. */
   startBot(): () => void
@@ -75,6 +80,8 @@ export function kanbanServer(options: ServerOptions = {}): KanbanServer {
   let nextCard = 1
   let nextTitle = 0
   let version = 1
+  const made = new Map<string, Card>()
+  const lost = new Set<string>()
   const cards = new Map<string, Card>()
   const columns = new Map<string, ColumnData>()
   for (const [id, title, limit] of [
@@ -169,16 +176,23 @@ export function kanbanServer(options: ServerOptions = {}): KanbanServer {
         if (chance() < grumpiness) throw new Error('conflict: somebody edited the board')
         doMove(id, toColumn, toIndex)
       }),
-    addCard: (column, title, tag) =>
+    addCard: (column, title, tag, key) =>
       slow(() => {
         if (!columns.has(column)) throw new Error('not found')
+        const repeat = key === undefined ? undefined : made.get(key)
+        if (repeat !== undefined) return { ...repeat } // the key names a card already made
         if (chance() < grumpiness) throw new Error('conflict: somebody edited the board')
         const card: Card = { id: `c${nextCard++}`, title, tag }
         cards.set(card.id, card)
         columns.get(column)?.cardIds.push(card.id)
+        if (key !== undefined) made.set(key, card)
         version++
+        if (lost.delete('addCard')) throw new Error('network: the reply was lost')
         return { ...card }
       }),
+    tripwire: call => {
+      lost.add(call)
+    },
     deleteCard: id =>
       slow(() => {
         const from = columnOf(id)

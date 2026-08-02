@@ -5,13 +5,12 @@ import assert from 'node:assert/strict'
 import { subscribe } from '#core/graph.ts'
 import { kanbanServer } from '../kanban-common/server.ts'
 import { region } from '#core/region.ts'
-import { kanbanPorts } from './transport.ts'
-import { kanbanState } from './state.ts'
+import { kanban } from './state.ts'
 import type { KanbanServer } from '../kanban-common/server.ts'
 
-// Assembled the way the root assembles it: ports into state, inside a region.
+// Assembled the way the root assembles it: the domain inside a region.
 const make = (server: KanbanServer, pollMs: number) => {
-  const box = region('kanban', () => kanbanState(kanbanPorts(server, pollMs)))
+  const box = region('kanban', () => kanban(server, pollMs))
   const app = box.value
   return {
     ...app,
@@ -53,7 +52,7 @@ test('a refused move shows up instantly and retreats: the entry leaves, nothing 
   await done // the server refuses; the entry is discarded with a trace
   assert.deepEqual(column(app, 'backlog'), before)
   assert.equal(app.state.busy.peek().size, 0)
-  assert.ok(app.state.notice.peek() !== null)
+  assert.ok(app.state.refused.peek() !== null)
   app.dispose()
 })
 
@@ -109,6 +108,26 @@ test('fifth: a snapshot lands during an unfinished move — truth at once, the h
   await hoped
   await app.actions.load()
   assert.equal(column(app, 'review')[0], ours) // now it is the base's own word
+  assert.equal(app.state.busy.peek().size, 0)
+  app.dispose()
+})
+
+test('sixth: a lost reply retried under the same key makes one card, not two', async () => {
+  const server = kanbanServer({ latency: 5, grumpiness: 0 })
+  const app = make(server, 60_000)
+  await app.actions.load()
+  const before = app.state.cards.peek().size
+
+  server.tripwire('addCard') // the work will happen; the answer will not arrive
+  await app.actions.add('backlog', 'the law of the key')
+  await wait(120) // the transient loss retries under the very same key
+
+  await app.actions.load()
+  assert.equal(app.state.cards.peek().size, before + 1) // one card, never two
+  const backlog = column(app, 'backlog')
+  const added = [...app.state.cards.peek().values()].find(c => c.title === 'the law of the key')
+  assert.ok(added !== undefined)
+  assert.equal(backlog.filter(id => id === added.id).length, 1)
   assert.equal(app.state.busy.peek().size, 0)
   app.dispose()
 })

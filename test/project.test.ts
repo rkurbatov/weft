@@ -58,3 +58,34 @@ test('the projection lays the book over the base in order, skips the stuck, keep
   assert.deepEqual(visible.peek().lanes, { todo: ['a', 'b'], doing: [] })
   assert.deepEqual(laneFind(visible.peek().lanes, 'a'), { lane: 'todo', at: 0 })
 })
+
+test('preserve is not blind to Map and Set', () => {
+  const prev = {
+    rows: new Map([
+      ['a', { x: 1 }],
+      ['b', { y: 2 }],
+    ]),
+    tags: new Set(['red']),
+  }
+  const next = {
+    rows: new Map([
+      ['a', { x: 1 }],
+      ['b', { y: 9 }],
+    ]),
+    tags: new Set(['red']),
+  }
+  const kept = preserve(prev, next)
+  assert.notEqual(kept, prev)
+  assert.equal(kept.rows.get('a'), prev.rows.get('a')) // unchanged row: same object
+  assert.equal(kept.rows.get('b')?.y, 9)
+  assert.equal(kept.tags, prev.tags) // same membership: the very same set
+
+  const same = preserve(prev, {
+    rows: new Map([
+      ['a', { x: 1 }],
+      ['b', { y: 2 }],
+    ]),
+    tags: new Set(['red']),
+  })
+  assert.equal(same, prev)
+})
