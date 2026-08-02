@@ -190,3 +190,54 @@
 .gate {
   color: #b23b2e;
 }
+
+.waves header {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.waves header input {
+  flex: 1;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 2px 8px;
+}
+
+.waves header button {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+
+.waves .wave {
+  cursor: pointer;
+}
+
+.waves .node {
+  border: 0;
+  background: none;
+  padding: 0 2px;
+  cursor: pointer;
+  color: var(--accent);
+  font: inherit;
+}
+
+.waves .node.gate {
+  color: #b23b2e;
+}
+
+.waves .detail {
+  margin: 2px 0 6px 14px;
+  border-left: 2px solid var(--line);
+  padding-left: 8px;
+}
+
+.waves .trace {
+  margin: 4px 0;
+  border-bottom: 1px dashed var(--line);
+  padding-bottom: 4px;
+}

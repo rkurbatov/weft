@@ -6,7 +6,7 @@ import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { together } from '#weft'
 import { useCell, useInputBinding, useSource } from '#weft/react'
-import { WavesPanel } from '../common/waves.tsx'
+import { WavesPanel } from '../common/waves.ts'
 import { countCellRender, useCounters } from '../common/stats.ts'
 import { railServer } from './server.ts'
 import { rail } from './state.ts'
@@ -224,7 +224,9 @@ export function App(): ReactNode {
       </header>
       <Rail />
       {picked !== null && <Details id={picked} />}
-      {waves && <WavesPanel />}
+      {waves && (
+        <WavesPanel inspect={[app.searchText, app.goals, app.counts.live, app.counts.all]} />
+      )}
     </div>
   )
 }

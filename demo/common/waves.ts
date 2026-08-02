@@ -1,0 +1,169 @@
+// The waves instrument. Not a tail anymore: filter by node, open a wave to
+// its writes and costs, click any name to follow it — the newest matching
+// wave is the answer to "why did this change last" — and, for nodes handed
+// in through `inspect`, a live trace: what it reads, who reads it, how
+// current its value is. Plain createElement so the same file runs under the
+// render test lane, where JSX does not.
+
+import { createElement as h, useEffect, useMemo, useReducer, useState } from 'react'
+import type { ReactNode } from 'react'
+import { journal, trace } from '#weft'
+import type { Trace, WaveSummary, Watchable } from '#weft'
+
+export type Inspectable = Watchable<unknown> & { readonly name?: string }
+
+const short = (value: unknown): string => {
+  try {
+    const text = JSON.stringify(value) ?? String(value)
+    return text.length > 48 ? `${text.slice(0, 45)}…` : text
+  } catch {
+    return String(value)
+  }
+}
+
+function touched(wave: WaveSummary, needle: string): boolean {
+  if (needle === '') return true
+  const has = (name: string): boolean => name.includes(needle)
+  return (
+    wave.writes.some(w => has(w.node)) ||
+    wave.computed.some(c => has(c.node)) ||
+    wave.gated.some(has)
+  )
+}
+
+function TraceView({ look, depth = 0 }: { look: Trace; depth?: number }): ReactNode {
+  return h(
+    'div',
+    { className: 'trace', style: { paddingLeft: depth * 14 } },
+    h('b', null, look.name),
+    ` ${look.state} = ${short(look.value)}`,
+    look.readBy.length > 0 && h('span', { className: 'dim' }, ` ← ${look.readBy.join(', ')}`),
+    ...(look.reads ?? []).map(read =>
+      h(TraceView, { key: `${read.name}-${depth}`, look: read, depth: depth + 1 }),
+    ),
+  )
+}
+
+export function WavesPanel({
+  limit = 30,
+  inspect = [],
+}: {
+  limit?: number
+  inspect?: readonly Inspectable[]
+}): ReactNode {
+  const [, bump] = useReducer((x: number) => x + 1, 0)
+  const [book] = useState(() => journal(128, () => bump()))
+  const [live, setLive] = useState(true)
+  const [filter, setFilter] = useState('')
+  const [opened, setOpened] = useState<number | null>(null)
+  const [probed, setProbed] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (live) book.start()
+    else book.stop()
+    return () => book.stop()
+  }, [book, live])
+
+  const nodes = useMemo(() => {
+    const named = new Map<string, Inspectable>()
+    for (const node of inspect) if (node.name !== undefined) named.set(node.name, node)
+    return named
+  }, [inspect])
+
+  const follow = (name: string): void => {
+    setFilter(name)
+    setProbed(nodes.has(name) ? name : null)
+  }
+
+  const nodeRef = (name: string, className: string): ReactNode =>
+    h(
+      'button',
+      {
+        key: name,
+        className,
+        onClick: (event: { stopPropagation(): void }) => {
+          event.stopPropagation()
+          follow(name)
+        },
+      },
+      name,
+    )
+
+  const tail = book
+    .waves()
+    .filter(wave => touched(wave, filter))
+    .slice(-limit)
+    .reverse()
+
+  const probedNode = probed === null ? undefined : nodes.get(probed)
+
+  return h(
+    'aside',
+    { className: 'waves' },
+    h(
+      'header',
+      null,
+      h('b', null, 'waves'),
+      h('input', {
+        placeholder: 'filter by node',
+        value: filter,
+        onChange: (event: { target: { value: string } }) => setFilter(event.target.value),
+      }),
+      h('button', { onClick: () => setLive(was => !was) }, live ? 'pause' : 'record'),
+      h(
+        'button',
+        {
+          onClick: () => {
+            book.clear()
+            bump()
+          },
+        },
+        'clear',
+      ),
+    ),
+    probedNode !== undefined && h(TraceView, { look: trace(probedNode) }),
+    tail.length === 0 && h('p', { className: 'dim' }, 'quiet — interact with the page'),
+    ...tail.map(wave =>
+      h(
+        'div',
+        {
+          key: wave.id,
+          className: 'wave',
+          onClick: () => setOpened(was => (was === wave.id ? null : wave.id)),
+        },
+        h(
+          'p',
+          null,
+          h('b', null, `#${wave.id}`),
+          ' ',
+          ...wave.writes.map(w => nodeRef(w.node, 'node')),
+          ` → ${wave.computed.length}`,
+          wave.gated.length > 0 &&
+            h(
+              'span',
+              { className: 'gate' },
+              ' ● ',
+              ...wave.gated.map(g => nodeRef(g, 'node gate')),
+            ),
+          ` · woke ${wave.woke} · ${wave.ms.toFixed(1)}ms`,
+        ),
+        opened === wave.id &&
+          h(
+            'div',
+            { className: 'detail' },
+            ...wave.writes.map(w =>
+              h('p', { key: `w-${w.node}` }, nodeRef(w.node, 'node'), ` ← ${short(w.value)}`),
+            ),
+            ...wave.computed.map((c, i) =>
+              h(
+                'p',
+                { key: `c-${c.node}-${i}` },
+                nodeRef(c.node, c.changed ? 'node' : 'node gate'),
+                ` ${c.changed ? 'changed' : 'gated'} · ${c.ms.toFixed(2)}ms`,
+              ),
+            ),
+          ),
+      ),
+    ),
+  )
+}
