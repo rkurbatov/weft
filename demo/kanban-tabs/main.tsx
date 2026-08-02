@@ -31,6 +31,42 @@ const carried = carry({
 
 const tab = kanbanMirror(carried.channel)
 
+// Breadcrumbs for the browser console: which build runs, who leads, what the
+// mirrors hold — read directly, past React, so a frozen screen cannot lie.
+console.log('[carried] page v3')
+import('#core/graph.ts').then(({ subscribe }) => {
+  console.log('[carried] role:', carried.role.peek())
+  subscribe(carried.role, () => console.log('[carried] role:', carried.role.peek()))
+  const stop = subscribe(tab.state.layout, () => {
+    if (tab.state.layout.peek().length > 0) {
+      console.log('[carried] board arrived:', tab.state.layout.peek().length, 'columns')
+      stop()
+    }
+  })
+})
+setInterval(() => {
+  console.log(
+    '[carried] pulse',
+    'role',
+    carried.role.peek(),
+    'cold',
+    tab.state.coldStart.peek(),
+    'columns',
+    tab.state.layout.peek().length,
+    'cards',
+    tab.state.cards.peek().size,
+  )
+}, 2000)
+
+// Vite dev: a hot-replaced module must let go of the carrier, or its still
+// held lock leaves a zombie leader and every next instance follows a corpse.
+if (import.meta.hot) {
+  import.meta.hot.dispose(() => {
+    tab.dispose()
+    carried.stop()
+  })
+}
+
 function Carried(): ReactNode {
   const role = useLive(() => carried.role.get())
   return (

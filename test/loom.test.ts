@@ -178,17 +178,20 @@ test('carry: without talking tabs the station lives inline, and the mirror canno
   const { atOnce } = await import('#link/channel.ts')
   void adopt
 
-  const carried = carry({
-    name: 'kanban-carried',
-    station: () => {
-      const app = kanban(kanbanServer({ latency: 3, grumpiness: 0 }), 60_000)
-      return {
-        serve: channel => serveKanban(app, channel, { schedule: atOnce }),
-        dispose: app.dispose,
-      }
+  const carried = carry(
+    {
+      name: 'kanban-carried',
+      station: () => {
+        const app = kanban(kanbanServer({ latency: 3, grumpiness: 0 }), 60_000)
+        return {
+          serve: channel => serveKanban(app, channel, { schedule: atOnce }),
+          dispose: app.dispose,
+        }
+      },
     },
-  })
-  assert.equal(carried.role.peek(), 'inline') // node: no locks, no election
+    { mode: 'inline' }, // stated, not sniffed: platforms grow locks
+  )
+  assert.equal(carried.role.peek(), 'inline')
 
   const tab = kanbanMirror(carried.channel)
   const { subscribe } = await import('#core/graph.ts')
@@ -199,4 +202,51 @@ test('carry: without talking tabs the station lives inline, and the mirror canno
   warm()
   tab.dispose()
   carried.stop()
+})
+
+test('carry: with talking tabs one leads and the others mirror it', async () => {
+  const { carry, offer } = await import('#loom')
+  const { link } = await import('#link/link.ts')
+  const { atOnce } = await import('#link/channel.ts')
+  const { subscribe } = await import('#core/graph.ts')
+  const { heldOf } = await import('#core/remote.ts')
+
+  // A lock of our own: first asker holds, the next in line takes over.
+  const lines = new Map<string, Array<() => void>>()
+  const lock = {
+    hold(name: string, onLead: () => void): () => void {
+      const line = lines.get(name) ?? []
+      lines.set(name, line)
+      line.push(onLead)
+      if (line.length === 1) onLead()
+      return () => {
+        const at = line.indexOf(onLead)
+        if (at < 0) return
+        line.splice(at, 1)
+        if (at === 0) line[0]?.()
+      }
+    },
+  }
+
+  type Wire = import('#link/channel.ts').Channel
+  const station = () => {
+    const n = fact(41, { name: 'n' })
+    return { serve: (channel: Wire) => offer({ views: { n } }, channel, { schedule: atOnce }) }
+  }
+  const one = carry({ name: 'carried-tabs', station }, { mode: 'tabs', lock })
+  const two = carry({ name: 'carried-tabs', station }, { mode: 'tabs', lock })
+  await wait(1)
+  assert.equal(one.role.peek(), 'leading')
+  assert.equal(two.role.peek(), 'following')
+
+  const wire = link(two.channel) // the follower mirrors the leader's station
+  const face = wire.cell<number>('n')
+  const warm = subscribe(face, () => {})
+  await wait(5)
+  assert.equal(heldOf(face.peek())?.value, 41)
+
+  warm()
+  wire.close()
+  two.stop()
+  one.stop()
 })

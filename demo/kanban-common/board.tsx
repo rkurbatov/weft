@@ -2,7 +2,7 @@
 // nothing about who keeps the state. Both implementations render this very
 // component — the screen is a common member and cancels out.
 
-import { useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import {
   DndContext,
@@ -13,7 +13,7 @@ import {
   useSensor,
   useSensors,
 } from '@dnd-kit/core'
-import type { DragEndEvent, DragStartEvent } from '@dnd-kit/core'
+import type { DragEndEvent, DragOverEvent, DragStartEvent } from '@dnd-kit/core'
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { Loader2, Plus, X } from 'lucide-react'
@@ -186,31 +186,88 @@ function Column({
 }
 
 export function BoardView(props: BoardViewProps): ReactNode {
-  const { columns, cardOf, onMove } = props
+  const { columns: settled, cardOf, onMove } = props
   const [dragged, setDragged] = useState<string | null>(null)
+  // The gesture's echo: a fact of the screen. When the state lives a wire away
+  // (a carried board), the hope lands one crossing later than the drop — and a
+  // drop animated onto an unchanged layout snaps back like a refused drag. The
+  // board itself shows the gesture at once and lets go when the state catches
+  // up; in place the state changes in the same tick and the echo lives for
+  // exactly zero frames.
+  const [echo, setEcho] = useState<{ id: string; into: string; at: number } | null>(null)
+  const holding = useRef(false) // a gesture in progress keeps its echo alive
+  useEffect(() => {
+    if (!holding.current) setEcho(null) // the layout moved: the truth is its again
+  }, [settled])
+  const columns = useMemo(() => {
+    if (echo === null) return settled
+    return settled.map(column => {
+      const cardIds = column.cardIds.filter(id => id !== echo.id)
+      if (column.id !== echo.into)
+        return cardIds.length === column.cardIds.length ? column : { ...column, cardIds }
+      const at = Math.min(echo.at, cardIds.length)
+      return { ...column, cardIds: [...cardIds.slice(0, at), echo.id, ...cardIds.slice(at)] }
+    })
+  }, [settled, echo])
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }))
 
   const columnOf = (cardId: string): BoardColumnView | undefined =>
     columns.find(c => c.cardIds.includes(cardId))
 
-  const onDragStart = (e: DragStartEvent): void => setDragged(String(e.active.id))
+  const onDragStart = (e: DragStartEvent): void => {
+    holding.current = true
+    setDragged(String(e.active.id))
+  }
 
-  const onDragEnd = (e: DragEndEvent): void => {
-    setDragged(null)
+  // Where would the card land if let go right here? `at` counts positions in
+  // the list without the card itself — the same meaning the echo applies.
+  const landing = (cardId: string, overId: string): { into: string; at: number } | null => {
+    const target = columns.find(c => c.id === overId)
+    if (target !== undefined)
+      return { into: target.id, at: target.cardIds.filter(id => id !== cardId).length }
+    const host = columnOf(overId)
+    if (host === undefined) return null
+    const ids = host.cardIds.filter(id => id !== cardId)
+    return { into: host.id, at: Math.max(0, ids.indexOf(overId)) }
+  }
+
+  const onDragOver = (e: DragOverEvent): void => {
     const { active, over } = e
     if (over === null) return
     const cardId = String(active.id)
     const overId = String(over.id)
     if (cardId === overId) return
-    const target = columns.find(c => c.id === overId)
-    if (target !== undefined) {
-      // Dropped on a column's body: goes to its end.
-      onMove(cardId, target.id, target.cardIds.length)
+    const spot = landing(cardId, overId)
+    if (spot === null) return
+    // The live echo: the card belongs to the hovered column while the gesture
+    // lasts, so the outline and the parted neighbours appear across columns
+    // exactly as they do within one.
+    if (echo === null || echo.into !== spot.into || echo.at !== spot.at)
+      setEcho({ id: cardId, ...spot })
+  }
+
+  const onDragEnd = (e: DragEndEvent): void => {
+    holding.current = false
+    setDragged(null)
+    const { active, over } = e
+    if (over === null) {
+      setEcho(null)
       return
     }
-    const host = columnOf(overId)
-    if (host === undefined) return
-    onMove(cardId, host.id, host.cardIds.indexOf(overId))
+    const cardId = String(active.id)
+    const overId = String(over.id)
+    const spot =
+      cardId === overId
+        ? echo?.id === cardId
+          ? { into: echo.into, at: echo.at }
+          : null
+        : landing(cardId, overId)
+    if (spot === null) {
+      setEcho(null)
+      return
+    }
+    setEcho({ id: cardId, ...spot })
+    onMove(cardId, spot.into, spot.at)
   }
 
   const draggedCard = dragged === null ? undefined : cardOf(dragged)
@@ -220,8 +277,13 @@ export function BoardView(props: BoardViewProps): ReactNode {
       sensors={sensors}
       collisionDetection={closestCorners}
       onDragStart={onDragStart}
+      onDragOver={onDragOver}
       onDragEnd={onDragEnd}
-      onDragCancel={() => setDragged(null)}
+      onDragCancel={() => {
+        holding.current = false
+        setDragged(null)
+        setEcho(null)
+      }}
     >
       <div className="flex items-start gap-3 overflow-x-auto p-4">
         {columns.map(column => (

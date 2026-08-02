@@ -136,11 +136,22 @@ export interface CarrySpec {
   station: () => { serve: (channel: Channel) => () => void; dispose?: () => void }
 }
 
-export function carry(spec: CarrySpec): Carried {
+export interface CarryOptions {
+  /** The deployment mode. 'auto' sniffs the platform; tests state it plainly —
+   *  platforms grow capabilities, and a sniff is not a contract. */
+  mode?: 'auto' | 'inline' | 'tabs'
+  /** The lock to elect with; tests hand in their own. */
+  lock?: import('../link/lead.ts').Lock
+}
+
+export function carry(spec: CarrySpec, options: CarryOptions = {}): Carried {
+  const mode = options.mode ?? 'auto'
   const tabsCanTalk =
-    typeof BroadcastChannel !== 'undefined' &&
-    typeof navigator !== 'undefined' &&
-    'locks' in navigator
+    mode === 'tabs' ||
+    (mode === 'auto' &&
+      typeof BroadcastChannel !== 'undefined' &&
+      typeof navigator !== 'undefined' &&
+      'locks' in navigator)
 
   if (!tabsCanTalk) {
     const built = spec.station()
@@ -153,17 +164,21 @@ export function carry(spec: CarrySpec): Carried {
       stop: () => {
         stopServe()
         built.dispose?.()
+        pair.watcher.close?.()
+        pair.graph.close?.()
       },
     }
   }
 
   const role = input<'inline' | 'leading' | 'following'>('following', { name: `${spec.name}.role` })
-  const hub = busHub(spec.name)
   const stopLead = leadOrFollow({
     name: spec.name,
-    lock: webLocks(),
+    lock: options.lock ?? webLocks(),
     lead: () => {
       role.set('leading')
+      // The hub — and its bus — are opened by the leader only: a follower
+      // holds nothing it would have to let go of.
+      const hub = busHub(spec.name)
       const built = spec.station()
       const stopHub = hub.accept(channel => built.serve(channel))
       return () => {
@@ -177,9 +192,15 @@ export function carry(spec: CarrySpec): Carried {
     },
   })
 
+  // The channel carry opened, carry closes: whoever adopted it may have
+  // closed it already, and a second close is a shrug, not a fault.
+  const channel = channelOverBus(spec.name)
   return {
-    channel: channelOverBus(spec.name),
+    channel,
     role,
-    stop: stopLead,
+    stop: () => {
+      stopLead()
+      channel.close?.()
+    },
   }
 }

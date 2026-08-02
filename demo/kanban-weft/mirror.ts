@@ -1,6 +1,6 @@
 // The kanban across the wire: the station offers the domain's face, a tab
 // adopts it and assembles the very same Kanban shape out of mirrors. The
-// trials cannot tell which side of the boundary they run on — that is the
+// tests cannot tell which side of the boundary they run on — that is the
 // whole point.
 
 import { adopt, offer, view } from '#loom'

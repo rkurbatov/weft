@@ -91,7 +91,9 @@ function openBus(name: string): Bus {
 }
 
 /** The graph's side of a bus: a hub that hands out one channel per watcher. */
-export function busHub(name: string, bus: Bus = openBus(name), options: HubOptions = {}): Hub {
+export function busHub(name: string, bus?: Bus, options: HubOptions = {}): Hub {
+  const owned = bus === undefined
+  const line = bus ?? openBus(name)
   const me = 'graph'
   const lease = options.lease ?? LEASE
   const timers = options.timers ?? wallClock
@@ -127,7 +129,7 @@ export function busHub(name: string, bus: Bus = openBus(name), options: HubOptio
           // give it a channel of its own. Its serve announces itself, so a
           // returning watcher re-asks for everything on its own accord.
           const channel: Channel = {
-            send: body => bus.postMessage({ weft: true, from: me, to: them, body }),
+            send: body => line.postMessage({ weft: true, from: me, to: them, body }),
             listen: handler => {
               handlers.set(them, handler)
               return () => handlers.delete(them)
@@ -141,15 +143,17 @@ export function busHub(name: string, bus: Bus = openBus(name), options: HubOptio
         }
       }
 
-      bus.addEventListener('message', onMessage)
+      line.addEventListener('message', onMessage)
       // Say we are here to the whole bus at once: watchers that outlived the
       // last graph re-ask immediately instead of waiting out their heartbeat,
       // and their watches introduce them before any command of theirs flies.
-      bus.postMessage({ weft: true, from: me, to: 'all', body: { kind: 'up' } })
+      line.postMessage({ weft: true, from: me, to: 'all', body: { kind: 'up' } })
 
       return () => {
-        bus.removeEventListener('message', onMessage)
+        line.removeEventListener('message', onMessage)
         for (const them of [...serving.keys()]) drop(them)
+        // A bus the hub opened, the hub closes.
+        if (owned) (line as { close?(): void }).close?.()
       }
     },
   }
@@ -160,16 +164,14 @@ export function isHello(body: unknown): boolean {
 }
 
 /** A watcher's side of a bus. Says hello, so the hub knows to serve it. */
-export function channelOverBus(
-  name: string,
-  bus: Bus = openBus(name),
-  options: KeepAliveOptions = {},
-): Channel {
+export function channelOverBus(name: string, bus?: Bus, options: KeepAliveOptions = {}): Channel {
+  const owned = bus === undefined
+  const line = bus ?? openBus(name)
   const keepAlive = options.keepAlive ?? KEEP_ALIVE
   const timers = options.timers ?? wallClock
   const me = newName()
   const send = (body: unknown): void => {
-    bus.postMessage({ weft: true, from: me, to: 'graph', body })
+    line.postMessage({ weft: true, from: me, to: 'graph', body })
   }
   send(HELLO)
   return {
@@ -180,14 +182,22 @@ export function channelOverBus(
         if (!isEnvelope(envelope) || (envelope.to !== me && envelope.to !== 'all')) return
         handler(envelope.body)
       }
-      bus.addEventListener('message', onMessage)
+      line.addEventListener('message', onMessage)
       // The heartbeat lives with the listener: while somebody listens on this
       // end, the hub's lease on us is kept; stop listening and it runs out.
       const stopBeating = heartbeat(() => send(HELLO), keepAlive, timers)
       return () => {
-        bus.removeEventListener('message', onMessage)
+        line.removeEventListener('message', onMessage)
         stopBeating()
       }
     },
+    // A bus this channel opened, this channel closes.
+    ...(owned
+      ? {
+          close: () => {
+            ;(line as { close?(): void }).close?.()
+          },
+        }
+      : {}),
   }
 }

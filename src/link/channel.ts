@@ -6,6 +6,8 @@ export interface Channel {
   send(message: unknown): void
   /** Returns the way to stop listening. */
   listen(handler: (message: unknown) => void): () => void
+  /** A channel that owns its transport closes it here; borrowed ones omit this. */
+  close?(): void
 }
 
 export type ToGraph =

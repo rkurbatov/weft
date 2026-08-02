@@ -92,6 +92,18 @@ const KEEP = 64
 export function alike(a: unknown, b: unknown): boolean {
   if (Object.is(a, b)) return true
   if (typeof a !== 'object' || typeof b !== 'object' || a === null || b === null) return false
+  if (a instanceof Map || b instanceof Map) {
+    if (!(a instanceof Map) || !(b instanceof Map) || a.size !== b.size) return false
+    for (const [key, value] of a) {
+      if (!b.has(key) || !alike(value, b.get(key))) return false
+    }
+    return true
+  }
+  if (a instanceof Set || b instanceof Set) {
+    if (!(a instanceof Set) || !(b instanceof Set) || a.size !== b.size) return false
+    for (const item of a) if (!b.has(item)) return false
+    return true
+  }
   if (Array.isArray(a) || Array.isArray(b)) {
     if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false
     return a.every((item, i) => alike(item, b[i]))

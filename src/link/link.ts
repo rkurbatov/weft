@@ -56,6 +56,7 @@ export function link(channel: Channel, options: LinkOptions = {}): Link {
   const linger = options.linger ?? 15_000
   const timers = options.timers ?? wallClock
   const mirrors = new Map<string, { id: number; cell: Input<Remote<unknown>> }>()
+  const lingering = new Set<unknown>()
   const byId = new Map<number, Input<Remote<unknown>>>()
   const waiting = new Map<
     number,
@@ -148,6 +149,7 @@ export function link(channel: Channel, options: LinkOptions = {}): Link {
       // Watching here is asking there; nobody watching is nobody asking.
       onDemand: () => {
         timers.clear(letGo as never)
+        lingering.delete(letGo)
         // A look may return after the mirror was let go of: register again.
         mirrors.set(at, { id, cell })
         byId.set(id, cell)
@@ -159,9 +161,13 @@ export function link(channel: Channel, options: LinkOptions = {}): Link {
         // Not dropped at once — a linger, then let go. The handle out there
         // stays valid: its next look re-registers the very same mirror.
         letGo = timers.set(() => {
+          lingering.delete(letGo)
           mirrors.delete(at)
           byId.delete(id)
         }, linger)
+        lingering.add(letGo)
+        // Housekeeping must not keep a process alive where the platform can say so.
+        ;(letGo as { unref?: () => void }).unref?.()
       },
     })
     mirrors.set(at, { id, cell })
@@ -210,8 +216,11 @@ export function link(channel: Channel, options: LinkOptions = {}): Link {
       }
       stopListening()
       rejectAll(() => new Unknown('weft: the link closed before an answer came'))
+      for (const held of lingering) timers.clear(held as never)
+      lingering.clear()
       mirrors.clear()
       byId.clear()
+      channel.close?.()
     },
   }
 }
