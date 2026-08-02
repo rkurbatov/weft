@@ -4,7 +4,9 @@
 
 import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { useCell } from '#weft/react'
+import { together } from '#weft'
+import { useCell, useInputBinding, useSource } from '#weft/react'
+import { WavesPanel } from '../common/waves.tsx'
 import { countCellRender, useCounters } from '../common/stats.ts'
 import { railServer } from './server.ts'
 import { rail } from './state.ts'
@@ -25,7 +27,11 @@ const Card = memo(function Card({ id }: { id: number }): ReactNode {
   if (game === undefined) return null
   const fresh = Date.now() - game.born < 15_000
   return (
-    <div className={`card ${game.status}${fresh ? ' fresh' : ''}`} style={{ height: ROW }}>
+    <div
+      className={`card ${game.status}${fresh ? ' fresh' : ''}`}
+      style={{ height: ROW }}
+      onClick={() => app.picked.set(id)}
+    >
       <span className="sport">{game.sport}</span>
       <span className="sides">
         {game.home} — {game.away}
@@ -50,6 +56,62 @@ function Tab({ name }: { name: Shelf }): ReactNode {
     <button className={picked ? 'tab on' : 'tab'} onClick={() => app.shelf.set(name)}>
       {name} <b>{count}</b>
     </button>
+  )
+}
+
+function Search(): ReactNode {
+  const box = useInputBinding(app.searchText) // the two-way seam, spread and done
+  const text = box.value.trim()
+  return (
+    <span className="search">
+      <input placeholder="find a team" {...box} />
+      {text.length >= 2 && <Matches text={text} />}
+    </span>
+  )
+}
+
+function Matches({ text }: { text: string }): ReactNode {
+  // The calm in the passport means the churn of typing asks once; the flat
+  // fields of Remote mean the old list keeps showing while the new travels.
+  const found = useSource(app.find(text))
+  return (
+    <span className="matches">
+      {found.loading && <span className="dim">…</span>}
+      {(found.value ?? []).slice(0, 6).map(game => (
+        <button key={game.id} onClick={() => app.picked.set(game.id)}>
+          {game.home} — {game.away}
+        </button>
+      ))}
+      {found.value !== undefined && found.value.length === 0 && <span className="dim">nobody</span>}
+    </span>
+  )
+}
+
+function Details({ id }: { id: number }): ReactNode {
+  // Two services answer at their own pace; `together` is the whole story of
+  // both: value when both hold, in flight while either travels, the first
+  // refusal speaking for the pair.
+  const info = useSource(app.gameInfo(id))
+  const odds = useSource(app.gameOdds(id))
+  const game = useCell(app.games.row(id))
+  const both = together({ info, odds })
+  return (
+    <aside className="details">
+      <header>
+        <b>{game === undefined ? `game ${id}` : `${game.home} — ${game.away}`}</b>
+        <button onClick={() => app.picked.set(null)}>×</button>
+      </header>
+      {both.loading && both.value === undefined && <p className="dim">asking two services…</p>}
+      {both.value !== undefined && (
+        <p>
+          {both.value.info.venue} · {both.value.info.attendance.toLocaleString()} seats
+          <br />
+          odds {both.value.odds.h.toFixed(2)} / {both.value.odds.x.toFixed(2)} /{' '}
+          {both.value.odds.a.toFixed(2)}
+        </p>
+      )}
+      {both.error !== undefined && <p className="gate">{String(both.error)}</p>}
+    </aside>
   )
 }
 
@@ -143,6 +205,8 @@ function Rail(): ReactNode {
 }
 
 export function App(): ReactNode {
+  const picked = useCell(app.picked)
+  const [waves, setWaves] = useState(false)
   return (
     <div className="rail">
       <header className="bar">
@@ -152,9 +216,15 @@ export function App(): ReactNode {
             <Tab key={name} name={name} />
           ))}
         </nav>
+        <Search />
         <Meter />
+        <button className="tab" onClick={() => setWaves(w => !w)}>
+          waves
+        </button>
       </header>
       <Rail />
+      {picked !== null && <Details id={picked} />}
+      {waves && <WavesPanel />}
     </div>
   )
 }

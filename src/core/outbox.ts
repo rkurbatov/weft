@@ -12,7 +12,7 @@ import type { Store } from './store.ts'
 import { wallClock } from './time.ts'
 import type { Timers } from './time.ts'
 
-export type EntryState = 'waiting' | 'sending' | 'stuck'
+export type EntryState = 'waiting' | 'sending' | 'stuck' | 'done'
 
 export interface Entry {
   /** The idempotency key. The same one on every attempt, including after a reload. */
@@ -24,6 +24,8 @@ export interface Entry {
   readonly attempts: number
   readonly state: EntryState
   readonly lastError?: string
+  /** When the world confirmed it — only on retained 'done' entries. */
+  readonly doneAt?: number
 }
 
 export interface Handling {
@@ -49,6 +51,12 @@ export interface OutboxOptions {
   /** Name the kind of trouble a handler threw. Default: Unknown-shaped errors
    *  are unknown, everything else transient. */
   classify?: (error: unknown) => Fault
+  /**
+   * Keep a confirmed entry in the book, marked 'done', until absorb() says the
+   * base has caught up. This is the third state of a note: confirmed but not
+   * yet absorbed — dropping it early would flash the screen backwards.
+   */
+  retain?: boolean
   /** Start held: nothing is sent until `resume()`. */
   paused?: boolean
   now?: () => number
@@ -69,14 +77,25 @@ export interface Outbox {
   readonly ready: Promise<void>
   /** Are writes of the book landing. `ok: false` names the reason. */
   readonly saving: Readable<Saving>
-  /** Everything not yet confirmed by the world, in the order it was written down. */
+  /** The whole book in the order it was written: owed, stuck, and — with
+   *  `retain` — confirmed entries the base has not absorbed yet. */
   readonly entries: Readable<readonly Entry[]>
+  /** What should lay over the base: everything but the stuck. */
+  readonly active: Readable<readonly Entry[]>
   /** How many are still owed to the world. */
   readonly owed: Readable<number>
   /** Are any stuck waiting for a person. */
   readonly stuck: Readable<readonly Entry[]>
   /** Write a command down and send it. Resolves when it leaves the book; rejects if it gets stuck. */
   send(name: string, args: unknown): { id: string; done: Promise<void> }
+  /** Write down a fait accompli: confirmed elsewhere, never sent. Born 'done',
+   *  it lays over the base until absorb() says the base has caught up.
+   *  Meaningful with `retain`; without it the base has nothing to catch up to,
+   *  and the note is refused loudly rather than dropped quietly. */
+  note(name: string, args: unknown): { id: string }
+  /** The base has caught up to this moment: retained entries confirmed at or
+   *  before it are absorbed and leave the book. */
+  absorb(before: number): void
   /** Try a stuck entry again. */
   again(id: string): void
   /** Drop an entry without sending it. */
@@ -112,6 +131,7 @@ export function outbox(options: OutboxOptions): Outbox {
     handlers,
     retry = 1000,
     maxAttempts = 5,
+    retain = false,
     onStuck,
     onRefused,
     onDiscarded,
@@ -205,7 +225,7 @@ export function outbox(options: OutboxOptions): Outbox {
   /** Send the head of the book, one at a time: order is part of the promise. */
   async function pump(): Promise<void> {
     if (sending || held || !lifted) return
-    const head = entries.peek().find(entry => entry.state !== 'stuck')
+    const head = entries.peek().find(entry => entry.state !== 'stuck' && entry.state !== 'done')
     if (head === undefined) return
 
     const handler = handlers[head.name]
@@ -230,7 +250,8 @@ export function outbox(options: OutboxOptions): Outbox {
         key: head.id,
         attempt,
       })
-      remove(head.id)
+      if (retain) replace(head.id, entry => ({ ...entry, state: 'done', doneAt: now() }))
+      else remove(head.id)
       settle(head.id)
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
@@ -298,9 +319,14 @@ export function outbox(options: OutboxOptions): Outbox {
     ready,
     saving,
     entries,
-    owed: cell(() => entries.get().filter(entry => entry.state !== 'stuck').length, {
-      name: `${key}.owed`,
+    active: cell<readonly Entry[]>(() => entries.get().filter(entry => entry.state !== 'stuck'), {
+      name: `${key}.active`,
+      equal: (a, b) => a.length === b.length && a.every((entry, i) => entry === b[i]),
     }),
+    owed: cell(
+      () => entries.get().filter(entry => entry.state !== 'stuck' && entry.state !== 'done').length,
+      { name: `${key}.owed` },
+    ),
     stuck: cell<readonly Entry[]>(() => entries.get().filter(entry => entry.state === 'stuck'), {
       name: `${key}.stuck`,
       equal: (a, b) => a.length === b.length && a.every((entry, i) => entry === b[i]),
@@ -319,6 +345,30 @@ export function outbox(options: OutboxOptions): Outbox {
       done.catch(() => {})
       void pump()
       return { id, done }
+    },
+
+    absorb(before) {
+      const book = entries.peek()
+      const kept = book.filter(
+        entry => entry.state !== 'done' || entry.doneAt === undefined || entry.doneAt > before,
+      )
+      if (kept.length !== book.length) write(kept)
+    },
+
+    note(name, args) {
+      if (!retain) throw new Error(`weft: outbox "${key}" needs retain for note()`)
+      const id = newId()
+      const entry: Entry = {
+        id,
+        name,
+        args,
+        at: now(),
+        attempts: 0,
+        state: 'done',
+        doneAt: now(),
+      }
+      write([...entries.peek(), entry])
+      return { id }
     },
 
     again(id) {

@@ -3,7 +3,7 @@
 // a call for creating cards — and hands them over as values. The state module
 // receives ports and could not name the server if it wanted to.
 
-import { memoryStore, outbox, source } from '#weft'
+import { heldOf, memoryStore, outbox, source, watch } from '#weft'
 import type { Outbox, Source } from '#weft'
 import type { BoardSnapshot, Card } from '../kanban-common/types.ts'
 import type { KanbanServer } from '../kanban-common/server.ts'
@@ -51,7 +51,20 @@ export function kanbanPorts(server: KanbanServer, pollMs = 4000): KanbanPorts {
     // discarded at once, with a trace. Anything else would be transient.
     classify: error =>
       error instanceof Error && error.message.includes('conflict') ? 'rejected' : 'transient',
+    // A confirmed note stays in the book until the base absorbs it.
+    retain: true,
   })
+
+  // Absorption lives where both ports live: a snapshot taken after a
+  // confirmation absorbs it. A cold watcher — it reacts to snapshots that
+  // arrive anyway and raises no demand of its own.
+  watch(
+    () => {
+      const asked = heldOf(board.state.get())?.value.askedAt
+      if (asked !== undefined) post.absorb(asked)
+    },
+    { demand: false },
+  )
 
   return { board, post, create: (into, title) => server.addCard(into, title, 'feature') }
 }

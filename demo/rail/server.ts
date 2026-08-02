@@ -30,11 +30,28 @@ export interface PageAnswer {
   total: number
 }
 
+export interface GameDetails {
+  venue: string
+  attendance: number
+}
+
+export interface GameOdds {
+  h: number
+  x: number
+  a: number
+}
+
 export interface RailServer {
   page(offset: number, limit: number): Promise<PageAnswer>
   /** Deltas from now on. The ticker runs only while somebody listens. */
   live(listener: (delta: GameDelta) => void): () => void
+  /** Find games by a team's name. A separate, slower service — as in life. */
+  search(text: string): Promise<Game[]>
+  details(id: number): Promise<GameDetails>
+  odds(id: number): Promise<GameOdds>
   watching(): number
+  /** How many searches were actually asked. For the tests' eyes. */
+  searches(): number
 }
 
 export interface ServerOptions {
@@ -145,7 +162,42 @@ export function railServer(options: ServerOptions = {}): RailServer {
     }
   }
 
+  let searched = 0
+
   return {
+    search(text) {
+      searched++
+      const needle = text.trim().toLowerCase()
+      const items = [...catalog.values()]
+        .filter(g => g.home.toLowerCase().includes(needle) || g.away.toLowerCase().includes(needle))
+        .sort((a, b) => a.start - b.start || a.id - b.id)
+        .slice(0, 20)
+        .map(g => ({ ...g, score: { ...g.score } }))
+      return new Promise(resolve => setTimeout(() => resolve(items), pageDelay))
+    },
+    details(id) {
+      const game = catalog.get(id)
+      return new Promise((resolve, reject) =>
+        setTimeout(() => {
+          if (game === undefined) reject(new Error('not found'))
+          else resolve({ venue: `${game.home} Grounds`, attendance: 3000 + ((id * 977) % 42000) })
+        }, pageDelay * 0.8),
+      )
+    },
+    odds(id) {
+      const game = catalog.get(id)
+      return new Promise((resolve, reject) =>
+        setTimeout(() => {
+          if (game === undefined) reject(new Error('not found'))
+          else {
+            const h = 1.5 + ((id * 13) % 20) / 10
+            const a = 1.5 + ((id * 29) % 25) / 10
+            resolve({ h, x: 3.1 + ((id * 7) % 12) / 10, a })
+          }
+        }, pageDelay * 1.8),
+      )
+    },
+    searches: () => searched,
     page(offset, limit) {
       // Photographed now, delivered later: rows are copies, revs are of this moment.
       const items = [...catalog.values()]

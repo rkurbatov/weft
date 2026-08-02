@@ -1,6 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { subscribe } from '#core/graph.ts'
+import { together } from '#core/remote.ts'
 import { railServer } from './server.ts'
 import { rail } from './state.ts'
 
@@ -53,5 +54,48 @@ test('a page that arrives late cannot roll a live game back', async () => {
   assert.ok(seen.size >= 40) // plenty of rows went through
   assert.deepEqual(rollbacks, [])
   stop()
+  app.dispose()
+})
+
+test('typing churn asks the search once: the calm holds the abandoned questions', async () => {
+  const server = railServer({ seed: 7, size: 60, pageDelay: 4, tickEvery: 1000 })
+  const app = rail(server)
+
+  // Three keystrokes, each look shorter than the calm (250ms in the passport).
+  let stop = subscribe(app.find('no').state, () => {})
+  await wait(60)
+  stop()
+  stop = subscribe(app.find('nor').state, () => {})
+  await wait(60)
+  stop()
+  stop = subscribe(app.find('north').state, () => {})
+  await wait(400)
+
+  assert.equal(server.searches(), 1) // only the survivor asked
+  const found = app.find('north').state.peek().value ?? []
+  assert.ok(found.length > 0)
+  assert.ok(found.every(g => `${g.home} ${g.away}`.toLowerCase().includes('north')))
+  stop()
+  app.dispose()
+})
+
+test('details come from two services and meet in one outcome', async () => {
+  const server = railServer({ seed: 7, size: 60, pageDelay: 4, tickEvery: 1000 })
+  const app = rail(server)
+  const someId = 3
+
+  const stopInfo = subscribe(app.gameInfo(someId).state, () => {})
+  const stopOdds = subscribe(app.gameOdds(someId).state, () => {})
+  await wait(40)
+
+  const both = together({
+    info: app.gameInfo(someId).state.peek(),
+    odds: app.gameOdds(someId).state.peek(),
+  })
+  assert.equal(both.kind, 'value')
+  assert.ok(both.value.info.venue.length > 0)
+  assert.ok(both.value.odds.h > 1)
+  stopInfo()
+  stopOdds()
   app.dispose()
 })

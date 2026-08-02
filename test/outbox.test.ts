@@ -416,3 +416,47 @@ test('a permanent refusal discards the entry at once, with a trace', async () =>
   assert.deepEqual(calls, ['1', '2'])
   assert.equal(box.entries.peek().length, 0)
 })
+
+test('a retained note stays done until the base absorbs it; a fait accompli is born done', async () => {
+  const world = fakeWorld()
+  const box = outbox({
+    key: 'k',
+    store: memoryStore(),
+    handlers: { move: (() => Promise.resolve()) as Handler },
+    retain: true,
+    timers: world.timers,
+    now: world.now,
+  })
+  await box.ready
+
+  const { done } = box.send('move', { id: 'c1' })
+  await world.advance(1)
+  await done
+  const held = box.entries.peek()[0]
+  assert.equal(held?.state, 'done') // confirmed, not absorbed: still in the book
+  assert.equal(box.owed.peek(), 0) // but owed to nobody
+  assert.equal(box.active.peek().length, 1) // and still laying over the base
+
+  const noted = box.note('add', { id: 'c2' })
+  assert.equal(box.entries.peek().length, 2)
+  assert.equal(box.entries.peek()[1]?.state, 'done')
+  assert.ok(noted.id.length > 0)
+
+  box.absorb(world.now() - 1000) // a snapshot older than both: absorbs nothing
+  assert.equal(box.entries.peek().length, 2)
+  box.absorb(world.now()) // the base caught up
+  assert.equal(box.entries.peek().length, 0)
+})
+
+test('note() without retain is refused loudly', async () => {
+  const world = fakeWorld()
+  const box = outbox({
+    key: 'k',
+    store: memoryStore(),
+    handlers: {},
+    timers: world.timers,
+    now: world.now,
+  })
+  await box.ready
+  assert.throws(() => box.note('add', {}), /needs retain/)
+})

@@ -1,11 +1,10 @@
-// The kanban state in four visible phases: what things are, what follows, and
-// what we ask of the world — through ports handed in from outside. This module
-// does not know the server exists. Rollback and poll guards do not exist as
-// code: a refusal removes its entry, a snapshot lands whenever it lands, and
-// the visible board is always base plus replay.
+// The kanban state, finally in the shape a developer solves his task in:
+// declare what the base is, declare what each note does to it, hand the
+// actions to the screen. Rollback, the three states of a note, absorption
+// and referential identity are the library's business — none of it is here.
 
-import { alike, cell, command, heldOf, input } from '#weft'
-import type { Outbox, Readable } from '#weft'
+import { cell, command, heldOf, input, laneAppend, laneDrop, lanePlace, projected } from '#weft'
+import type { Lanes, Outbox, Readable } from '#weft'
 import type { Card, ColumnData } from '../kanban-common/types.ts'
 import type { KanbanPorts } from './transport.ts'
 
@@ -13,7 +12,7 @@ export interface Kanban {
   state: {
     layout: Readable<ColumnData[]>
     cards: Readable<ReadonlyMap<string, Card>>
-    /** Cards with our own entry still owed to the world. */
+    /** Cards with our own note still owed to the world. */
     busy: Readable<ReadonlySet<string>>
     addBusy: Readable<string | null>
     notice: Readable<string | null>
@@ -31,56 +30,15 @@ export interface Kanban {
   dispose(): void
 }
 
-// ── The applicator ─────────────────────────────────────────────────────────
-// Four laws. Absolute: the intent names the target, never the past. Total:
-// wherever the subject stands — take it out, put it here. Void: no subject in
-// the base — no application, silently. Idempotent: twice is once. Entries
-// replay in queue order; under these four, replay is safe on any base.
-
-type Op =
-  | { kind: 'move'; id: string; into: string; at: number }
-  | { kind: 'drop'; id: string }
-  | { kind: 'add'; card: Card; into: string }
-
-interface SettledOp {
-  op: Op
-  confirmedAt: number
-}
-
-function without(columns: ColumnData[], id: string): ColumnData[] {
-  return columns.map(c =>
-    c.cardIds.includes(id) ? { ...c, cardIds: c.cardIds.filter(x => x !== id) } : c,
-  )
-}
-
-function placed(columns: ColumnData[], id: string, into: string, at: number): ColumnData[] {
-  return columns.map(c => {
-    if (c.id !== into) return c
-    const index = Math.max(0, Math.min(at, c.cardIds.length))
-    return { ...c, cardIds: [...c.cardIds.slice(0, index), id, ...c.cardIds.slice(index)] }
-  })
-}
-
-function applyOp(columns: ColumnData[], known: ReadonlySet<string>, op: Op): ColumnData[] {
-  switch (op.kind) {
-    case 'move':
-      if (!known.has(op.id)) return columns // void: the subject is gone
-      return placed(without(columns, op.id), op.id, op.into, op.at)
-    case 'drop':
-      return without(columns, op.id)
-    case 'add':
-      // The op carries its subject; re-placing is what makes it idempotent.
-      return placed(without(columns, op.card.id), op.card.id, op.into, Number.MAX_SAFE_INTEGER)
-  }
+/** What the board is, as the projection sees it. */
+interface Board {
+  lanes: Lanes<string>
+  cards: Readonly<Record<string, Card>>
 }
 
 export function kanbanState(ports: KanbanPorts): Kanban {
   const { board, post } = ports
 
-  // ── What things are ──────────────────────────────────────────────────────
-  /** Confirmed but not yet absorbed: the world said yes, the base does not
-   *  know it yet. Removing these early would flash the screen backwards. */
-  const settled = input<readonly SettledOp[]>([], { name: 'settled' })
   const notice = input<string | null>(null, { name: 'notice' })
   const addingIn = input<string | null>(null, { name: 'addingIn' })
 
@@ -91,32 +49,76 @@ export function kanbanState(ports: KanbanPorts): Kanban {
     hush = setTimeout(() => notice.set(null), 4000)
   }
 
-  const askedNow = (): number =>
-    heldOf(board.state.peek())?.value.askedAt ?? Number.NEGATIVE_INFINITY
-  const absorbedBy = (asked: number) => (s: SettledOp) => s.confirmedAt <= asked
-  const settle = (op: Op): void => {
-    const kept = settled.peek().filter(s => !absorbedBy(askedNow())(s))
-    settled.set([...kept, { op, confirmedAt: Date.now() }])
-  }
+  // ── The base, and what each note does to it ──────────────────────────────
+  const base = cell<Board>(
+    () => {
+      const snapshot = heldOf(board.state.get())?.value.snapshot
+      const lanes: Record<string, readonly string[]> = {}
+      const cards: Record<string, Card> = {}
+      for (const column of snapshot?.columns ?? []) lanes[column.id] = column.cardIds
+      for (const card of snapshot?.cards ?? []) cards[card.id] = card
+      return { lanes, cards }
+    },
+    { name: 'base' },
+  )
 
-  // ── What we ask of the world ─────────────────────────────────────────────
-  // The entry itself is the hope; its confirmation is held in `settled` until
-  // a snapshot taken after it absorbs it; its refusal arrives as a rejection
-  // and needs nothing undone — the entry is simply no longer there.
-  const move = (id: string, into: string, at: number): Promise<void> =>
-    post
-      .send('move', { id, into, at })
-      .done.then(() => settle({ kind: 'move', id, into, at }), report)
+  const visible = projected(base, post.entries, {
+    name: 'visible',
+    apply: {
+      move: (b: Board, op: { id: string; into: string; at: number }) =>
+        op.id in b.cards ? { ...b, lanes: lanePlace(b.lanes, op.id, op.into, op.at) } : b,
+      drop: (b: Board, op: { id: string }) => ({ ...b, lanes: laneDrop(b.lanes, op.id) }),
+      add: (b: Board, op: { card: Card; into: string }) => ({
+        lanes: laneAppend(b.lanes, op.card.id, op.into),
+        cards: { ...b.cards, [op.card.id]: op.card },
+      }),
+    },
+  })
 
-  const remove = (id: string): Promise<void> =>
-    post.send('drop', { id }).done.then(() => settle({ kind: 'drop', id }), report)
+  // ── What the screen reads ────────────────────────────────────────────────
+  const meta = cell(
+    () =>
+      (heldOf(board.state.get())?.value.snapshot.columns ?? []).map(({ id, title, limit }) => ({
+        id,
+        title,
+        limit,
+      })),
+    { name: 'meta' },
+  )
 
+  const layout = cell<ColumnData[]>(
+    () => {
+      const lanes = visible.get().lanes
+      return meta.get().map(column => ({ ...column, cardIds: [...(lanes[column.id] ?? [])] }))
+    },
+    { name: 'layout' },
+  )
+
+  const cards = cell<ReadonlyMap<string, Card>>(
+    () => new Map(Object.entries(visible.get().cards)),
+    { name: 'cards' },
+  )
+
+  const busy = cell<ReadonlySet<string>>(
+    () => {
+      const ids = new Set<string>()
+      for (const entry of post.entries.get()) {
+        if (entry.state === 'done') continue
+        const args = entry.args as { id?: string }
+        if (args.id !== undefined) ids.add(args.id)
+      }
+      return ids
+    },
+    { name: 'busy' },
+  )
+
+  // ── What reaches the world ───────────────────────────────────────────────
   const add = command(
     async (into: string, title: string) => {
       addingIn.set(into)
       try {
         const card = await ports.create(into, title)
-        settle({ kind: 'add', card, into })
+        post.note('add', { card, into }) // a fait accompli: lays over until the base absorbs it
       } catch (refusal) {
         report(refusal)
       } finally {
@@ -124,65 +126,6 @@ export function kanbanState(ports: KanbanPorts): Kanban {
       }
     },
     { name: 'add' },
-  )
-
-  // ── What follows ─────────────────────────────────────────────────────────
-  const base = cell(() => heldOf(board.state.get())?.value, { name: 'base' })
-
-  const overlay = cell<readonly Op[]>(
-    () => {
-      const asked = base.get()?.askedAt ?? Number.NEGATIVE_INFINITY
-      const confirmed = settled.get().filter(s => !absorbedBy(asked)(s))
-      const ops: Op[] = confirmed.map(s => s.op)
-      for (const entry of post.entries.get()) {
-        if (entry.name === 'move')
-          ops.push({ kind: 'move', ...(entry.args as { id: string; into: string; at: number }) })
-        if (entry.name === 'drop') ops.push({ kind: 'drop', ...(entry.args as { id: string }) })
-      }
-      return ops
-    },
-    { name: 'overlay' },
-  )
-
-  // Cards keep their identity across snapshots: an unchanged card is the same
-  // object, so a memoized screen stays quiet through a poll.
-  const sameCards = new Map<string, Card>()
-  const keep = (card: Card): Card => {
-    const was = sameCards.get(card.id)
-    if (was !== undefined && alike(was, card)) return was
-    sameCards.set(card.id, card)
-    return card
-  }
-
-  const cards = cell<ReadonlyMap<string, Card>>(
-    () => {
-      const map = new Map<string, Card>()
-      for (const card of base.get()?.snapshot.cards ?? []) map.set(card.id, keep(card))
-      for (const op of overlay.get()) if (op.kind === 'add') map.set(op.card.id, op.card)
-      return map
-    },
-    { name: 'cards' },
-  )
-
-  const layout = cell(
-    () => {
-      const start = base.get()?.snapshot.columns ?? []
-      const known = new Set(cards.get().keys())
-      return overlay.get().reduce((columns, op) => applyOp(columns, known, op), start)
-    },
-    { name: 'layout' },
-  )
-
-  const busy = cell<ReadonlySet<string>>(
-    () => {
-      const ids = new Set<string>()
-      for (const entry of post.entries.get()) {
-        const args = entry.args as { id?: string }
-        if (args.id !== undefined) ids.add(args.id)
-      }
-      return ids
-    },
-    { name: 'busy' },
   )
 
   const addBusy = cell(() => (add.pending.get() ? addingIn.get() : null), { name: 'addBusy' })
@@ -204,8 +147,8 @@ export function kanbanState(ports: KanbanPorts): Kanban {
   return {
     state: { layout, cards, busy, addBusy, notice, coldStart, fault },
     actions: {
-      move,
-      remove,
+      move: (id, into, at) => post.send('move', { id, into, at }).done.catch(report),
+      remove: id => post.send('drop', { id }).done.catch(report),
       add: (into, title) =>
         add.run(into, title).then(
           () => undefined,

@@ -43,6 +43,11 @@ export type { Probe, WaveSummary, WaveWrite, WaveCompute } from './core/waves.ts
 export { journal } from './core/journal.ts'
 export type { Journal } from './core/journal.ts'
 
+export { projected, preserve } from './core/project.ts'
+export type { ProjectionSpec } from './core/project.ts'
+export { laneDrop, lanePlace, laneAppend, laneFind } from './core/arrange.ts'
+export type { Lanes } from './core/arrange.ts'
+
 export { table, alike } from './core/table.ts'
 export type {
   Table,

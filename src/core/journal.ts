@@ -26,7 +26,7 @@ export interface Journal {
   clear(): void
 }
 
-export function journal(keep = 256): Journal {
+export function journal(keep = 256, onWave?: (wave: WaveSummary) => void): Journal {
   const memory: WaveSummary[] = []
 
   return {
@@ -35,6 +35,7 @@ export function journal(keep = 256): Journal {
         wave(summary) {
           memory.push(summary)
           while (memory.length > keep) memory.shift()
+          onWave?.(summary)
         },
       })
     },

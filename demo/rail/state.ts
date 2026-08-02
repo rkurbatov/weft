@@ -2,9 +2,9 @@
 // bookkeeping and no merge code: what things are is declared here, how changes
 // travel is the library's business.
 
-import { command, input, table, watch } from '#weft'
-import type { Command, Input, Ordered, SourceTable, Watchable } from '#weft'
-import type { Game, RailServer, Status } from './server.ts'
+import { command, input, query, table, watch } from '#weft'
+import type { Command, Input, Ordered, Query, SourceTable, Watchable } from '#weft'
+import type { Game, GameDetails, GameOdds, RailServer, Status } from './server.ts'
 
 export type Shelf = Status | 'all'
 export const PAGE = 40
@@ -22,6 +22,13 @@ export interface Rail {
   reach: Input<number>
   loaded: Input<number>
   nextPage: Command<[], void>
+  /** What the person is typing. The question with a calm in its passport. */
+  searchText: Input<string>
+  find: Query<string, Game[]>
+  /** The opened game, if any; its details come from two services at once. */
+  picked: Input<number | null>
+  gameInfo: Query<number, GameDetails>
+  gameOdds: Query<number, GameOdds>
   dispose(): void
 }
 
@@ -90,6 +97,19 @@ export function rail(server: RailServer): Rail {
 
   const shelf = input<Shelf>('all', { name: 'shelf' })
 
+  // Search: the churn of typing asks only the question that survives the calm,
+  // and a question abandoned mid-flight is disowned by the move itself.
+  const searchText = input('', { name: 'searchText' })
+  const find = query((text: string) => server.search(text), {
+    name: 'find',
+    max: 32,
+    calm: 250,
+  })
+
+  const picked = input<number | null>(null, { name: 'picked' })
+  const gameInfo = query((id: number) => server.details(id), { name: 'gameInfo', max: 16 })
+  const gameOdds = query((id: number) => server.odds(id), { name: 'gameOdds', max: 16 })
+
   return {
     games,
     shelf,
@@ -100,6 +120,11 @@ export function rail(server: RailServer): Rail {
     reach,
     loaded,
     nextPage,
+    searchText,
+    find,
+    picked,
+    gameInfo,
+    gameOdds,
     dispose: stopFeeding,
   }
 }
