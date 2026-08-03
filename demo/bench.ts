@@ -171,6 +171,10 @@ for (const scene of scenes) {
 
   for (const subject of subjects) {
     const taken: Run[] = []
+    // One run thrown away first: subjects are measured in order, and whoever
+    // goes first would otherwise pay for warming the runtime up. Measured
+    // both ways, that bias was worth more than everything the table compares.
+    once(subject, scene, shape, cells)
     for (let run = 0; run < runs; run++) taken.push(once(subject, scene, shape, cells))
     const edit = median(taken.map(r => r.edit))
     if (subject.name === 'classic') classicEdit = edit

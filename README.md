@@ -95,15 +95,15 @@ The hand-written one needs 175 lines for that — a 146-line store and a 29-line
 Both pass the same seven questions (`store.test.ts`, `sheet.test.ts`) — the same values, the same cells told, the same recovery when a loop is cut. What differs is the bill. On a sheet of 26,000 cells with 780 on screen, measured by `pnpm demo:bench`:
 
 ```
-                   open   first look   edit A1   worked out   renders   vs classic
-classic          121 ms       0.4 ms    5.2 ms          242        53         1.0x
-weft, no blocks  8.3 ms       7.1 ms    0.5 ms           84        53        10.1x
-weft, blocks    12.6 ms       4.4 ms    0.3 ms           84        53        15.6x
+                    open   first look   edit A1   worked out   renders   vs classic
+classic           112 ms       0.3 ms    4.7 ms          242        53         1.0x
+weft, no blocks   6.5 ms       3.8 ms    0.3 ms           84        53        13.6x
+weft, blocks      5.8 ms       4.1 ms    0.4 ms           84        53        11.7x
 ```
 
-Ten times cheaper per edit, and the gap widens with the sheet. The reason is not a faster engine — it is that the hand-written sheet works out every cell whether anyone is looking or not, while demand decides here. The same 53 components render in both — the `renders` column is the React render count taken without React, since one shown cell is watched by exactly one component — and that is the point: same behaviour, different price, much less written down.
+Better than ten times cheaper per edit, and the gap widens with the sheet. Blocks make no difference in this scene and are not meant to: nothing on screen sums a column. The reason is not a faster engine — it is that the hand-written sheet works out every cell whether anyone is looking or not, while demand decides here. The same 53 components render in both — the `renders` column is the React render count taken without React, since one shown cell is watched by exactly one component — and that is the point: same behaviour, different price, much less written down.
 
-Run it yourself rather than trusting the figures — they are one machine's, and the ratios are what matter.
+Run it yourself rather than trusting the figures — they are one machine's, and the ratios are what matter. Ratios move with the machine and the runtime: what has held everywhere is the shape — an edit an order of magnitude cheaper, a first look that costs more because it is where the work moved to.
 
 ## Blocks
 
@@ -111,18 +111,20 @@ Run it yourself rather than trusting the figures — they are one machine's, and
 
 It is worth building here and nowhere else. Each partial is a cell, so what depends on what — and what has to be redone — is the graph's business; the hand-written sheet could keep the same tree, but would have to invalidate it level by level, by hand. And it is only correct because the arithmetic underneath is exact.
 
-Measured with the totals row on screen, so the long column sums are live — the bench's second scene, a run of its own (so the classic row differs from the table above). Both tables are one machine, Node 26, median of three:
+Measured with the totals row on screen, so the long column sums are live — the bench's second scene, a run of its own (so the classic row differs from the table above). Both tables are one machine, median of three, with one run thrown away first — subjects are measured in order, and whoever goes first otherwise pays for warming the runtime up; that bias turned out to be worth more than everything the tables compare:
 
 ```
                     open   first look   edit A1   worked out   renders   vs classic
-classic           105 ms       0.3 ms    4.1 ms          242        67         1.0x
-weft, no blocks   6.0 ms      88.9 ms   14.0 ms          240        67         0.3x
-weft, blocks      3.8 ms      97.3 ms    2.2 ms          257        67         1.9x
+classic           107 ms       0.3 ms    4.3 ms          242        67         1.0x
+weft, no blocks   8.7 ms      82.1 ms    8.4 ms          240        67         0.5x
+weft, blocks      3.7 ms       105 ms    2.0 ms          257        67         2.2x
 ```
 
-Three honest things in that table. The middle row is _worse_ than the hand-written sheet: without blocks each of the 26 column sums reads its whole column through the graph rather than through a plain array — that is what `createSheet(cells, { blocks: false })` measures. Blocks turn the same answer into a few dozen small sums, six times cheaper per edit than no blocks, and the multiple grows with the column.
+Two honest things in that table. The middle row shows what blocks are for: without them every edit re-reads whole columns (8.4ms, half the hand-written sheet's speed), with them the same answer costs four times less (2.0ms) and the multiple grows with the column.
 
-The first look is where demand shows its bill rather than its saving: about 97ms against the hand-written sheet's 0.3ms. Nothing is lost there, it is moved — the hand-written sheet works out all 26 column sums while opening (105ms), so it has nothing left to do when the screen appears, while here the first total reads every cell it covers at the moment somebody looks (3.8 + 97). The totals come to the same; what differs is that a sheet nobody opens with totals on screen never pays it at all, and every edit afterwards is half the price.
+The first look is where demand shows its bill rather than its saving: 105ms against the hand-written sheet's 0.3ms. Nothing is lost there, it is moved. The hand-written sheet works out all 26 column sums while opening — that is its 107ms — so it has nothing left to do when the screen appears; here almost nothing happens at open (3.7ms) and the first total reads every cell it covers at the moment somebody looks. Open plus first look comes to roughly the same on both sides. What differs is that a sheet opened without totals on screen never pays it at all — scene one, where the first look costs 4ms — and that every edit afterwards is twice as cheap.
+
+Measurement earned that paragraph the hard way: the block tree was suspected of costing the first look, and measuring said otherwise. Building the answer as a tree is not more expensive than one straight pass — it is cheaper, because a single total reading 26,000 cells pays for a dependency list 26,000 long, and a tree breaks it up. The first look costs what it costs because 16,010 formulas have to be worked out, and both sheets pay that; only the moment differs.
 
 Chasing that middle row also found a real fault in the library: `family` reordered its LRU on every read — a map delete and insert per lookup — which is pure cost while the ceiling is far away. Reordering now happens only as the ceiling comes into sight, and the same scene went from 95ms to 16ms.
 
