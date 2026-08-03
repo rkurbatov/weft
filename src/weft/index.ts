@@ -83,7 +83,7 @@ export type { Remote, Held, Fault } from './core/remote.ts'
 export { memoryStore, webStore } from './core/store.ts'
 export type { Store } from './core/store.ts'
 
-export { idbStore } from './core/idb.ts'
+export { idbStore, bestStore } from './core/idb.ts'
 export type { IdbOptions } from './core/idb.ts'
 
 export { keepInput, keepSource } from './core/keep.ts'

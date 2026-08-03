@@ -80,3 +80,21 @@ test('the connection lost between operations is reopened, not mourned', async ()
     restore()
   }
 })
+
+test('bestStore takes the disk when there is one, and says which it took', async () => {
+  const { bestStore } = await import('#weft')
+  const had = 'indexedDB' in globalThis
+  assert.equal(bestStore('nowhere').where, had ? 'disk' : 'memory')
+
+  const previous = (globalThis as { indexedDB?: unknown }).indexedDB
+  ;(globalThis as { indexedDB?: unknown }).indexedDB = new IDBFactory()
+  try {
+    const shelf = bestStore('weft.trial')
+    assert.equal(shelf.where, 'disk')
+    await shelf.write('a', { n: 1 })
+    assert.deepEqual(await shelf.read('a'), { n: 1 })
+  } finally {
+    if (previous === undefined) delete (globalThis as { indexedDB?: unknown }).indexedDB
+    else (globalThis as { indexedDB?: unknown }).indexedDB = previous
+  }
+})

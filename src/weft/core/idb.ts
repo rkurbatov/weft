@@ -12,6 +12,7 @@
 // a kept value is a cache, not a ledger — and are committed explicitly rather
 // than left to the auto-commit.
 
+import { memoryStore } from './store.ts'
 import type { Store } from './store.ts'
 
 export interface IdbOptions {
@@ -146,4 +147,23 @@ interface ObjectStoreish {
   get(key: string): Requestish<unknown>
   put(value: unknown, key: string): Requestish<unknown>
   delete(key: string): Requestish<unknown>
+}
+
+/**
+ * The best shelf this platform has for something that must outlive the tab: the
+ * browser's database where there is one, memory where there is not. Durability
+ * is 'strict' — a book of unsent intents is not a cache.
+ *
+ * Which one was taken is not a secret: `where` says it plainly, so an assembly
+ * can refuse or warn instead of silently keeping a book that dies with the tab.
+ */
+export function bestStore(
+  name: string,
+  options: IdbOptions = {},
+): Store & { where: 'disk' | 'memory' } {
+  if (typeof indexedDB === 'undefined') {
+    return Object.assign(memoryStore(), { where: 'memory' as const })
+  }
+  const disk = idbStore(name, { durability: 'strict', ...options })
+  return Object.assign(disk, { where: 'disk' as const })
 }

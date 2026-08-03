@@ -250,3 +250,17 @@ test('carry: with talking tabs one leads and the others mirror it', async () => 
   two.stop()
   one.stop()
 })
+
+test('the book states its shelf: memory here, and a given shelf is the caller’s', async () => {
+  const { memoryStore } = await import('#weft')
+  const plain = will({ ping: sends<number>(() => Promise.resolve()) }, { name: 'shelf.plain' })
+  // No browser database in a test runner, so the best shelf here is memory —
+  // and it says so rather than pretending the book outlives the tab.
+  assert.equal(plain.shelf, 'memory')
+
+  const given = will(
+    { ping: sends<number>(() => Promise.resolve()) },
+    { name: 'shelf.given', store: memoryStore() },
+  )
+  assert.equal(given.shelf, 'given')
+})

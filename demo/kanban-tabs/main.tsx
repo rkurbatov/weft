@@ -22,6 +22,7 @@ const carried = carry({
     // way each backend deployment would. The book travels by succession.
     const server = kanbanServer({ latency: 120, grumpiness: 0.15 })
     const app = kanban(server, 4000)
+    console.log('[carried] the book lives on:', app.post.shelf)
     return {
       serve: channel => serveKanban(app, channel, { schedule: perFrame, instruments: true }),
       dispose: app.dispose,

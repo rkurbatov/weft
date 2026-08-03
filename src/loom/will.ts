@@ -7,7 +7,7 @@
 
 import { cell, input } from '#weft'
 import type { Watchable } from '#weft'
-import { memoryStore } from '#weft'
+import { bestStore } from '#weft'
 import type { Store } from '#weft'
 import { outbox } from '#weft'
 import type { Entry, Handler } from '#weft'
@@ -63,6 +63,8 @@ export interface Refusal {
 
 export interface WillPassport {
   name?: string
+  /** Where the book lives. Default: the best shelf this platform has, since a
+   *  book of unsent intents that dies with the tab is not a book. */
   store?: Store
   /** Sort a sender's failure. Default: everything is transient. */
   judge?: (error: unknown) => Fault
@@ -81,6 +83,9 @@ export interface WillBase<D extends WillDict> {
   owed: Watchable<number>
   /** The last permanent refusal, with its trace. Silence is not an option. */
   refused: Watchable<Refusal | null>
+  /** Where this book lives: 'memory' means it dies with the tab, 'given' means
+   *  the passport handed in a shelf and only the caller knows what it is. */
+  shelf: 'disk' | 'memory' | 'given'
   /** Offline: pause() holds the book, resume() sends what is owed. */
   pause(): void
   resume(): void
@@ -92,6 +97,7 @@ export type Will<D extends WillDict> = WillBase<D> & Speak<D>
 
 export function will<D extends WillDict>(dict: D, passport: WillPassport = {}): Will<D> {
   const name = passport.name ?? 'will'
+  const shelf = bestStore(`weft.${name}`)
   const refused = input<Refusal | null>(null, { name: `${name}.refused` })
 
   const handlers: Record<string, Handler> = {}
@@ -105,7 +111,7 @@ export function will<D extends WillDict>(dict: D, passport: WillPassport = {}): 
 
   const box = outbox({
     key: name,
-    store: passport.store ?? memoryStore(),
+    store: passport.store ?? shelf,
     handlers,
     retain: true,
     ...(passport.judge === undefined ? {} : { classify: passport.judge }),
@@ -146,6 +152,7 @@ export function will<D extends WillDict>(dict: D, passport: WillPassport = {}): 
       ),
     owed: box.owed,
     refused,
+    shelf: passport.store === undefined ? shelf.where : 'given',
     pause: () => box.pause(),
     resume: () => box.resume(),
     absorb: before => box.absorb(before),

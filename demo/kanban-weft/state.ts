@@ -29,7 +29,8 @@ export interface Kanban {
     add(into: string, title: string, key?: string): Promise<void>
     load(): Promise<void>
   }
-  post: { pause(): void; resume(): void; owed: View<number> }
+  // `shelf` is the station's own fact: a mirror never holds the book.
+  post: { pause(): void; resume(): void; owed: View<number>; shelf?: 'disk' | 'memory' | 'given' }
   dispose(): void
 }
 
@@ -112,7 +113,12 @@ export function kanban(io: KanbanServer, pollMs = 4000): Kanban {
       add: (into, title, key) => post.add({ into, title }, key),
       load: () => board.refresh(),
     },
-    post: { pause: () => post.pause(), resume: () => post.resume(), owed: post.owed },
+    post: {
+      pause: () => post.pause(),
+      resume: () => post.resume(),
+      owed: post.owed,
+      shelf: post.shelf,
+    },
     dispose: () => post.pause(),
   }
 }
