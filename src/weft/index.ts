@@ -101,13 +101,13 @@ export type { Surface, ServeOptions } from './link/serve.ts'
 export { link, Unknown } from './link/link.ts'
 export type { Link, LinkOptions } from './link/link.ts'
 
-export { pairInMemory, channelOverPort } from './link/ports.ts'
+export { pairInMemory, portChannel } from './link/ports.ts'
 export type { Pair, Port } from './link/ports.ts'
 
-export { busHub, channelOverBus } from './link/bus.ts'
+export { busHub, busChannel } from './link/bus.ts'
 export type { Bus, Hub, HubOptions, KeepAliveOptions } from './link/bus.ts'
 
-export { sharedWorkerHub, channelToSharedWorker, sharedWorkersExist } from './link/shared.ts'
+export { sharedWorkerHub, sharedWorkerChannel, sharedWorkersExist } from './link/shared.ts'
 export type { SharedScope } from './link/shared.ts'
 
 export { leadOrFollow, webLocks } from './link/lead.ts'

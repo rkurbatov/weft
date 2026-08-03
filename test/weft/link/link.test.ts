@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { MessageChannel } from 'node:worker_threads'
 import { cell, input, subscribe } from '#weft/core/graph.ts'
 import { atOnce } from '#weft/link/channel.ts'
-import { channelOverPort, pairInMemory } from '#weft/link/ports.ts'
+import { portChannel, pairInMemory } from '#weft/link/ports.ts'
 import { link, Unknown } from '#weft/link/link.ts'
 import { serve } from '#weft/link/serve.ts'
 
@@ -202,8 +202,8 @@ test('a value that cannot cross is reported, not swallowed', async () => {
 test('the same over a real port, with real cloning', async () => {
   const { surface, count } = world()
   const ports = new MessageChannel()
-  const stopServing = serve(surface, channelOverPort(ports.port1 as never), { schedule: atOnce })
-  const seen = link(channelOverPort(ports.port2 as never))
+  const stopServing = serve(surface, portChannel(ports.port1 as never), { schedule: atOnce })
+  const seen = link(portChannel(ports.port2 as never))
 
   const mirror = seen.cell<number>('doubled')
   const stop = subscribe(mirror, () => {})

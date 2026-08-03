@@ -40,7 +40,7 @@ What a second press does is declared, not hand-rolled. `drop` (the default) make
 
 **Requirements.** A consumer states what it needs rather than arranging how to get it: `feed.require(200)` says "this must not be older than 200ms" and hands back the withdrawal. The strictest live requirement sets the pace; when it goes, the pace relaxes to the next one; when the last goes, the source falls quiet. A source may declare a `floor` it will not be asked below, and `onUnmet` is told when a requirement asks for more than the floor allows — the honest limit of a library: it reports at runtime what a compiler would refuse before the program ran. `fresh(feed, within)` ties the two together, and `arrivalOf(feed)` is the promise of a landing: asking for it is itself demand, which is what makes suspense honest rather than a forced fetch.
 
-**`src/weft/core/query.ts` — parametric sources.** A family of sources by key: the same key is the same source, so identical questions collapse by construction, and a changed key is simply another source — the old one loses demand and falls quiet, which is what cancellation amounts to here. Seniority is a law rather than machinery: a new question devalues an unresolved old one, and a late answer is not accepted even into its own cell. The ceiling is stated, never silent, and only unwatched members count against it.
+**`src/weft/core/query.ts` — parametric sources.** A family of sources by key: the same key is the same source, so identical questions collapse by construction, and a changed key is simply another source — the old one loses demand and falls quiet, which is what cancellation amounts to here. Seniority is a law rather than machinery: a new question devalues an unresolved old one, and a late answer is not accepted even into its own cell. The ceiling is stated, never silent, and only unwatched members count against it. Next to `family` this is not a duplicate but the other half of the pair: a family keeps a **cell** per key — a row of state the application writes and reads — while a query keeps a **source** per key, with a passport of its own: fetching, polling, shelf life, retries. Same keying, different thing kept.
 
 **`src/weft/core/table.ts` — live collections.** Entities by identity, fed by deltas: `put`, `drop`, `apply`, `replace`, with `wins` deciding seniority when a late page meets a fresh event. Views are ordinary cells — `where`, `whereLive` (the predicate is itself a formula, so a filter typed into a field re-filters the view and followers still hear only the difference), `orderBy` with `slice` (a window that wakes only when the window moves), `fold` with an inverse where one exists, `count`, `sumBy`, `row(key)`, `rank(key)`. A change log lets a follower that fell behind resync by difference instead of rebuilding. Tested against an oracle: three hundred random operations against a naive recomputation at every step.
 
@@ -58,11 +58,11 @@ What a second press does is declared, not hand-rolled. `drop` (the default) make
 
 **`src/weft/link/` — placement.** The graph is meant to live in a worker, so the boundary is designed for rather than retrofitted. A `Channel` is two functions — send and listen; `serve(surface, channel)` publishes named cells, keyed families, commands and declared facts from the graph's side; `link(channel)` gives the watching side mirrors and command handles. A mirrored cell is an ordinary stored cell holding the same `Remote` shape a source does — one vocabulary on both sides of the wire — and its single writer is the wire, so **demand crosses the boundary by itself**. Changes are coalesced per cell and flushed on a schedule you pass in — once a frame in a browser, at once in tests — and the frame races a timer, because a background tab's frame never arrives at all.
 
-Two more arrangements come with it. `busHub(name)` and `channelOverBus(name)` put the graph in one tab and watchers in the others over a `BroadcastChannel`; because a bus carries everything to everybody, the envelope says who a message is from and for, and the hub hands each tab a channel of its own. `sharedWorkerHub(self)` and `channelToSharedWorker(port)` are the same shape for a shared worker. Where shared workers are missing, `leadOrFollow` decides which tab holds the graph by holding a lock: a tab follows at once and takes over the moment the lock comes to it, which in a browser is the moment the leading tab dies. The lock is passed in rather than reached for, so it is testable without a browser.
+Two more arrangements come with it. `busHub(name)` and `busChannel(name)` put the graph in one tab and watchers in the others over a `BroadcastChannel`; because a bus carries everything to everybody, the envelope says who a message is from and for, and the hub hands each tab a channel of its own. `sharedWorkerHub(self)` and `sharedWorkerChannel(port)` are the same shape for a shared worker. Where shared workers are missing, `leadOrFollow` decides which tab holds the graph by holding a lock: a tab follows at once and takes over the moment the lock comes to it, which in a browser is the moment the leading tab dies. The lock is passed in rather than reached for, so it is testable without a browser.
 
 The graph announces itself when it starts, and a watcher asks again for everything it still watches — a worker restart or a change of leader costs a round trip, not a stale screen. A tab that dies cannot say goodbye, so both hubs hold each tab by a lease that anything it says renews, while the tab keeps a heartbeat with a fast introduction. An idle mirror is let go after `linger`, but its handle stays alive: the next look re-registers the very same mirror. And a call still waiting when the graph restarts, or when the link closes, is rejected with `Unknown` rather than an ordinary error — the other side may have done the work, and pretending it refused would license a retry that is only safe if the command is.
 
-`pairInMemory()` is the two ends in one process, cloning messages on the way exactly as a real boundary would, so a value that could not survive the crossing fails in the tests rather than in the browser. `channelOverPort(port)` covers a browser worker or any message port; the suite runs the whole protocol over a real `MessageChannel` as well as in memory.
+`pairInMemory()` is the two ends in one process, cloning messages on the way exactly as a real boundary would, so a value that could not survive the crossing fails in the tests rather than in the browser. `portChannel(port)` covers a browser worker or any message port; the suite runs the whole protocol over a real `MessageChannel` as well as in memory.
 
 **`src/loom/` — the convenient layer.** A handful of words over the engine: `fact` (the door for what the person states), `truth` and `truthBy` (the door for what the world answers — read as a plain value, with flight, fault and asked standing beside it), `feed` (the door for what the world keeps changing: a collection fed by deltas, fed on the first look and resting when nobody watches), `will` (the door for intent: a typed dictionary of senders over the book), `view` (a formula), `laid` (the picture — truth plus the replay of the book). `useLive` and `useField` are its seam; `offer`, `adopt` and `carry` are the carrier, which decides where the station lives — inline, or in a leading tab with the others mirroring — without the dialect noticing. It is documented on its own; here it is enough to say that it imports the engine and the engine knows nothing about it.
 
@@ -95,13 +95,13 @@ The hand-written one needs 175 lines for that — a 146-line store and a 29-line
 Both pass the same seven questions (`store.test.ts`, `sheet.test.ts`) — the same values, the same cells told, the same recovery when a loop is cut. What differs is the bill. On a sheet of 26,000 cells with 780 on screen, measured by `pnpm demo:bench`:
 
 ```
-                   open   first look   edit A1   worked out   told   vs classic
-classic          121 ms       0.4 ms    5.5 ms          242     53         1.0x
-weft, no blocks  9.0 ms       7.0 ms    0.6 ms           84     53        10.0x
-weft, blocks    10.4 ms       4.6 ms    0.4 ms           84     53        13.2x
+                   open   first look   edit A1   worked out   renders   vs classic
+classic          121 ms       0.4 ms    5.2 ms          242        53         1.0x
+weft, no blocks  8.3 ms       7.1 ms    0.5 ms           84        53        10.1x
+weft, blocks    12.6 ms       4.4 ms    0.3 ms           84        53        15.6x
 ```
 
-Ten times cheaper per edit, and the gap widens with the sheet. The reason is not a faster engine — it is that the hand-written sheet works out every cell whether anyone is looking or not, while demand decides here. The same 53 cells are told in both, which is the point: same behaviour, different price, much less written down.
+Ten times cheaper per edit, and the gap widens with the sheet. The reason is not a faster engine — it is that the hand-written sheet works out every cell whether anyone is looking or not, while demand decides here. The same 53 components render in both — the `renders` column is the React render count taken without React, since one shown cell is watched by exactly one component — and that is the point: same behaviour, different price, much less written down.
 
 Run it yourself rather than trusting the figures — they are one machine's, and the ratios are what matter.
 
@@ -114,13 +114,15 @@ It is worth building here and nowhere else. Each partial is a cell, so what depe
 Measured with the totals row on screen, so the long column sums are live — the bench's second scene, a run of its own (so the classic row differs from the table above). Both tables are one machine, Node 26, median of three:
 
 ```
-                    open   first look   edit A1   worked out   told   vs classic
-classic           109 ms       0.3 ms    4.9 ms          242     67         1.0x
-weft, no blocks   6.7 ms      89.6 ms   13.5 ms          240     67         0.4x
-weft, blocks      3.5 ms      99.8 ms    1.9 ms          257     67         2.5x
+                    open   first look   edit A1   worked out   renders   vs classic
+classic           105 ms       0.3 ms    4.1 ms          242        67         1.0x
+weft, no blocks   6.0 ms      88.9 ms   14.0 ms          240        67         0.3x
+weft, blocks      3.8 ms      97.3 ms    2.2 ms          257        67         1.9x
 ```
 
-Three honest things in that table. The middle row is _worse_ than the hand-written sheet: without blocks each of the 26 column sums reads its whole column through the graph rather than through a plain array — that is what `createSheet(cells, { blocks: false })` measures. Blocks turn the same answer into a few dozen small sums — seven times cheaper per edit here, and the multiple grows with the column. And the first look costs about the same either way, blocks a shade more, because the first total has to read every cell it covers whatever shape it is built in; what blocks buy is every edit after it.
+Three honest things in that table. The middle row is _worse_ than the hand-written sheet: without blocks each of the 26 column sums reads its whole column through the graph rather than through a plain array — that is what `createSheet(cells, { blocks: false })` measures. Blocks turn the same answer into a few dozen small sums, six times cheaper per edit than no blocks, and the multiple grows with the column.
+
+The first look is where demand shows its bill rather than its saving: about 97ms against the hand-written sheet's 0.3ms. Nothing is lost there, it is moved — the hand-written sheet works out all 26 column sums while opening (105ms), so it has nothing left to do when the screen appears, while here the first total reads every cell it covers at the moment somebody looks (3.8 + 97). The totals come to the same; what differs is that a sheet nobody opens with totals on screen never pays it at all, and every edit afterwards is half the price.
 
 Chasing that middle row also found a real fault in the library: `family` reordered its LRU on every read — a map delete and insert per lookup — which is pure cost while the ceiling is far away. Reordering now happens only as the ceiling comes into sight, and the same scene went from 95ms to 16ms.
 

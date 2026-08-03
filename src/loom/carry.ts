@@ -79,6 +79,8 @@ export function adopt(channel: Channel, options: LinkOptions = {}): Adopted {
   const wire = link(channel, options)
   const faces = new Map<string, Watchable<unknown>>()
 
+  // Names are declared by the station, so this map is as big as the face and no
+  // bigger; the mirrors under it are let go on their own when nobody looks.
   const view = <T>(name: string): Watchable<T | undefined> => {
     const known = faces.get(name)
     if (known !== undefined) return known as Watchable<T | undefined>
@@ -120,7 +122,7 @@ export function adopt(channel: Channel, options: LinkOptions = {}): Adopted {
 // and serves the rest; without them the station lives right here, inline.
 // A SharedWorker carrier stays an explicit two-entry wiring for now.
 
-import { busHub, channelOverBus } from '#weft'
+import { busHub, busChannel } from '#weft'
 import { leadOrFollow, webLocks } from '#weft'
 import { pairInMemory } from '#weft'
 
@@ -195,7 +197,7 @@ export function carry(spec: CarrySpec, options: CarryOptions = {}): Carried {
 
   // The channel carry opened, carry closes: whoever adopted it may have
   // closed it already, and a second close is a shrug, not a fault.
-  const channel = channelOverBus(spec.name)
+  const channel = busChannel(spec.name)
   return {
     channel,
     role,

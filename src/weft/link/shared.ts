@@ -5,7 +5,7 @@
 // fires. So the hub holds each tab by a lease, renewed by anything the tab
 // says; the tab's channel keeps a heartbeat while somebody listens on it.
 
-import { channelOverPort } from './ports.ts'
+import { portChannel } from './ports.ts'
 import type { Port } from './ports.ts'
 import type { Channel } from './channel.ts'
 import { HELLO, LEASE, KEEP_ALIVE, heartbeat, isHello } from './bus.ts'
@@ -45,7 +45,7 @@ export function sharedWorkerHub(scope: SharedScope, options: HubOptions = {}): H
       const onConnect = (event: { ports: readonly Port[] }): void => {
         const port = event.ports[0]
         if (port === undefined) return
-        const raw = channelOverPort(port)
+        const raw = portChannel(port)
         const channel: Channel = {
           send: raw.send,
           // The heartbeat is transport talk: it renews the lease and goes no further.
@@ -71,10 +71,10 @@ export function sharedWorkerHub(scope: SharedScope, options: HubOptions = {}): H
 }
 
 /** In a tab: the channel to a shared worker. Pass `new SharedWorker(url).port`. */
-export function channelToSharedWorker(port: Port, options: KeepAliveOptions = {}): Channel {
+export function sharedWorkerChannel(port: Port, options: KeepAliveOptions = {}): Channel {
   const keepAlive = options.keepAlive ?? KEEP_ALIVE
   const timers = options.timers ?? wallClock
-  const raw = channelOverPort(port)
+  const raw = portChannel(port)
   return {
     send: raw.send,
     listen: handler => {

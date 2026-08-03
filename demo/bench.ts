@@ -1,5 +1,10 @@
 // The two sheets, measured against each other without React in the way.
 //
+// The `renders` column is the React render count, measured without React: in
+// both sheets one shown cell is watched by exactly one component, so a cell
+// told is a component rendered. Counting it here rather than in the browser
+// keeps the figure free of paint, layout and devtools.
+//
 //   pnpm demo:bench                 the default sheet
 //   pnpm demo:bench --rows=15000    a bigger one
 //   pnpm demo:bench --runs=7        more repetitions, median reported
@@ -160,7 +165,7 @@ for (const scene of scenes) {
   console.log(`${scene.name} — ${count(watched)} cells watched`)
 
   const lines: string[][] = [
-    ['', 'open', 'first look', 'edit A1', 'worked out', 'told', 'vs classic'],
+    ['', 'open', 'first look', 'edit A1', 'worked out', 'renders', 'vs classic'],
   ]
   let classicEdit = 0
 

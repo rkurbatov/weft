@@ -46,7 +46,7 @@ export interface Port {
   start?(): void
 }
 
-export function channelOverPort(port: Port): Channel {
+export function portChannel(port: Port): Channel {
   port.start?.()
   return {
     send: message => port.postMessage(message),

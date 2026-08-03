@@ -166,7 +166,7 @@ export function isHello(body: unknown): boolean {
 }
 
 /** A watcher's side of a bus. Says hello, so the hub knows to serve it. */
-export function channelOverBus(name: string, bus?: Bus, options: KeepAliveOptions = {}): Channel {
+export function busChannel(name: string, bus?: Bus, options: KeepAliveOptions = {}): Channel {
   const owned = bus === undefined
   const line = bus ?? openBus(name)
   const keepAlive = options.keepAlive ?? KEEP_ALIVE

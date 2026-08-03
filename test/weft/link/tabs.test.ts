@@ -4,8 +4,8 @@ import { MessageChannel } from 'node:worker_threads'
 import { cell, input, subscribe } from '#weft/core/graph.ts'
 import type { Timers } from '#weft/core/time.ts'
 import { atOnce } from '#weft/link/channel.ts'
-import { busHub, channelOverBus, heartbeat } from '#weft/link/bus.ts'
-import { channelToSharedWorker, sharedWorkerHub } from '#weft/link/shared.ts'
+import { busHub, busChannel, heartbeat } from '#weft/link/bus.ts'
+import { sharedWorkerChannel, sharedWorkerHub } from '#weft/link/shared.ts'
 import type { SharedScope } from '#weft/link/shared.ts'
 import type { Port } from '#weft/link/ports.ts'
 import { pairInMemory } from '#weft/link/ports.ts'
@@ -55,8 +55,8 @@ test('two tabs watch one graph over the bus, each served on its own', async () =
     serve(surface, channel, { schedule: atOnce }),
   )
 
-  const first = link(channelOverBus('weft-test-a', buses.make()))
-  const second = link(channelOverBus('weft-test-a', buses.make()))
+  const first = link(busChannel('weft-test-a', buses.make()))
+  const second = link(busChannel('weft-test-a', buses.make()))
   const mirrorOne = first.cell<number>('count')
   const mirrorTwo = second.cell<number>('doubled')
   const stopOne = subscribe(mirrorOne, () => {})
@@ -86,8 +86,8 @@ test('a command from one tab is seen by the other', async () => {
     serve(surface, channel, { schedule: atOnce }),
   )
 
-  const writer = link(channelOverBus('weft-test-b', buses.make()))
-  const reader = link(channelOverBus('weft-test-b', buses.make()))
+  const writer = link(busChannel('weft-test-b', buses.make()))
+  const reader = link(busChannel('weft-test-b', buses.make()))
   const mirror = reader.cell<number>('count')
   const stop = subscribe(mirror, () => {})
   await settle()
@@ -332,9 +332,9 @@ test('the hub lets go of a tab that fell silent, and keeps serving the live one'
   }).accept(channel => serve(surface, channel, { schedule: atOnce }))
 
   const alive = link(
-    channelOverBus('weft-test-lease', buses.make(), { keepAlive: 5_000, timers: clock.timers }),
+    busChannel('weft-test-lease', buses.make(), { keepAlive: 5_000, timers: clock.timers }),
   )
-  const dead = link(channelOverBus('weft-test-lease', buses.make(), { keepAlive: false }))
+  const dead = link(busChannel('weft-test-lease', buses.make(), { keepAlive: false }))
   const aliveMirror = alive.cell<number>('silent')
   const deadMirror = dead.cell<number>('talking')
   const stopAlive = subscribe(aliveMirror, () => {})
@@ -397,12 +397,12 @@ test('the shared-worker hub lets go of a tab that fell silent', async () => {
     for (const arrival of listeners) arrival({ ports: [pair.port1 as unknown as Port] })
   }
   const alive = link(
-    channelToSharedWorker(live.port2 as unknown as Port, {
+    sharedWorkerChannel(live.port2 as unknown as Port, {
       keepAlive: 5_000,
       timers: clock.timers,
     }),
   )
-  const dead = link(channelToSharedWorker(gone.port2 as unknown as Port, { keepAlive: false }))
+  const dead = link(sharedWorkerChannel(gone.port2 as unknown as Port, { keepAlive: false }))
 
   const aliveMirror = alive.cell<number>('talking')
   const deadMirror = dead.cell<number>('lonely')
