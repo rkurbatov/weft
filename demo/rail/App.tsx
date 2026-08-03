@@ -2,14 +2,15 @@
 // The window is a cell of the ordered shelf; a card reads its own row and wakes
 // alone when its score moves. The render counter in the bar is the proof.
 
-import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { memo, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { useField, useLive } from '#loom/react'
+import { useField, useKeepRow, useLive } from '#loom/react'
 import { WavesPanel } from '../common/waves.ts'
 import { countCellRender, useCounters } from '../common/stats.ts'
 import { railServer } from './server.ts'
 import { rail } from './state.ts'
 import type { Shelf } from './state.ts'
+import type { Game } from './server.ts'
 
 const app = rail(railServer())
 
@@ -183,24 +184,17 @@ function Rail(): ReactNode {
 
   const rows = useLive(() => shelfView.slice(first, first + span).get())
 
-  // The list is alive: games are born and leave above the window, and every
-  // such move shifts the indices the window is positioned by. The anchor keeps
-  // the top drawn row at the same pixel; the scroll event then catches `first`
-  // up, and the overscan covers the frame in between.
-  const anchor = useRef<{ key: number; rank: number; shelf: Shelf } | null>(null)
-  useLayoutEffect(() => {
-    const held = anchor.current
-    if (held !== null && held.shelf === name) {
-      const stands = shelfView.rank(held.key)
-      if (stands >= 0 && stands !== held.rank) {
-        const view = box.current
-        if (view !== null) view.scrollTop += (stands - held.rank) * ROW
-        anchor.current = { ...held, rank: stands }
-        return // the same anchor, restated
-      }
-    }
-    const top = rows[0]
-    anchor.current = top === undefined ? null : { key: top.id, rank: first, shelf: name }
+  // The list is alive: games are born and leave above the window, and every such
+  // move shifts the indices the window is positioned by. The library holds the
+  // top drawn row in place; switching shelves forgets it.
+  useKeepRow({
+    box,
+    rowHeight: ROW,
+    first,
+    rows,
+    keyOf: (g: Game) => g.id,
+    rankOf: key => shelfView.rank(key),
+    reset: name,
   })
 
   return (

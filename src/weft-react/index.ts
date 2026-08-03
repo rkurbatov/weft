@@ -1,9 +1,16 @@
 // React binding. Deliberately thin: the graph lives outside the tree,
 // React is one of its outputs.
 
-import { useCallback, useDebugValue, useMemo, useRef, useSyncExternalStore } from 'react'
+import {
+  useCallback,
+  useDebugValue,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useSyncExternalStore,
+} from 'react'
 import { subscribe, untracked } from '#weft'
-import type { Input, Watchable } from '#weft'
+import type { Input, Key, Watchable } from '#weft'
 import type { Command, CommandState } from '#weft'
 import { arrivalOf, fresh } from '#weft'
 import type { Source } from '#weft'
@@ -96,6 +103,51 @@ export function useSourceValue<T>(feed: Source<T>, options: { within?: number } 
   if (held !== undefined) return held.value
   if (state.kind === 'failed') throw state.error
   throw arrivalOf(feed)
+}
+
+export interface KeepRowOptions<R> {
+  /** The scrolling element. */
+  box: { current: HTMLElement | null }
+  /** Row height in pixels; the list is assumed to be even-height. */
+  rowHeight: number
+  /** Index of the first drawn row. */
+  first: number
+  /** The rows drawn right now, top first. */
+  rows: readonly R[]
+  keyOf: (row: R) => Key
+  /** Where that key stands in the ordered view now; below zero means gone. */
+  rankOf: (key: Key) => number
+  /** Change this to forget the held row — a different list, a different order. */
+  reset?: unknown
+}
+
+/**
+ * Hold the top drawn row in place while the list moves under it.
+ *
+ * A live list gains and loses rows above the window, and every such move shifts
+ * the indices the window is positioned by — the screen would jump. This keeps
+ * the row the reader is looking at at the same pixel by scrolling the box by
+ * exactly as much as the row moved; the scroll handler then catches the window
+ * up, and overscan covers the frame in between.
+ */
+export function useKeepRow<R>(options: KeepRowOptions<R>): void {
+  const { box, rowHeight, first, rows, keyOf, rankOf, reset } = options
+  const held = useRef<{ key: Key; rank: number; of: unknown } | null>(null)
+
+  useLayoutEffect(() => {
+    const anchor = held.current
+    if (anchor !== null && Object.is(anchor.of, reset)) {
+      const stands = rankOf(anchor.key)
+      if (stands >= 0 && stands !== anchor.rank) {
+        const view = box.current
+        if (view !== null) view.scrollTop += (stands - anchor.rank) * rowHeight
+        held.current = { ...anchor, rank: stands }
+        return // the same row, restated where it now stands
+      }
+    }
+    const top = rows[0]
+    held.current = top === undefined ? null : { key: keyOf(top), rank: first, of: reset }
+  })
 }
 
 export { arrivalOf } from '#weft'

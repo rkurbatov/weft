@@ -7,7 +7,7 @@ import { cell, subscribe } from '#weft'
 import type { Cell } from '#weft'
 import { alike } from '#weft'
 
-export { useInputBinding as useField } from '#weft-react'
+export { useInputBinding as useField, useKeepRow } from '#weft-react'
 
 export function useLive<T>(formula: () => T): T {
   const body = useRef(formula)

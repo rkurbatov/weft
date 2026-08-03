@@ -10,11 +10,11 @@ import { GlobalRegistrator } from '@happy-dom/global-registrator'
 GlobalRegistrator.register()
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
-import { Component, StrictMode, Suspense, act, createElement as h } from 'react'
+import { Component, StrictMode, Suspense, act, createElement as h, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { input } from '#weft'
 import { source } from '#weft'
-import { useCell, useInputBinding, useSourceValue } from '#weft-react'
+import { useCell, useInputBinding, useKeepRow, useSourceValue } from '#weft-react'
 
 const { createRoot } = await import('react-dom/client')
 type Root = ReturnType<typeof createRoot>
@@ -149,4 +149,40 @@ test('useSourceValue: a refusal with empty hands lands in the boundary', async (
   })
   assert.match(shown.el.textContent ?? '', /the world is down/)
   shown.unmount()
+})
+
+test('useKeepRow: the row under the reader stays put while the list moves', () => {
+  // The reader is looking at row `watched`, drawn at index 5 with 20px rows.
+  // Three rows are then born above it, so the view says it stands at 8 — the
+  // hook must scroll by the same three rows, or the screen jumps.
+  let rank = 5
+  let redraw = (): void => {}
+
+  function List(): ReactNode {
+    const el = useRef<HTMLDivElement>(null)
+    const [, bump] = useState(0)
+    redraw = () => bump(n => n + 1)
+    useKeepRow({
+      box: el,
+      rowHeight: 20,
+      first: 5,
+      rows: [{ id: 'watched' }],
+      keyOf: (row: { id: string }) => row.id,
+      rankOf: () => rank,
+    })
+    return h('div', { ref: el }, 'watched')
+  }
+
+  const view = mount(h(List))
+  const el = view.el.firstChild as HTMLElement
+  el.scrollTop = 100
+
+  rank = 8
+  act(() => redraw())
+  assert.equal(el.scrollTop, 160) // three rows of 20, and not a pixel more
+
+  // Standing still costs nothing: no rank change, no scrolling.
+  act(() => redraw())
+  assert.equal(el.scrollTop, 160)
+  view.unmount()
 })
