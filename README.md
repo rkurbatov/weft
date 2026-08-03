@@ -72,7 +72,7 @@ The graph announces itself when it starts, and a watcher asks again for everythi
 
 The engine is built: graph, commands, families, remote state, sources with demand-driven delivery and policies, parametric queries, live tables, persistence on IndexedDB, an outbox with keys and doors, projection and arrangement, regions, waves and a journal, the wire with leases and leadership — and the dialect on top of it. 266 tests, no build step, no runtime dependencies. `src/index.ts` is the front door; React does not exist in the engine: native hooks live behind `#weft-react`, the convenient layer behind `#loom`.
 
-What is not done, and should be said plainly. No live application has been moved onto this yet — the demos are stands, and the honest next step is one domain of a real product, whole. The block-wise totals that give the largest measured win still live in a demo rather than in the library. The dialect has no word for a delta-fed collection, so the rail stand reaches for the engine's table directly — the one leak the dialect promised not to have. And a leading tab is not yet obliged to keep its book on disk: the mechanism survives succession and a test proves it, but nothing in assembly enforces the shelf.
+What is not done, and should be said plainly. No live application has been moved onto this yet — the demos are stands, and the honest next step is one domain of a real product, whole. The dialect has no word for a delta-fed collection, so the rail stand reaches for the engine's table directly — the one leak the dialect promised not to have. And a leading tab is not yet obliged to keep its book on disk: the mechanism survives succession and a test proves it, but nothing in assembly enforces the shelf.
 
 ## What the library asks of values
 
@@ -95,34 +95,34 @@ The hand-written one needs 175 lines for that — a 146-line store and a 29-line
 Both pass the same seven questions (`store.test.ts`, `sheet.test.ts`) — the same values, the same cells told, the same recovery when a loop is cut. What differs is the bill. On a sheet of 26,000 cells with 780 on screen, measured by `pnpm demo:bench`:
 
 ```
-classic   build 192ms | edit A1 8.1ms | recomputed 242 | cells told 53
-on weft   lay out 11ms + first look 12ms (780 cells) | edit A1 0.8ms | recomputed 84 | cells told 53
+                   open   first look   edit A1   worked out   told   vs classic
+classic          121 ms       0.4 ms    5.5 ms          242     53         1.0x
+weft, no blocks  9.0 ms       7.0 ms    0.6 ms           84     53        10.0x
+weft, blocks    10.4 ms       4.6 ms    0.4 ms           84     53        13.2x
 ```
 
-Ten times cheaper per edit, and the gap widens with the sheet: at 130,000 cells the hand-written one spends seconds getting started and tens of milliseconds on a single change. The reason is not a faster engine — it is that the hand-written sheet works out every cell whether anyone is looking or not, while demand decides here. The same 53 cells are told in both, which is the point: same behaviour, different price, much less written down.
+Ten times cheaper per edit, and the gap widens with the sheet. The reason is not a faster engine — it is that the hand-written sheet works out every cell whether anyone is looking or not, while demand decides here. The same 53 cells are told in both, which is the point: same behaviour, different price, much less written down.
 
 Run it yourself rather than trusting the figures — they are one machine's, and the ratios are what matter.
 
 ## Blocks
 
-`demo/spreadsheet-weft/blocks.ts` answers a long total from a tree of partial sums rather than by reading every cell: blocks of 32, blocks of blocks above them, each partial an ordinary cell. One edit then touches one partial per level and the total. Trees run both ways — down a column and along a row — and a rectangle is cut into lines along its longer side, since that is the side a tree pays on.
+`src/weft/core/blocks.ts` answers a long total from a tree of partial sums rather than by reading every cell: blocks of `span`, blocks of blocks above them, each partial an ordinary cell. `blocks({ read, zero, join })` is the whole surface — the caller supplies the arithmetic and owes it associativity and exactness; the spreadsheet builds one tree per fold and direction and cuts a rectangle into lines. One edit then touches one partial per level and the total. Trees run both ways — down a column and along a row — and a rectangle is cut into lines along its longer side, since that is the side a tree pays on.
 
 It is worth building here and nowhere else. Each partial is a cell, so what depends on what — and what has to be redone — is the graph's business; the hand-written sheet could keep the same tree, but would have to invalidate it level by level, by hand. And it is only correct because the arithmetic underneath is exact.
 
-Measured with the totals row on screen, so the long column sums are live — the bench's second scene, a run of its own (so the classic row differs from the table above):
+Measured with the totals row on screen, so the long column sums are live — the bench's second scene, a run of its own (so the classic row differs from the table above). Both tables are one machine, Node 26, median of three:
 
 ```
-                     open   first look   edit A1   worked out   told   vs classic
-classic           5419 ms       2.9 ms    181 ms          242     66         1.0x
-weft, no blocks    657 ms      4211 ms    295 ms          240     66         0.6x
-weft, blocks       369 ms      4204 ms   10.7 ms          271     67        17.0x
+                    open   first look   edit A1   worked out   told   vs classic
+classic           109 ms       0.3 ms    4.9 ms          242     67         1.0x
+weft, no blocks   6.7 ms      89.6 ms   13.5 ms          240     67         0.4x
+weft, blocks      3.5 ms      99.8 ms    1.9 ms          257     67         2.5x
 ```
 
-Three honest things in that table. The middle row is _worse_ than the hand-written sheet: without blocks each of the 26 column sums reads its whole column through the graph rather than through a plain array — that is what `createSheet(cells, { blocks: false })` measures. Blocks turn the same answer into a few dozen small sums. And the first look costs four seconds either way, because the first total has to read every cell it covers; what blocks buy is every edit after it.
+Three honest things in that table. The middle row is _worse_ than the hand-written sheet: without blocks each of the 26 column sums reads its whole column through the graph rather than through a plain array — that is what `createSheet(cells, { blocks: false })` measures. Blocks turn the same answer into a few dozen small sums — seven times cheaper per edit here, and the multiple grows with the column. And the first look costs about the same either way, blocks a shade more, because the first total has to read every cell it covers whatever shape it is built in; what blocks buy is every edit after it.
 
 Chasing that middle row also found a real fault in the library: `family` reordered its LRU on every read — a map delete and insert per lookup — which is pure cost while the ceiling is far away. Reordering now happens only as the ceiling comes into sight, and the same scene went from 95ms to 16ms.
-
-This is the largest measured win above the graph, and it is still demo code. Moving it into the collections layer is an open debt.
 
 ## The other stands
 

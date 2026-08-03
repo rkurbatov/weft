@@ -281,6 +281,41 @@ function gather(node: Node, lookup: Lookup): Value[] | CellError {
   return isError(value) ? value : [value]
 }
 
+/** The empty answer for a fold. MIN and MAX start from nothing, not from zero. */
+export function foldZero(name: FoldName): Value {
+  if (name === 'PROD') return dec.fromInt(1)
+  if (name === 'MIN' || name === 'MAX') return ''
+  return dec.ZERO
+}
+
+/** Two partial answers into one. Exact and associative — the price of blocks. */
+export function foldJoin(name: FoldName, a: Value, b: Value): Value {
+  if (isError(a)) return a
+  if (isError(b)) return b
+  if (a === '') return b
+  if (b === '') return a
+  const left = asDec(a)
+  const right = asDec(b)
+  if (isError(left)) return left
+  if (isError(right)) return right
+  switch (name) {
+    case 'SUM':
+    case 'COUNT':
+      return dec.add(left, right)
+    case 'PROD':
+      return dec.mul(left, right)
+    case 'MIN':
+      return dec.cmp(left, right) <= 0 ? left : right
+    case 'MAX':
+      return dec.cmp(left, right) >= 0 ? left : right
+  }
+}
+
+/** One cell's contribution: the same rules the ordinary path uses. */
+export function foldOne(name: FoldName, value: Value): Value {
+  return name === 'COUNT' ? (counts(value) ? dec.fromInt(1) : dec.ZERO) : asDec(value)
+}
+
 /** A cell counts as a number when it holds one, or holds text that reads as one. */
 export function counts(value: Value): boolean {
   if (typeof value === 'number') return true

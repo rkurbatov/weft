@@ -4,7 +4,6 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { subscribe } from '#weft'
 import { createSheet } from './sheet.ts'
-import { SPAN } from './blocks.ts'
 import { columnName } from '../common/address.ts'
 import type { Contents } from '../common/sample.ts'
 
@@ -133,7 +132,6 @@ test('a short row range is read the ordinary way, and still adds up', () => {
   cells.set('A3', '=SUM(A1:Z1)')
   const sheet = createSheet(cells)
   assert.equal(sheet.shown('A3').peek(), '351')
-  assert.ok(SPAN > 1)
 })
 
 /** A wide sheet: one row, many columns. */
