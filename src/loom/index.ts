@@ -15,7 +15,6 @@ export { will, sends, notes } from './will.ts'
 export type { Will, WillDict, WillPassport, Refusal } from './will.ts'
 export { laid } from './laid.ts'
 export type { Board, Builder, Lane, LaidShape, LaidSpec } from './laid.ts'
-export { together, firstOf } from '#weft'
 
 // The assembly word: the root wraps its domains in a region and owns their life.
 export { region } from '#weft'
