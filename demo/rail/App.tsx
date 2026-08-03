@@ -182,7 +182,7 @@ function Rail(): ReactNode {
     })
   }
 
-  const rows = useLive(() => shelfView.slice(first, first + span).get())
+  const rows = useLive(() => shelfView.window(first, first + span).get())
 
   // The list is alive: games are born and leave above the window, and every such
   // move shifts the indices the window is positioned by. The library holds the
@@ -193,7 +193,7 @@ function Rail(): ReactNode {
     first,
     rows,
     keyOf: (g: Game) => g.id,
-    rankOf: key => shelfView.rank(key),
+    rankOf: key => shelfView.place(key),
     reset: name,
   })
 

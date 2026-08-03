@@ -11,13 +11,13 @@ test('the rail feeds itself: a look starts the feed and loads pages; leaving sto
   const app = rail(server)
   assert.equal(server.watching(), 0)
 
-  const stop = subscribe(app.shelves.all.slice(0, 12), () => {})
+  const stop = subscribe(app.shelves.all.window(0, 12), () => {})
   assert.equal(server.watching(), 1) // the live feed followed the first look
 
   await wait(80) // the first page lands; the ticker runs meanwhile
   assert.ok(app.loaded.peek() >= 40)
 
-  const rows = app.shelves.all.slice(0, 12).peek()
+  const rows = app.shelves.all.window(0, 12).peek()
   assert.equal(rows.length, 12)
   for (let i = 1; i < rows.length; i++) {
     const a = rows[i - 1]
@@ -41,7 +41,7 @@ test('a page that arrives late cannot roll a live game back', async () => {
 
   const seen = new Map<number, number>()
   const rollbacks: number[] = []
-  const stop = subscribe(app.games.all, rows => {
+  const stop = subscribe(app.games.rows, rows => {
     for (const g of rows) {
       const before = seen.get(g.id)
       if (before !== undefined && g.rev < before) rollbacks.push(g.id)
