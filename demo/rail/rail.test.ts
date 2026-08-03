@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { subscribe } from '#core/graph.ts'
+import { subscribe } from '#weft'
 import { railServer } from './server.ts'
 import { rail } from './state.ts'
 

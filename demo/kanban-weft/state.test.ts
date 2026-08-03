@@ -1,6 +1,6 @@
 // The shared tests, in place: the domain runs right here, propagation is a breath.
 
-import { region } from '#core/region.ts'
+import { region } from '#weft'
 import { kanban } from './state.ts'
 import { kanbanSuite } from './suite.ts'
 import type { Make } from './suite.ts'

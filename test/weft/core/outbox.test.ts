@@ -1,10 +1,10 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { cell, subscribe } from '#core/graph.ts'
-import { outbox } from '#core/outbox.ts'
-import { memoryStore } from '#core/store.ts'
-import type { Entry, Handler } from '#core/outbox.ts'
-import type { Timers } from '#core/time.ts'
+import { cell, subscribe } from '#weft/core/graph.ts'
+import { outbox } from '#weft/core/outbox.ts'
+import { memoryStore } from '#weft/core/store.ts'
+import type { Entry, Handler } from '#weft/core/outbox.ts'
+import type { Timers } from '#weft/core/time.ts'
 
 function fakeWorld(start = 1000) {
   let time = start

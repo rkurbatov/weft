@@ -5,16 +5,16 @@
   "description": "Weft: live state — cell graph, inputs, requirements",
   "type": "module",
   "imports": {
-    "#core/*": "./src/core/*",
-    "#link/*": "./src/link/*",
-    "#weft": "./src/index.ts",
-    "#weft/react": "./src/react/hooks.ts",
+    "#weft": "./src/weft/index.ts",
+    "#weft/*": "./src/weft/*",
+    "#weft-react": "./src/weft-react/index.ts",
     "#loom": "./src/loom/index.ts",
     "#loom/react": "./src/loom/react.ts"
   },
   "scripts": {
     "test": "node --test \"test/**/*.test.ts\" \"demo/**/*.test.ts\"",
-    "test:weft": "node --test \"test/core/*.test.ts\" \"test/link/*.test.ts\" \"test/react/*.test.ts\"",
+    "test:weft": "node --test \"test/weft/*.test.ts\"",
+    "test:weft-react": "node --test \"test/weft-react/*.test.ts\"",
     "test:loom": "node --test \"test/loom/*.test.ts\"",
     "test:stands": "node --test \"demo/**/*.test.ts\"",
     "check": "tsc --noEmit",

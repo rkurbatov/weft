@@ -1,12 +1,12 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { input, subscribe } from '#core/graph.ts'
-import { source } from '#core/source.ts'
-import { keepInput, keepSource } from '#core/keep.ts'
-import { memoryStore } from '#core/store.ts'
-import type { Dropped } from '#core/keep.ts'
-import type { Store } from '#core/store.ts'
-import type { Timers } from '#core/time.ts'
+import { input, subscribe } from '#weft/core/graph.ts'
+import { source } from '#weft/core/source.ts'
+import { keepInput, keepSource } from '#weft/core/keep.ts'
+import { memoryStore } from '#weft/core/store.ts'
+import type { Dropped } from '#weft/core/keep.ts'
+import type { Store } from '#weft/core/store.ts'
+import type { Timers } from '#weft/core/time.ts'
 
 function fakeWorld(start = 1000) {
   let time = start

@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { input, cell, watch, subscribe, untracked } from '#core/graph.ts'
-import { family } from '#core/family.ts'
+import { input, cell, watch, subscribe, untracked } from '#weft/core/graph.ts'
+import { family } from '#weft/core/family.ts'
 
 function tracked() {
   const log: string[] = []

@@ -34,7 +34,7 @@ const tab = kanbanMirror(carried.channel)
 // Breadcrumbs for the browser console: which build runs, who leads, what the
 // mirrors hold — read directly, past React, so a frozen screen cannot lie.
 console.log('[carried] page v3')
-import('#core/graph.ts').then(({ subscribe }) => {
+import('#weft').then(({ subscribe }) => {
   console.log('[carried] role:', carried.role.peek())
   subscribe(carried.role, () => console.log('[carried] role:', carried.role.peek()))
   const stop = subscribe(tab.state.layout, () => {

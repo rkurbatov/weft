@@ -3,10 +3,10 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { input } from '#core/graph.ts'
+import { input } from '#weft'
 import { fact, laid, notes, sends, truth, will } from '#loom'
-import type { Entry } from '#core/outbox.ts'
-import type { Channel as Wire } from '#link/channel.ts'
+import type { Entry } from '#weft'
+import type { Channel as Wire } from '#weft'
 
 const wait = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms))
 
@@ -91,7 +91,7 @@ test('laid assembles the void into nothing and keeps identity', () => {
 })
 
 test("the book is carried over: a dead leader's unsent note is delivered by the next", async () => {
-  const { memoryStore } = await import('#core/store.ts')
+  const { memoryStore } = await import('#weft')
   const shelf = memoryStore() // the shared shelf: what idb is to leaders
   const delivered: number[] = []
 
@@ -121,7 +121,7 @@ test("the book is carried over: a dead leader's unsent note is delivered by the 
 })
 
 test('the book outlives its leader: a new will on the same store delivers what is owed', async () => {
-  const { memoryStore } = await import('#core/store.ts')
+  const { memoryStore } = await import('#weft')
   const store = memoryStore()
   const sent: number[] = []
   const dictOf = () => ({
@@ -176,7 +176,7 @@ test('carry: without talking tabs the station lives inline, and the mirror canno
   const { kanbanServer } = await import('../../demo/kanban-common/server.ts')
   const { kanban } = await import('../../demo/kanban-weft/state.ts')
   const { serveKanban, kanbanMirror } = await import('../../demo/kanban-weft/mirror.ts')
-  const { atOnce } = await import('#link/channel.ts')
+  const { atOnce } = await import('#weft')
   void adopt
 
   const carried = carry(
@@ -195,7 +195,7 @@ test('carry: without talking tabs the station lives inline, and the mirror canno
   assert.equal(carried.role.peek(), 'inline')
 
   const tab = kanbanMirror(carried.channel)
-  const { subscribe } = await import('#core/graph.ts')
+  const { subscribe } = await import('#weft')
   const warm = subscribe(tab.state.cards, () => {})
   await tab.actions.load()
   await new Promise(resolve => setTimeout(resolve, 5))
@@ -207,10 +207,10 @@ test('carry: without talking tabs the station lives inline, and the mirror canno
 
 test('carry: with talking tabs one leads and the others mirror it', async () => {
   const { carry, offer } = await import('#loom')
-  const { link } = await import('#link/link.ts')
-  const { atOnce } = await import('#link/channel.ts')
-  const { subscribe } = await import('#core/graph.ts')
-  const { heldOf } = await import('#core/remote.ts')
+  const { link } = await import('#weft')
+  const { atOnce } = await import('#weft')
+  const { subscribe } = await import('#weft')
+  const { heldOf } = await import('#weft')
 
   // A lock of our own: first asker holds, the next in line takes over.
   const lines = new Map<string, Array<() => void>>()

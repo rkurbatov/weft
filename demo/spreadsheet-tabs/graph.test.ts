@@ -1,8 +1,8 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { subscribe } from '#core/graph.ts'
-import { busHub, channelOverBus } from '#link/bus.ts'
-import type { Lock } from '#link/lead.ts'
+import { subscribe } from '#weft'
+import { busHub, channelOverBus } from '#weft'
+import type { Lock } from '#weft'
 import { joinSheet } from './graph.ts'
 import type { TabWorld } from './graph.ts'
 

@@ -1,5 +1,6 @@
-// The library's front door. React lives behind '#weft/react' so that the graph
-// stays usable — and testable — without React in the picture.
+// The engine's front door — the only way across the unit's boundary. React
+// does not exist here: native hooks live in '#weft-react', the convenient
+// layer in '#loom'.
 
 export {
   input,
@@ -29,7 +30,7 @@ export type { Command, CommandOptions, CommandState, WhileRunning } from './core
 export { family } from './core/family.ts'
 export type { Family, FamilyOptions } from './core/family.ts'
 
-export { source, fresh } from './core/source.ts'
+export { source, fresh, arrivalOf } from './core/source.ts'
 export type { Source, SourceOptions } from './core/source.ts'
 
 export { query } from './core/query.ts'
@@ -38,7 +39,7 @@ export type { Query, QueryOptions } from './core/query.ts'
 export { region, owned, regionName } from './core/region.ts'
 export type { Region } from './core/region.ts'
 
-export { attachProbe } from './core/waves.ts'
+export { attachProbe, quietly } from './core/waves.ts'
 export type { Probe, WaveSummary, WaveWrite, WaveCompute } from './core/waves.ts'
 export { journal } from './core/journal.ts'
 export type { Journal } from './core/journal.ts'
@@ -74,7 +75,7 @@ export {
   together,
   firstOf,
 } from './core/remote.ts'
-export type { Remote, Held } from './core/remote.ts'
+export type { Remote, Held, Fault } from './core/remote.ts'
 
 export { memoryStore, webStore } from './core/store.ts'
 export type { Store } from './core/store.ts'
@@ -95,7 +96,7 @@ export { serve } from './link/serve.ts'
 export type { Surface, ServeOptions } from './link/serve.ts'
 
 export { link, Unknown } from './link/link.ts'
-export type { Link } from './link/link.ts'
+export type { Link, LinkOptions } from './link/link.ts'
 
 export { pairInMemory, channelOverPort } from './link/ports.ts'
 export type { Pair, Port } from './link/ports.ts'

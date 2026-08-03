@@ -10,7 +10,7 @@ GlobalRegistrator.register()
 
 import { act, createElement as h } from 'react'
 import type { ReactNode } from 'react'
-import { cell, input, subscribe } from '#core/graph.ts'
+import { cell, input, subscribe } from '#weft'
 import { WavesPanel } from './waves.ts'
 
 const { createRoot } = await import('react-dom/client')

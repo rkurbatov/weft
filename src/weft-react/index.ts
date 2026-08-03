@@ -2,13 +2,13 @@
 // React is one of its outputs.
 
 import { useCallback, useDebugValue, useMemo, useRef, useSyncExternalStore } from 'react'
-import { subscribe, untracked } from '#core/graph.ts'
-import type { Input, Watchable } from '#core/graph.ts'
-import type { Command, CommandState } from '#core/command.ts'
-import { arrivalOf, fresh } from '#core/source.ts'
-import type { Source } from '#core/source.ts'
-import { heldOf } from '#core/remote.ts'
-import type { Remote } from '#core/remote.ts'
+import { subscribe, untracked } from '#weft'
+import type { Input, Watchable } from '#weft'
+import type { Command, CommandState } from '#weft'
+import { arrivalOf, fresh } from '#weft'
+import type { Source } from '#weft'
+import { heldOf } from '#weft'
+import type { Remote } from '#weft'
 
 /** Read a cell. The component re-renders when this value changes — nothing else. */
 export function useCell<T>(source: Watchable<T>): T {
@@ -98,4 +98,4 @@ export function useSourceValue<T>(feed: Source<T>, options: { within?: number } 
   throw arrivalOf(feed)
 }
 
-export { arrivalOf } from '#core/source.ts'
+export { arrivalOf } from '#weft'

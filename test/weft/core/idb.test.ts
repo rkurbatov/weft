@@ -2,7 +2,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { IDBFactory } from 'fake-indexeddb'
-import { idbStore } from '#core/idb.ts'
+import { idbStore } from '#weft/core/idb.ts'
 
 /** Each test gets a database world of its own. */
 function ownIndexedDB(): () => void {

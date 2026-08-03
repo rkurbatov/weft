@@ -11,12 +11,12 @@
 // A rule of application is a property of the picture, not of the note: one
 // will may lay over any number of truths, each absorbing what concerns it.
 
-import { cell, watch } from '#core/graph.ts'
-import type { Watchable } from '#core/graph.ts'
-import { laneDrop, lanePlace } from '#core/arrange.ts'
-import type { Lanes } from '#core/arrange.ts'
-import { preserve } from '#core/project.ts'
-import type { Entry } from '#core/outbox.ts'
+import { cell, watch } from '#weft'
+import type { Watchable } from '#weft'
+import { laneDrop, lanePlace } from '#weft'
+import type { Lanes } from '#weft'
+import { preserve } from '#weft'
+import type { Entry } from '#weft'
 
 export interface Lane {
   readonly id: string

@@ -3,11 +3,11 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { input } from '#core/graph.ts'
-import { preserve, projected } from '#core/project.ts'
-import { laneDrop, laneFind, lanePlace } from '#core/arrange.ts'
-import type { Lanes } from '#core/arrange.ts'
-import type { Entry } from '#core/outbox.ts'
+import { input } from '#weft/core/graph.ts'
+import { preserve, projected } from '#weft/core/project.ts'
+import { laneDrop, laneFind, lanePlace } from '#weft/core/arrange.ts'
+import type { Lanes } from '#weft/core/arrange.ts'
+import type { Entry } from '#weft/core/outbox.ts'
 
 const entry = (name: string, args: unknown, state: Entry['state'] = 'waiting'): Entry => ({
   id: `${name}-${JSON.stringify(args)}`,

@@ -1,11 +1,11 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { MessageChannel } from 'node:worker_threads'
-import { cell, input, subscribe } from '#core/graph.ts'
-import { atOnce } from '#link/channel.ts'
-import { channelOverPort, pairInMemory } from '#link/ports.ts'
-import { link, Unknown } from '#link/link.ts'
-import { serve } from '#link/serve.ts'
+import { cell, input, subscribe } from '#weft/core/graph.ts'
+import { atOnce } from '#weft/link/channel.ts'
+import { channelOverPort, pairInMemory } from '#weft/link/ports.ts'
+import { link, Unknown } from '#weft/link/link.ts'
+import { serve } from '#weft/link/serve.ts'
 
 function settle(): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, 0))
@@ -428,7 +428,7 @@ test('perFrame does not wait for a frame that never comes: a background tab stil
     configurable: true,
   })
   try {
-    const { perFrame: frozenFrame } = await import('#link/channel.ts')
+    const { perFrame: frozenFrame } = await import('#weft/link/channel.ts')
     const ran: number[] = []
     frozenFrame(() => ran.push(1))
     await new Promise(resolve => setTimeout(resolve, 80))
@@ -441,7 +441,7 @@ test('perFrame does not wait for a frame that never comes: a background tab stil
 })
 
 test('an idle mirror lingers, then is let go; a fresh look brings it back', async () => {
-  const { heldOf } = await import('#core/remote.ts')
+  const { heldOf } = await import('#weft/core/remote.ts')
   const rest = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms))
   const pair = pairInMemory()
   const feed = input(1, { name: 'n' })

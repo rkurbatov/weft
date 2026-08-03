@@ -7,7 +7,7 @@
 // effect cleanup would kill the link on StrictMode's double mount.
 
 import { useState } from 'react'
-import { useCell } from '#weft/react'
+import { useCell } from '#weft-react'
 import { columnName } from '../common/address.ts'
 import { key } from '../common/sample.ts'
 import { browserWorld, joinSheet } from './graph.ts'

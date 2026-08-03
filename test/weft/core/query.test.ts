@@ -1,9 +1,9 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { subscribe } from '#core/graph.ts'
-import { query } from '#core/query.ts'
-import { heldOf } from '#core/remote.ts'
-import type { Timers } from '#core/time.ts'
+import { subscribe } from '#weft/core/graph.ts'
+import { query } from '#weft/core/query.ts'
+import { heldOf } from '#weft/core/remote.ts'
+import type { Timers } from '#weft/core/time.ts'
 
 function fakeWorld(start = 1000) {
   let time = start

@@ -4,13 +4,13 @@
 // and flight, fault and freshness are cells standing beside it. heldOf does
 // not exist in application code.
 
-import { cell } from '#core/graph.ts'
-import type { Watchable } from '#core/graph.ts'
-import { heldOf } from '#core/remote.ts'
-import type { Remote } from '#core/remote.ts'
-import { arrivalOf, source } from '#core/source.ts'
-import { query } from '#core/query.ts'
-import type { Timers } from '#core/time.ts'
+import { cell } from '#weft'
+import type { Watchable } from '#weft'
+import { heldOf } from '#weft'
+import type { Remote } from '#weft'
+import { arrivalOf, source } from '#weft'
+import { query } from '#weft'
+import type { Timers } from '#weft'
 
 export interface TruthPassport<T> {
   /** What the value reads as before anything arrived. */

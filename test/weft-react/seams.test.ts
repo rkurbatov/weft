@@ -4,9 +4,9 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { source } from '#core/source.ts'
-import { arrivalOf } from '#weft/react'
-import type { Timers } from '#core/time.ts'
+import { source } from '#weft'
+import { arrivalOf } from '#weft-react'
+import type { Timers } from '#weft'
 
 function fakeWorld(start = 1000) {
   let time = start

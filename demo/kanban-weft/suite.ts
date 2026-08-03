@@ -5,7 +5,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { subscribe } from '#core/graph.ts'
+import { subscribe } from '#weft'
 import type { KanbanServer } from '../kanban-common/server.ts'
 import { kanbanServer } from '../kanban-common/server.ts'
 import type { Kanban } from './state.ts'

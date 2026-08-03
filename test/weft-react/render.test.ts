@@ -12,9 +12,9 @@ GlobalRegistrator.register()
 
 import { Component, StrictMode, Suspense, act, createElement as h } from 'react'
 import type { ReactNode } from 'react'
-import { input } from '#core/graph.ts'
-import { source } from '#core/source.ts'
-import { useCell, useInputBinding, useSourceValue } from '#weft/react'
+import { input } from '#weft'
+import { source } from '#weft'
+import { useCell, useInputBinding, useSourceValue } from '#weft-react'
 
 const { createRoot } = await import('react-dom/client')
 type Root = ReturnType<typeof createRoot>

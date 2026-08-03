@@ -50,7 +50,7 @@
       }
     },
     {
-      "files": ["src/link/*.ts"],
+      "files": ["src/weft/link/*.ts"],
       "rules": {
         "unicorn/require-post-message-target-origin": "off"
       }
