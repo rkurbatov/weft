@@ -93,7 +93,7 @@ export function WavesPanel({
     .waves()
     .filter(wave => touched(wave, filter))
     .slice(-limit)
-    .reverse()
+    .toReversed()
 
   const probedNode = probed === null ? undefined : nodes.get(probed)
 

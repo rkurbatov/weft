@@ -62,6 +62,8 @@ export function sharedWorkerHub(scope: SharedScope, options: HubOptions = {}): H
       scope.addEventListener('connect', onConnect)
       return () => {
         scope.removeEventListener('connect', onConnect)
+        // Snapshot: drop() deletes from `serving` while we walk it.
+        // oxlint-disable-next-line unicorn/no-useless-spread
         for (const port of [...serving.keys()]) drop(port)
       }
     },

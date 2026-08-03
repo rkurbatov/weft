@@ -15,7 +15,9 @@
     "no-unused-vars": [
       "error",
       {
-        "argsIgnorePattern": "^_"
+        "argsIgnorePattern": "^_",
+        "varsIgnorePattern": "^_",
+        "ignoreRestSiblings": true
       }
     ],
     "typescript/consistent-type-imports": "error",
@@ -37,7 +39,8 @@
       "files": ["**/*.test.ts", "demo/bench.ts"],
       "rules": {
         "no-console": "off",
-        "no-await-in-loop": "off"
+        "no-await-in-loop": "off",
+        "unicorn/consistent-function-scoping": "off"
       }
     },
     {

@@ -25,6 +25,13 @@ export interface RootState {
 
 type BoardEpic = Epic<BoardAction, BoardAction, RootState>
 
+// Any failure leaves a notice; the notice wipes itself a moment later.
+const noticeEpic: BoardEpic = action$ =>
+  action$.pipe(
+    ofType(A.CARD_MOVE_FAILURE, A.CARD_ADD_FAILURE, A.CARD_DELETE_FAILURE),
+    switchMap(() => of(A.noticeClear()).pipe(delay(4000))),
+  )
+
 export function makeEpics(server: KanbanServer, pollMs = 4000): BoardEpic {
   const loadEpic: BoardEpic = action$ =>
     action$.pipe(
@@ -96,12 +103,6 @@ export function makeEpics(server: KanbanServer, pollMs = 4000): BoardEpic {
     )
 
   // Any failure leaves a notice; the notice wipes itself a moment later.
-  const noticeEpic: BoardEpic = action$ =>
-    action$.pipe(
-      ofType(A.CARD_MOVE_FAILURE, A.CARD_ADD_FAILURE, A.CARD_DELETE_FAILURE),
-      switchMap(() => of(A.noticeClear()).pipe(delay(4000))),
-    )
-
   const root = combineEpics(loadEpic, moveEpic, addEpic, deleteEpic, pollEpic, noticeEpic)
   // The usual teardown pattern: one action ends every effect (tests, hot reload).
   const stoppable: BoardEpic = (action$, state$, deps) =>

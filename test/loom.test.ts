@@ -6,6 +6,7 @@ import assert from 'node:assert/strict'
 import { input } from '#core/graph.ts'
 import { fact, laid, notes, sends, truth, will } from '#loom'
 import type { Entry } from '#core/outbox.ts'
+import type { Channel as Wire } from '#link/channel.ts'
 
 const wait = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms))
 
@@ -228,7 +229,6 @@ test('carry: with talking tabs one leads and the others mirror it', async () => 
     },
   }
 
-  type Wire = import('#link/channel.ts').Channel
   const station = () => {
     const n = fact(41, { name: 'n' })
     return { serve: (channel: Wire) => offer({ views: { n } }, channel, { schedule: atOnce }) }

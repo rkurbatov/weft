@@ -34,9 +34,11 @@ export interface Rail {
   dispose(): void
 }
 
+const byStart = (a: Game, b: Game): number => a.start - b.start
+
 export function rail(server: RailServer): Rail {
   const openedAt = Date.now()
-  let quiet = (): void => {}
+  let quiet: (() => void) | undefined
 
   /** Everything the client knows. The live feed follows the first look;
    *  a slow page loses to the event that overtook it. */
@@ -47,7 +49,7 @@ export function rail(server: RailServer): Rail {
     onDemand: () => {
       quiet = server.live(delta => games.apply(delta))
     },
-    onIdle: () => quiet(),
+    onIdle: () => quiet?.(),
   })
 
   const loaded = input(0, { name: 'loaded' })
@@ -73,8 +75,6 @@ export function rail(server: RailServer): Rail {
     if (reach.get() + PAGE / 2 < has) return
     void nextPage.run()
   })
-
-  const byStart = (a: Game, b: Game): number => a.start - b.start
 
   const live = games.where(g => g.status === 'live', 'live')
   const upcoming = games.where(g => g.status === 'upcoming', 'upcoming')

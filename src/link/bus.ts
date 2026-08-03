@@ -151,6 +151,8 @@ export function busHub(name: string, bus?: Bus, options: HubOptions = {}): Hub {
 
       return () => {
         line.removeEventListener('message', onMessage)
+        // Snapshot: drop() deletes from `serving` while we walk it.
+        // oxlint-disable-next-line unicorn/no-useless-spread
         for (const them of [...serving.keys()]) drop(them)
         // A bus the hub opened, the hub closes.
         if (owned) (line as { close?(): void }).close?.()

@@ -1,3 +1,7 @@
+// oxlint-disable unicorn/prefer-add-event-listener -- IndexedDB requests are
+// one-shot: a single handler each, and our minimal typings (Requestish,
+// Databaseish) declare only the on* properties the store actually uses.
+
 // A Store on IndexedDB — the disk a worker actually has. Values go in as they
 // are: the database clones structurally, so a Date survives and numbers stay
 // numbers, with no text packing on the way.

@@ -80,7 +80,7 @@ function insertCard(
 }
 
 function drop<T>(record: Record<string, T>, key: string): Record<string, T> {
-  const { [key]: _, ...rest } = record
+  const { [key]: _dropped, ...rest } = record
   return rest
 }
 

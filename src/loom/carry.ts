@@ -17,6 +17,7 @@ import type { ServeOptions } from '../link/serve.ts'
 import { link } from '../link/link.ts'
 import type { LinkOptions } from '../link/link.ts'
 import type { Channel } from '../link/channel.ts'
+import type { Lock } from '../link/lead.ts'
 import { subscribe } from '../core/graph.ts'
 
 export interface Offering {
@@ -33,7 +34,7 @@ export interface OfferOptions extends ServeOptions {
 /** The station's side: put a face on the wire. */
 export function offer(handles: Offering, channel: Channel, options: OfferOptions = {}): () => void {
   const cells: Record<string, Watchable<unknown>> = { ...handles.views }
-  let stopInstruments = (): void => {}
+  let stopInstruments: (() => void) | undefined
 
   if (options.instruments !== undefined && options.instruments !== false) {
     const keep = options.instruments === true ? 64 : (options.instruments.keep ?? 64)
@@ -57,7 +58,7 @@ export function offer(handles: Offering, channel: Channel, options: OfferOptions
   )
   return () => {
     stop()
-    stopInstruments()
+    stopInstruments?.()
   }
 }
 
@@ -141,7 +142,7 @@ export interface CarryOptions {
    *  platforms grow capabilities, and a sniff is not a contract. */
   mode?: 'auto' | 'inline' | 'tabs'
   /** The lock to elect with; tests hand in their own. */
-  lock?: import('../link/lead.ts').Lock
+  lock?: Lock
 }
 
 export function carry(spec: CarrySpec, options: CarryOptions = {}): Carried {

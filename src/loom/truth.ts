@@ -7,6 +7,7 @@
 import { cell } from '../core/graph.ts'
 import type { Watchable } from '../core/graph.ts'
 import { heldOf } from '../core/remote.ts'
+import type { Remote } from '../core/remote.ts'
 import { arrivalOf, source } from '../core/source.ts'
 import { query } from '../core/query.ts'
 import type { Timers } from '../core/time.ts'
@@ -48,7 +49,7 @@ interface Carried<T> {
 }
 
 function faceOf<T>(
-  feed: { state: Watchable<import('../core/remote.ts').Remote<Carried<T>>> },
+  feed: { state: Watchable<Remote<Carried<T>>> },
   empty: T,
   refresh: () => Promise<void>,
   name: string,

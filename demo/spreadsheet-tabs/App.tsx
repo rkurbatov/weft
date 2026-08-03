@@ -66,10 +66,10 @@ export function App() {
           </tr>
         </thead>
         <tbody>
-          {Array.from({ length: world.shape.rows }, (_, row) => (
+          {Array.from({ length: world.shape.rows }, (_row, row) => (
             <tr key={row}>
               <th>{row + 1}</th>
-              {Array.from({ length: world.shape.cols }, (_, col) => (
+              {Array.from({ length: world.shape.cols }, (_col, col) => (
                 <Mirror
                   key={col}
                   at={key(row, col)}

@@ -1,3 +1,5 @@
+// oxlint-disable oxc/no-map-spread -- a fake server hands out copies: callers
+// must never hold the server's own objects.
 // The far side of the rail: a catalogue served in pages, and a live feed that
 // keeps moving while the pages travel. A page is photographed when asked and
 // delivered later — so a page can, and regularly does, arrive already stale.
@@ -170,7 +172,7 @@ export function railServer(options: ServerOptions = {}): RailServer {
       const needle = text.trim().toLowerCase()
       const items = [...catalog.values()]
         .filter(g => g.home.toLowerCase().includes(needle) || g.away.toLowerCase().includes(needle))
-        .sort((a, b) => a.start - b.start || a.id - b.id)
+        .toSorted((a, b) => a.start - b.start || a.id - b.id)
         .slice(0, 20)
         .map(g => ({ ...g, score: { ...g.score } }))
       return new Promise(resolve => setTimeout(() => resolve(items), pageDelay))
@@ -201,7 +203,7 @@ export function railServer(options: ServerOptions = {}): RailServer {
     page(offset, limit) {
       // Photographed now, delivered later: rows are copies, revs are of this moment.
       const items = [...catalog.values()]
-        .sort((a, b) => a.start - b.start || a.id - b.id)
+        .toSorted((a, b) => a.start - b.start || a.id - b.id)
         .slice(offset, offset + limit)
         .map(g => ({ ...g, score: { ...g.score } }))
       const total = catalog.size

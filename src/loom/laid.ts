@@ -1,3 +1,5 @@
+// oxlint-disable oxc/no-map-spread -- assembly builds a new picture; identity of
+// untouched pieces is restored by preserve, not by mutating the old one.
 // The laying: visible = truth + the replay of the book. Rules are written in
 // the verbs of a resolution builder — b is not a draft and not arrays:
 // take(id) — "this does not exist", place(id, into, at) — "wherever it was,

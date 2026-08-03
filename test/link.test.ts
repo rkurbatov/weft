@@ -329,7 +329,7 @@ test('one value that cannot cross does not cost the others theirs', async () => 
   const complaints: string[] = []
   const stopServing = serve({ cells: { good, bad } }, wire.graph, {
     schedule: atOnce,
-    onUnsendable: cell => complaints.push(cell),
+    onUnsendable: name => complaints.push(name),
   })
   const seen = link(wire.watcher)
 
@@ -374,7 +374,7 @@ test('closing the link lets the graph go: unwatch for every mirror still watched
 })
 
 test('an ask over the wire waits only so long: past the term the outcome is unknown', async () => {
-  const world = (() => {
+  const clockwork = (() => {
     let time = 0
     let id = 1
     const jobs = new Map<number, { at: number; fn: () => void }>()
@@ -391,6 +391,8 @@ test('an ask over the wire waits only so long: past the term the outcome is unkn
       },
       async advance(ms: number) {
         const until = time + ms
+        // Snapshot: the loop deletes from `jobs` as it runs them.
+        // oxlint-disable-next-line unicorn/no-useless-spread
         for (const [handle, job] of [...jobs]) {
           if (job.at > until) continue
           jobs.delete(handle)
@@ -406,12 +408,12 @@ test('an ask over the wire waits only so long: past the term the outcome is unkn
   const never = serve({ commands: { forever: () => new Promise(() => {}) } }, wire.graph, {
     schedule: atOnce,
   })
-  const seen = link(wire.watcher, { within: 2000, timers: world.timers })
+  const seen = link(wire.watcher, { within: 2000, timers: clockwork.timers })
 
   const slow = seen.command<[], void>('forever')()
   const outcome = assert.rejects(slow, Unknown)
   await settle()
-  await world.advance(2000)
+  await clockwork.advance(2000)
   await outcome
 
   seen.close()

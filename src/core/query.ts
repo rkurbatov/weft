@@ -88,6 +88,8 @@ export function query<K, T>(
   }
   ask.sweep = () => {
     let went = 0
+    // Snapshot: eviction deletes from `held` while we walk it.
+    // oxlint-disable-next-line unicorn/no-useless-spread
     for (const [name, member] of [...held]) {
       if (member.feed.demanded) continue
       held.delete(name)

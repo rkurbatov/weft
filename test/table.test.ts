@@ -2,7 +2,6 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { subscribe } from '#core/graph.ts'
 import { table } from '#core/table.ts'
-import type { SourceTable } from '#core/table.ts'
 
 interface Row {
   id: number
@@ -181,7 +180,7 @@ test('oracle: every derived answer equals a recount from scratch, at every step'
   const total = t.sumBy(r => r.score)
   const highCount = t.count(r => r.score >= 50)
 
-  const ids = (rows: readonly Row[]): number[] => rows.map(r => r.id).sort((a, b) => a - b)
+  const ids = (rows: readonly Row[]): number[] => rows.map(r => r.id).toSorted((a, b) => a - b)
   const check = (): void => {
     const rows = [...model.values()]
     assert.deepEqual(ids(high.all.peek()), ids(rows.filter(r => r.score >= 50)))
@@ -189,7 +188,7 @@ test('oracle: every derived answer equals a recount from scratch, at every step'
       ids(evens.all.peek()),
       ids(rows.filter(r => r.score >= 50 && r.group === 'even')),
     )
-    const sorted = [...rows].sort((a, b) => a.score - b.score || a.id - b.id)
+    const sorted = rows.toSorted((a, b) => a.score - b.score || a.id - b.id)
     assert.deepEqual(
       ordered
         .slice(0, rows.length)

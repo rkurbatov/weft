@@ -1,3 +1,5 @@
+// oxlint-disable oxc/no-map-spread -- a fake server hands out copies: callers
+// must never hold the server's own objects.
 // The far side, shared by both implementations verbatim. It is slow on
 // purpose, it fails some writes on purpose, and a bot keeps editing the board
 // so the client's picture goes stale on its own.

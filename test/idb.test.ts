@@ -1,3 +1,4 @@
+// oxlint-disable unicorn/prefer-add-event-listener -- one-shot IDB requests
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { IDBFactory } from 'fake-indexeddb'

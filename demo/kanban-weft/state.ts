@@ -3,7 +3,7 @@
 // nothing else. Queues, retries, retreat, absorption, identity, the key of a
 // repeat: under the floor.
 
-import { fact, laid, notes, sends, truth, view, will } from '#loom'
+import { laid, notes, sends, truth, view, will } from '#loom'
 import type { Refusal, Truth, View } from '#loom'
 import type { BoardSnapshot, Card, ColumnData } from '../kanban-common/types.ts'
 import type { KanbanServer } from '../kanban-common/server.ts'
@@ -40,7 +40,6 @@ export function kanban(io: KanbanServer, pollMs = 4000): Kanban {
     empty: { columns: [], cards: [], version: 0 },
   })
 
-  let noteAdded: (op: Added) => void = () => {}
   const post = will(
     {
       move: sends<Move>(op => io.moveCard(op.id, op.into, op.at)),
@@ -49,7 +48,7 @@ export function kanban(io: KanbanServer, pollMs = 4000): Kanban {
       // the same key answers with the very same card, never a second one.
       add: sends<Add>(async (op, key) => {
         const card = await io.addCard(op.into, op.title, 'feature', key)
-        noteAdded({ card, into: op.into })
+        post.added({ card, into: op.into })
       }),
       added: notes<Added>(),
     },
@@ -60,8 +59,6 @@ export function kanban(io: KanbanServer, pollMs = 4000): Kanban {
       retry: 30,
     },
   )
-  noteAdded = op => post.added(op)
-
   const seen = laid(board, post, {
     name: 'seen',
     shape: {
