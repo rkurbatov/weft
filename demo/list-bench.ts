@@ -11,6 +11,7 @@
 
 import { classicList } from './list/classic.ts'
 import { weftList } from './list/weft.ts'
+import { flatList } from './list/flat.ts'
 import type { List } from './list/classic.ts'
 
 const arg = (name: string, fallback: number): number => {
@@ -73,7 +74,8 @@ const scenes: Scene[] = [
 
 const subjects: Array<{ name: string; open: () => List }> = [
   { name: 'cached offsets', open: () => classicList(rows) },
-  { name: 'block tree', open: () => weftList(rows) },
+  { name: 'graph tree', open: () => weftList(rows) },
+  { name: 'flat tree, delta-fed', open: () => flatList(rows) },
 ]
 
 const median = (xs: number[]): number =>

@@ -4,6 +4,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { classicList } from './classic.ts'
 import { weftList } from './weft.ts'
+import { flatList } from './flat.ts'
 
 function heights(count: number): number[] {
   const out: number[] = []
@@ -19,23 +20,29 @@ test('offsets and hit-testing agree, before and after measuring', () => {
   const rows = heights(3000)
   const a = classicList(rows)
   const b = weftList(rows)
+  const c = flatList(rows)
 
   for (const i of [0, 1, 511, 512, 513, 1500, 2999]) {
     assert.equal(b.offsetOf(i), a.offsetOf(i), `offset of ${i}`)
+    assert.equal(c.offsetOf(i), a.offsetOf(i), `flat offset of ${i}`)
   }
 
   a.measure(700, 400)
   b.measure(700, 400)
+  c.measure(700, 400)
   a.measure(2048, 30)
   b.measure(2048, 30)
+  c.measure(2048, 30)
 
   for (const i of [699, 700, 701, 2047, 2048, 2999]) {
     assert.equal(b.offsetOf(i), a.offsetOf(i), `offset of ${i} after measuring`)
+    assert.equal(c.offsetOf(i), a.offsetOf(i), `flat offset of ${i} after measuring`)
   }
 
   const total = a.offsetOf(2999)
   for (const p of [0, 1, 100, Math.floor(total / 3), total - 1]) {
     assert.deepEqual(b.at(p), a.at(p), `hit test at ${p}`)
+    assert.deepEqual(c.at(p), a.at(p), `flat hit test at ${p}`)
   }
 })
 

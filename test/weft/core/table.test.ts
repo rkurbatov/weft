@@ -342,3 +342,66 @@ test('whereLive: followers hear only the difference when the filter moves', () =
   above.dispose()
   rows.dispose()
 })
+
+test('a fold names its carrier by rule, and the choice is visible', async () => {
+  const { onPlan, TREE_WORTH_IT } = await import('#weft')
+  const heard: Array<{ name: string; carrier: string }> = []
+  const stopEar = onPlan((name, plan) => heard.push({ name, carrier: plan.carrier }))
+
+  const t = table<Row>({ key: r => r.id })
+  for (let i = 0; i < TREE_WORTH_IT + 10; i++) t.put(row(i, 'a', i))
+
+  // An inverse exists: the running accumulator wins regardless of size.
+  t.fold({ zero: 0, add: (a, r) => a + r.score, sub: (a, r) => a - r.score }, 'total')
+  // No inverse, but partials join and the collection is big: a tree.
+  t.fold({ zero: 0, add: (a, r) => Math.max(a, r.score), join: Math.max }, 'peak')
+  // Forced by hand for tests.
+  t.fold(
+    { zero: 0, add: (a, r) => Math.max(a, r.score), join: Math.max, carrier: 'recount' },
+    'peak.slow',
+  )
+
+  assert.deepEqual(heard, [
+    { name: 'total', carrier: 'running' },
+    { name: 'peak', carrier: 'tree' },
+    { name: 'peak.slow', carrier: 'recount' },
+  ])
+  stopEar()
+  t.dispose()
+})
+
+test('the tree carrier answers like the recount, and an edit pays one block', async () => {
+  const { TREE_SPAN } = await import('#weft')
+  const t = table<Row>({ key: r => r.id })
+  const N = TREE_SPAN * 4
+  for (let i = 0; i < N; i++) t.put(row(i, 'a', i))
+
+  let added = 0
+  const spec = {
+    zero: 0,
+    add: (a: number, r: Row) => {
+      added++
+      return Math.max(a, r.score)
+    },
+    join: Math.max,
+  }
+  const fast = t.fold({ ...spec, carrier: 'tree' as const }, 'peak.tree')
+  const slow = t.fold({ ...spec, carrier: 'recount' as const }, 'peak.recount')
+  const stop = subscribe(fast, () => {})
+  const stopSlow = subscribe(slow, () => {})
+  assert.equal(fast.peek(), slow.peek())
+
+  added = 0
+  t.put(row(3, 'a', 999_999))
+  assert.equal(fast.peek(), 999_999)
+  assert.equal(fast.peek(), slow.peek())
+  // The tree recounted its one dirty block; the recount walked everything.
+  assert.ok(added <= TREE_SPAN + N + 4, `added ${added}`)
+  assert.ok(added >= N, 'the recount alone walks the collection')
+
+  t.drop(3) // a hole, not a shift: the same block recounts, answers still agree
+  assert.equal(fast.peek(), slow.peek())
+  stop()
+  stopSlow()
+  t.dispose()
+})

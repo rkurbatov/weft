@@ -22,6 +22,7 @@
     "demo:build": "vite build",
     "demo:bench": "node demo/bench.ts",
     "demo:list": "node demo/list-bench.ts",
+    "demo:folds": "node demo/fold-bench.ts",
     "demo:preview": "vite preview",
     "lint": "oxlint",
     "format": "oxfmt",

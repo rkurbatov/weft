@@ -8,6 +8,7 @@
 import { cell, input } from './graph.ts'
 import type { Cell, Equal, Watchable } from './graph.ts'
 import { family } from './family.ts'
+import { TREE_SPAN, planFold } from './plan.ts'
 
 export type Key = string | number
 
@@ -24,8 +25,14 @@ export interface Patch<R> {
 }
 
 export interface FoldSpec<R, A> {
+  /** Who keeps the answer: absent or 'auto' lets the library decide by rule
+   *  (see core/plan.ts); set by hand for tests and tuning. */
+  carrier?: 'auto' | 'running' | 'tree' | 'recount'
   zero: A
   add(acc: A, row: R): A
+  /** Two partial answers into one — associative. With it (and no inverse) the
+   *  fold may be carried as a tree of blocks: one edit recounts one block. */
+  join?: (a: A, b: A) => A
   /** Undo one row. With it an edit costs O(1); without it the fold recounts. */
   sub?(acc: A, row: R): A
   equal?: Equal<A>
@@ -184,6 +191,18 @@ function follow<R>(feed: Feed<R>, on: Follower<R>): () => void {
 }
 
 function foldOver<R, A>(feed: Feed<R>, spec: FoldSpec<R, A>, name: string): Cell<A> {
+  const plan = planFold(name, {
+    size: feed.count(),
+    hasSub: spec.sub !== undefined,
+    hasJoin: spec.join !== undefined,
+    ...(spec.carrier === undefined ? {} : { forced: spec.carrier }),
+  })
+  // The carriers answer the same; what differs is who pays for one edit.
+  return plan.carrier === 'tree' ? foldByTree(feed, spec, name) : foldByAcc(feed, spec, name)
+}
+
+/** Running accumulator (or honest recount when the operation cannot undo). */
+function foldByAcc<R, A>(feed: Feed<R>, spec: FoldSpec<R, A>, name: string): Cell<A> {
   let acc = spec.zero
   const recount = (): void => {
     acc = spec.zero
@@ -210,6 +229,84 @@ function foldOver<R, A>(feed: Feed<R>, spec: FoldSpec<R, A>, name: string): Cell
     () => {
       ensure()
       return acc
+    },
+    { name, equal: spec.equal ?? Object.is },
+  )
+}
+
+/**
+ * A flat tree of block partials: rows take slots in a plain array, an edit
+ * dirties one block, a read recounts dirty blocks and joins the partials.
+ * For operations without an inverse — min, max — over big collections: one
+ * edit costs one block, not the collection. No cells per row: the deltas feed
+ * the array directly, the graph sees one answer.
+ */
+function foldByTree<R, A>(feed: Feed<R>, spec: FoldSpec<R, A>, name: string): Cell<A> {
+  const span = TREE_SPAN
+  let rows: (R | undefined)[] = []
+  let slots = new Map<Key, number>()
+  let partials: A[] = []
+  let dirty = new Set<number>()
+
+  const rebuild = (): void => {
+    rows = []
+    slots = new Map()
+    feed.each(row => {
+      slots.set(feed.keyOf(row), rows.length)
+      rows.push(row)
+    })
+    partials = []
+    dirty = new Set()
+    for (let b = 0; b * span < rows.length; b++) dirty.add(b)
+  }
+
+  const ensure = follow(feed, {
+    first: rebuild,
+    apply(changes) {
+      for (const c of changes) {
+        const at = slots.get(c.key)
+        if (c.next === undefined) {
+          // A hole, not a shift: positions hold, the block recounts around it.
+          if (at !== undefined) {
+            rows[at] = undefined
+            slots.delete(c.key)
+            dirty.add(Math.floor(at / span))
+          }
+        } else if (at === undefined) {
+          slots.set(c.key, rows.length)
+          rows.push(c.next)
+          dirty.add(Math.floor((rows.length - 1) / span))
+        } else {
+          rows[at] = c.next
+          dirty.add(Math.floor(at / span))
+        }
+      }
+    },
+    resync: rebuild,
+  })
+
+  const answer = (): A => {
+    for (const b of dirty) {
+      let part = spec.zero
+      const first = b * span
+      const last = Math.min(first + span, rows.length)
+      for (let i = first; i < last; i++) {
+        const row = rows[i]
+        if (row !== undefined) part = spec.add(part, row)
+      }
+      partials[b] = part
+    }
+    dirty.clear()
+    const join = spec.join as (a: A, b: A) => A // the plan grants 'tree' only with a join
+    let whole = spec.zero
+    for (let b = 0; b * span < rows.length; b++) whole = join(whole, partials[b] as A)
+    return whole
+  }
+
+  return cell(
+    () => {
+      ensure()
+      return answer()
     },
     { name, equal: spec.equal ?? Object.is },
   )
