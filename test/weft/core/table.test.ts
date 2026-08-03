@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { subscribe } from '#weft/core/graph.ts'
+import { input, subscribe, watch } from '#weft/core/graph.ts'
 import { table } from '#weft/core/table.ts'
 
 interface Row {
@@ -283,4 +283,62 @@ test('rank follows the living order: a birth above shifts it, absence is -1', ()
 
   t.drop(3)
   assert.equal(byScore.rank(3), -1)
+})
+
+test('whereLive: the predicate is a formula, so typing re-filters the view', () => {
+  const people = table<{ id: number; name: string }>({ key: p => p.id, name: 'people' })
+  people.put({ id: 1, name: 'anna' }, { id: 2, name: 'boris' }, { id: 3, name: 'anatoly' })
+  const query = input('', { name: 'query' })
+  const found = people.whereLive(() => {
+    const text = query.get()
+    return p => p.name.startsWith(text)
+  }, 'found')
+
+  const seen: number[] = []
+  const stop = watch(() => seen.push(found.size.get()))
+  assert.equal(seen.at(-1), 3)
+
+  query.set('an')
+  assert.equal(found.size.peek(), 2)
+  assert.deepEqual(
+    found.all.peek().map(p => p.id),
+    [1, 3],
+  )
+
+  query.set('b')
+  assert.equal(found.size.peek(), 1)
+
+  // A row arriving while the filter stands is judged by the live predicate.
+  people.put({ id: 4, name: 'bella' })
+  assert.equal(found.size.peek(), 2)
+
+  query.set('')
+  assert.equal(found.size.peek(), 4)
+  stop()
+  found.dispose()
+  people.dispose()
+})
+
+test('whereLive: followers hear only the difference when the filter moves', () => {
+  const rows = table<{ id: number; n: number }>({ key: r => r.id, name: 'rows' })
+  for (let id = 1; id <= 20; id++) rows.put({ id, n: id })
+  const floor = input(0, { name: 'floor' })
+  const above = rows.whereLive(() => {
+    const least = floor.get()
+    return r => r.n > least
+  }, 'above')
+
+  let told = 0
+  const stop = watch(() => {
+    above.size.get()
+    told++
+  })
+  assert.equal(above.size.peek(), 20)
+
+  floor.set(18)
+  assert.equal(above.size.peek(), 2)
+  assert.equal(told, 2) // one wake for the change, not one per row dropped
+  stop()
+  above.dispose()
+  rows.dispose()
 })

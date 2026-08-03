@@ -49,6 +49,9 @@ export interface Table<R> {
   /** The cell for one row; wakes only when that row moves. */
   row(key: Key): Watchable<R | undefined>
   where(test: (row: R) => boolean, name?: string): Table<R>
+  /** The same, with a predicate that is itself a formula: whatever it reads —
+   *  a search field, a chosen status — re-filters the view when it changes. */
+  whereLive(pick: () => (row: R) => boolean, name?: string): Table<R>
   orderBy(compare: (a: R, b: R) => number, name?: string): Ordered<R>
   fold<A>(spec: FoldSpec<R, A>, name?: string): Watchable<A>
   count(test?: (row: R) => boolean): Watchable<number>
@@ -326,10 +329,18 @@ function orderedOver<R>(feed: Feed<R>, compare: (a: R, b: R) => number, name: st
   }
 }
 
-function whereOver<R>(parent: Feed<R>, test: (row: R) => boolean, name: string): Table<R> {
+/** Before the first predicate arrives nothing is filtered out. */
+const passes = (): boolean => true
+
+function whereOver<R>(parent: Feed<R>, pick: () => (row: R) => boolean, name: string): Table<R> {
   const state = new Map<Key, R>()
   const log = changeLog<R>(KEEP)
   let v = 0
+  // The living predicate: whatever `pick` reads is a dependency, so a filter
+  // typed into a field is an ordinary cell change, not a rebuild by hand.
+  const chosen = cell(pick, { name: `${name}.test` })
+  let test: (row: R) => boolean = passes
+  let judged = false
 
   const rebuild = (): Map<Key, R> => {
     const fresh = new Map<Key, R>()
@@ -337,6 +348,20 @@ function whereOver<R>(parent: Feed<R>, test: (row: R) => boolean, name: string):
       if (test(row)) fresh.set(parent.keyOf(row), row)
     })
     return fresh
+  }
+
+  /** Take the rebuilt picture, but tell followers only the difference. */
+  const settleTo = (fresh: Map<Key, R>): void => {
+    const mine: Change<R>[] = []
+    for (const [key, row] of fresh) {
+      const had = state.get(key)
+      if (had === undefined) mine.push({ key, next: row })
+      else if (!Object.is(had, row)) mine.push({ key, prev: had, next: row })
+    }
+    for (const [key, had] of state) if (!fresh.has(key)) mine.push({ key, prev: had })
+    state.clear()
+    for (const [key, row] of fresh) state.set(key, row)
+    if (mine.length > 0) log.push(++v, mine)
   }
 
   const ensure = follow(parent, {
@@ -360,23 +385,21 @@ function whereOver<R>(parent: Feed<R>, test: (row: R) => boolean, name: string):
     },
     resync() {
       // A diff against the rebuilt picture keeps our own followers incremental.
-      const fresh = rebuild()
-      const mine: Change<R>[] = []
-      for (const [key, row] of fresh) {
-        const had = state.get(key)
-        if (had === undefined) mine.push({ key, next: row })
-        else if (!Object.is(had, row)) mine.push({ key, prev: had, next: row })
-      }
-      for (const [key, had] of state) if (!fresh.has(key)) mine.push({ key, prev: had })
-      state.clear()
-      for (const [key, row] of fresh) state.set(key, row)
-      if (mine.length > 0) log.push(++v, mine)
+      settleTo(rebuild())
     },
   })
 
   const version = cell(
     () => {
+      const next = chosen.get()
+      const moved = judged && next !== test
+      test = next
+      judged = true
       ensure()
+      // A new predicate means every row is judged again — but followers still
+      // hear only what actually moved. The first build is not a move: the
+      // predicate arrives before anything has been judged by it.
+      if (moved) settleTo(rebuild())
       return v
     },
     { name: `${name}.version` },
@@ -394,7 +417,10 @@ function whereOver<R>(parent: Feed<R>, test: (row: R) => boolean, name: string):
     changesSince: seen => log.since(seen, v),
   }
 
-  return tableOver(feed, () => version.dispose())
+  return tableOver(feed, () => {
+    version.dispose()
+    chosen.dispose()
+  })
 }
 
 /** The reading surface every table shares, source and derived alike. */
@@ -430,7 +456,8 @@ function tableOver<R>(feed: Feed<R>, dispose: () => void): Table<R> {
     size,
     all,
     row: key => rows(key),
-    where: (test, name) => whereOver(feed, test, name ?? `${feed.name}.where`),
+    where: (test, name) => whereOver(feed, () => test, name ?? `${feed.name}.where`),
+    whereLive: (pick, name) => whereOver(feed, pick, name ?? `${feed.name}.where`),
     orderBy: (compare, name) => orderedOver(feed, compare, name ?? `${feed.name}.order`),
     fold: (spec, name) => foldOver(feed, spec, name ?? `${feed.name}.fold`),
     count: test =>
