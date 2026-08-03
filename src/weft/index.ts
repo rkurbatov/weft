@@ -34,6 +34,8 @@ export { planFold, onPlan, TREE_SPAN, TREE_WORTH_IT } from './core/plan.ts'
 export type { Plan, Carrier, FoldTraits } from './core/plan.ts'
 export { blocks } from './core/blocks.ts'
 export type { Blocks, BlockOptions } from './core/blocks.ts'
+export { offsets } from './core/offsets.ts'
+export type { Offsets } from './core/offsets.ts'
 
 export { source, fresh, arrivalOf } from './core/source.ts'
 export type { Source, SourceOptions } from './core/source.ts'
