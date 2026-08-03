@@ -5,17 +5,17 @@
 // sender that creates state must hand the key to the world, and the world
 // must recognize a repeat by it.
 
-import { cell, input } from '../core/graph.ts'
-import type { Watchable } from '../core/graph.ts'
-import { memoryStore } from '../core/store.ts'
-import type { Store } from '../core/store.ts'
-import { outbox } from '../core/outbox.ts'
-import type { Entry, Handler } from '../core/outbox.ts'
+import { cell, input } from '#core/graph.ts'
+import type { Watchable } from '#core/graph.ts'
+import { memoryStore } from '#core/store.ts'
+import type { Store } from '#core/store.ts'
+import { outbox } from '#core/outbox.ts'
+import type { Entry, Handler } from '#core/outbox.ts'
 
 /** The dialect's word for what the book holds: a note of intent. */
 export type Note = Entry
-import type { Fault } from '../core/remote.ts'
-import type { Timers } from '../core/time.ts'
+import type { Fault } from '#core/remote.ts'
+import type { Timers } from '#core/time.ts'
 
 declare const OP: unique symbol
 

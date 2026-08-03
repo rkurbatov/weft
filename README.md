@@ -1,8 +1,20 @@
-# weft
+# Weft
 
-The weft woven across Warp's warp: a live-state layer — a cell graph that lives outside the React tree, delivery owned by sources, requirements stated from above. A TypeScript library that runs alongside whatever you already have; Redux can stay switched on while domains move over one at a time.
+The weft woven across Warp's warp: a live-state engine — a cell graph that lives outside the React tree, delivery owned by sources, requirements stated from above. A TypeScript library that runs alongside whatever you already have; Redux can stay switched on while domains move over one at a time.
 
 The rule everything else follows from: **store only what came from outside**. Anything computable is a formula, and its dependencies are written once — inside it. The test for a broken model: if you ever need the word _invalidate_, some dependency is written down twice.
+
+## Who this is for
+
+Three things share this line of work, and they are judged differently.
+
+**Warp** is the language the model came from; its corpus lives in its own repository.
+
+**Weft** — `src/core` and `src/link` here — is the engine: the same semantics running today, without a compiler, in a browser. It is judged by whether it is sufficient, flexible and fast, not by whether it reads nicely. Nobody is expected to write an application directly against it.
+
+**Loom** — `src/loom` — is the speech of Weft for the person writing an application: five words, one seam, and a carrier. Everything about readability is asked of Loom.
+
+So this README is the machine room. If you want to know how an application is written, read the dialect; if you want to know how the machinery works, or you are writing another translator over the same engine, you are in the right place.
 
 ## What's here
 
@@ -12,47 +24,55 @@ Propagation is pull-based over three states. A write marks its direct consumers 
 
 Tested properties: a formula nobody reads is never run; a diamond recomputes once, not twice; a watcher never sees a half-updated picture; the branch a conditional didn't take is not a dependency; a write from inside a watcher settles in the same round.
 
-**`src/core/command.ts` — commands.** The only way anything reaches the world. A handle gives you the start (`run`), the wait (it returns a promise), and the observable state — idle, running, done, failed, with timestamps. `pending`, `result` and `error` are ordinary cells, so a formula may depend on them: a button greys out because its own condition reads `pending`, not because someone set a flag next to it. Failure is a state _and_ a rejected promise, so the caller can handle it on the spot as well.
+**Demand,** also in the graph. It is counted along the links, which is what lets a source know it is being watched: a watcher contributes one, a formula passes it up while anything demands it, and dropping a dependency releases the source it held. Source hooks run after the graph settles, never inside a formula, so an adapter may write its own cell from them. The cold watch is a primitive too — `watch(body, { demand: false })` sees the changes that occur anyway without counting as demand, which is exactly what persistence, logging and devtools want.
+
+**`src/core/command.ts` — commands.** A handle gives you the start (`run`), the wait (it returns a promise), and the observable state — idle, running, done, failed, with timestamps. `pending`, `result` and `error` are ordinary cells, so a formula may depend on them: a button greys out because its own condition reads `pending`, not because someone set a flag next to it. Failure is a state _and_ a rejected promise.
 
 What a second press does is declared, not hand-rolled. `drop` (the default) makes the second press ride the first promise and runs the body once — that is double-submit protection. `restart` is for search and suggestions: the older attempt loses its claim on the state through a generation counter, so its answer is ignored rather than applied late over the newer one.
 
 **`src/core/family.ts` — families.** One cell per entity, built on first demand: `item(id)` hands back the same cell for the same key, so a card subscribes to its own row and nothing else. A member nobody watches is a cache entry rather than state, so it is dropped past a stated ceiling (LRU) or on `sweep()`; a watched member is never dropped, because its watchers hold that very cell. Dropping is not destruction — the next read rebuilds the member from its current sources. Object keys need a `keyOf`; strings, numbers, booleans and bigints work as they are.
 
-**`src/core/remote.ts` — the state of what came from outside.** One shape — empty, in flight, a value with the moment it arrived, or a refusal — instead of a value with flags beside it. A flight and a refusal both carry whatever is already held, so a screen keeps showing the last good answer instead of blanking. Every variant carries the same flat fields — `state.value`, `state.at`, `state.error`, `state.loading` — so a screen reads it without helpers, while `kind` keeps the exact story for whoever needs it.
+**`src/core/remote.ts` — the state of what came from outside.** One shape — empty, in flight, a value with the moment it arrived, or a refusal — instead of a value with flags beside it. A flight and a refusal both carry whatever is already held, so a screen keeps showing the last good answer instead of blanking. Every variant carries the same flat fields — `state.value`, `state.at`, `state.error`, `state.loading` — so a screen reads it without helpers, while `kind` keeps the exact story. A refusal names its kind: transient, permanent, rejected — plus `unknown`, which is not a refusal at all but a third outcome, the one where the world may well have done the work.
 
-**`src/core/source.ts` — sources.** Delivery lives here and nowhere else: fetching, polling, shelf life, retries with growing waits. A source runs only while something live watches it — the first watcher starts it, the last one to leave stops it, and an unwatched screen therefore costs nothing. A new watcher within shelf life gets the answer already held; past it, a refetch. A second demand rides the flight already under way instead of duplicating it; `refresh()` starts a new one and disowns the older answer. The clock and the timers are injectable, so all of this is tested without waiting.
+`together` and `firstOf` reduce several outcomes into one: all-of, where the first refusal follows declaration order and the summary is as old as its oldest part; and first-of, where argument order is priority rather than a race, and among the empty-handed hope outranks refusal.
 
-**`src/core/graph.ts` — demand.** The graph counts demand along its links, which is what lets a source know it is being watched: a watcher contributes one, a formula passes it up while anything demands it, and dropping a dependency releases the source it held. Source hooks run after the graph settles, never inside a formula, so an adapter may write its own cell from them.
+**`src/core/source.ts` — sources.** Delivery lives here and nowhere else: fetching, polling, shelf life, retries with growing waits and jitter. A source runs only while something live watches it — the first watcher starts it, the last one to leave stops it, and an unwatched screen therefore costs nothing. A new watcher within shelf life gets the answer already held; past it, a refetch. A second demand rides the flight already under way, and losing demand aborts that flight through the signal the loader was handed. `calm` is the quiet a look must outlive before a question is asked — debounce as a line in the passport rather than an operator over a stream. A timeout resolves to `unknown` rather than a refusal, and only transient and unknown outcomes retry by themselves: a source is a read, and a read is safe to repeat. The clock and the timers are injectable, so all of this is tested without waiting.
 
-**Requirements.** A consumer states what it needs rather than arranging how to get it: `feed.require(200)` says "this must not be older than 200ms" and hands back the withdrawal. The strictest live requirement sets the pace; when it goes, the pace relaxes to the next one; when the last goes, the source falls quiet. Stating a requirement against something already too old asks at once instead of waiting for the next turn of the wheel. A source may declare a `floor` it will not be asked below, and `onUnmet` is told when a requirement asks for more than the floor allows — the honest limit of a library: it can report at runtime what a compiler would refuse before it ran.
+**Requirements.** A consumer states what it needs rather than arranging how to get it: `feed.require(200)` says "this must not be older than 200ms" and hands back the withdrawal. The strictest live requirement sets the pace; when it goes, the pace relaxes to the next one; when the last goes, the source falls quiet. A source may declare a `floor` it will not be asked below, and `onUnmet` is told when a requirement asks for more than the floor allows — the honest limit of a library: it reports at runtime what a compiler would refuse before the program ran. `fresh(feed, within)` ties the two together, and `arrivalOf(feed)` is the promise of a landing: asking for it is itself demand, which is what makes suspense honest rather than a forced fetch.
 
-`fresh(feed, within)` ties the two together: a view of a source that holds a requirement for exactly as long as somebody watches it, so nothing has to be released by hand. In React that is `useSource(feed, { within: 200 })` — mounting is the requirement, unmounting withdraws it.
+**`src/core/query.ts` — parametric sources.** A family of sources by key: the same key is the same source, so identical questions collapse by construction, and a changed key is simply another source — the old one loses demand and falls quiet, which is what cancellation amounts to here. Seniority is a law rather than machinery: a new question devalues an unresolved old one, and a late answer is not accepted even into its own cell. The ceiling is stated, never silent, and only unwatched members count against it.
 
-**`src/core/keep.ts` — persistence.** Only stored cells are kept; a formula is recomputed, never restored. What is written carries the moment it arrived and a schema version, so an answer that survives a reload is honest about its age: within shelf life it is served as it stands and nothing is asked, past it the first demand refetches while the old value stays on screen. Another version is dropped unless a `migrate` rescues it; anything past `maxAge` is dropped; rubbish on disk is dropped rather than thrown. A refusal never overwrites a good answer. Watching is cold — persistence records what happens anyway and asks for nothing, so keeping a source does not make it fetch.
+**`src/core/table.ts` — live collections.** Entities by identity, fed by deltas: `put`, `drop`, `apply`, `replace`, with `wins` deciding seniority when a late page meets a fresh event. Views are ordinary cells — `where`, `orderBy` with `slice` (a window that wakes only when the window moves), `fold` with an inverse where one exists, `count`, `sumBy`, `row(key)`, `rank(key)`. A change log lets a follower that fell behind resync by difference instead of rebuilding. Tested against an oracle: three hundred random operations against a naive recomputation at every step.
 
-The cold watch is a graph primitive: `watch(body, { demand: false })` sees the changes that occur anyway without counting as demand. Persistence, logging and devtools want exactly that.
+**`src/core/keep.ts`, `store.ts`, `idb.ts` — persistence.** Only stored cells are kept; a formula is recomputed, never restored. What is written carries the moment it arrived and a schema version, so an answer that survives a reload is honest about its age. Another version is dropped unless a `migrate` rescues it; anything past `maxAge` is dropped; rubbish on disk is dropped rather than thrown. The store is asynchronous because a worker has no synchronous one: `idbStore` opens lazily at the current version, survives another tab's upgrade, and commits explicitly. Restoring never delays the first paint, and an edit or an answer that beat the disk wins over what the disk held. A failed write is a declared state — `saving` says ok, or gives the reason — not silence.
 
-**`src/core/outbox.ts` — the outbox.** A command that reached for the world is written down before it is sent and leaves the book only when the world confirms it, so a tab dying mid-flight loses nothing. Each entry carries an idempotency key — the same one on every attempt, including after a reload — which is what makes a repeat safe rather than a second purchase. Entries go one at a time in the order they were written: order is part of the promise. A refusal is retried with growing waits; past `maxAttempts` the entry gets stuck and waits for a person, and `again(id)` or `forget(id)` decides its fate. An entry whose handler is unknown after a deploy gets stuck rather than vanishing. What is owed is an ordinary cell, so a screen can show "3 unsent" without asking anybody.
+**`src/core/outbox.ts` — the outbox.** A command that reached for the world is written down before it is sent and leaves the book only when the world confirms it, so a tab dying mid-flight loses nothing. Each entry carries an idempotency key — the same one on every attempt, including after a reload — which is what makes a repeat safe rather than a second purchase. Entries go one at a time in the order they were written. A permanent refusal withdraws the entry at once and hands it to `onRefused` with the last error: nothing dies quietly. An unknown outcome does not count towards poison, so a blinking network does not bury live entries. Past `maxAttempts` an entry sticks and waits for a person; `again(id)` and `forget(id)` are the two doors, and both leave a trace. With `retain`, a confirmed entry stays in the book as done until `absorb(before)` takes it — which is what lets an overlay survive the gap between confirmation and the next snapshot.
 
-**`src/core/reconcile.ts` — reconciliation.** Something outside must match a value inside: request headers match the identity, a socket subscription matches the row on show. The rule is to watch the value itself rather than the events that might have changed it — then there is no list of triggers, and nothing to go stale when a fourth thing starts feeding that value. Following is cold by default: a reconciliation does not keep a source awake on its own, though `demand: true` says otherwise. While one value is being applied a newer one supersedes the ones between, because the world was never in those states. Refusals are retried with growing waits and then reported; a new value clears the refusal and starts over.
+**`src/core/project.ts`, `arrange.ts` — base and overlay.** `projected(base, book, {apply})` replays the book over the truth in queue order; a refusal rolls nothing back, because the entry simply is not there any more and the projection is recomputed. `preserve` restores identity — the same piece is the same object, recursively — so memoised screens and equality gates keep working through replays and reloads. `Lanes` with `lanePlace` / `laneDrop` / `laneAppend` / `laneFind` is the vocabulary of arrangement: absolute, total, void without a subject and idempotent by construction, rather than by the discipline of whoever writes the rules.
 
-**`src/link/` — placement.** The graph is meant to live in a worker, so the boundary is designed for rather than retrofitted. A `Channel` is two functions — send and listen; `serve(surface, channel)` publishes named cells, keyed families and commands from the graph's side; `link(channel)` gives the watching side mirrors and command handles. A mirrored cell is an ordinary stored cell holding the same `Remote` shape a source does — one vocabulary on both sides of the wire — and its single writer is the wire, so **demand crosses the boundary by itself**: watching a mirror is what asks the other side for it, and the last watcher leaving is what stops it. Changes are coalesced per cell and flushed on a schedule you pass in — once a frame in a browser, at once in tests — so a slow reader gets what is true now rather than a queue of what was.
+**`src/core/region.ts` — lifetime.** `region(name, build)` owns everything created while it builds — cells, watches, timers, sources — and puts it out in one move, in reverse order of birth, with names nesting for debugging. Each primitive knows its own teardown: a source stops its clock and disowns its flight, a book keeps its entries whole.
 
-Two more arrangements come with it. `busHub(name)` and `channelOverBus(name)` put the graph in one tab and watchers in the others over a `BroadcastChannel`; because a bus carries everything to everybody, the envelope says who a message is from and for, and the hub hands each tab a channel of its own. `sharedWorkerHub(self)` and `channelToSharedWorker(port)` are the same shape for a shared worker — one graph per origin, a port per tab. Where shared workers are missing, `leadOrFollow` decides which tab holds the graph by holding a lock: a tab follows at once and takes over the moment the lock comes to it, which in a browser is the moment the leading tab dies. The lock is passed in rather than reached for, so it is testable without a browser.
+**`src/core/waves.ts`, `journal.ts` — observation.** A wave is the natural unit of the graph's work: a batch of writes into inputs, the recomputations it causes, the gates where it died, the watchers it woke. A wave follows a write; a read is a question, not a wave. The probe costs one null check while it is off. The journal answers both questions a debugger owes — why did this recompute (a trace back along the edges to the writes) and why did this _not_ update (the gate where the wave stopped) — and `replay` is a time machine over inputs, honest about its border: what formulas derive is rebuilt, what lives outside the graph is not. `trace(node)` looks without touching.
 
-The graph announces itself when it starts, and a watcher that outlived the last one asks again for everything it is still watching — a worker restart or a change of leader costs a round trip, not a stale screen.
+**`src/core/reconcile.ts` — reconciliation.** Something outside must match a value inside: request headers match the identity, a socket subscription matches the row on show. The rule is to watch the value itself rather than the events that might have changed it — then there is no list of triggers, and nothing to go stale when a fourth thing starts feeding that value. Following is cold by default. While one value is being applied a newer one supersedes the ones between, because the world was never in those states.
 
-A tab that dies cannot say goodbye, so both hubs hold each tab by a lease: anything the tab says renews it, the tab's channel keeps a heartbeat while somebody listens on its end, and a lease that runs out releases that tab's watches — and the demand they held. A tab let go by mistake recovers on its own: its next message earns it a fresh channel, whose serve announces itself. Closing a link releases its watches at once rather than by lease. And a call still waiting when the graph restarts, or when the link closes, is rejected with `Unknown` rather than an ordinary error — the other side may have done the work, and pretending it refused would license a retry that is only safe if the command is.
+**`src/link/` — placement.** The graph is meant to live in a worker, so the boundary is designed for rather than retrofitted. A `Channel` is two functions — send and listen; `serve(surface, channel)` publishes named cells, keyed families, commands and declared facts from the graph's side; `link(channel)` gives the watching side mirrors and command handles. A mirrored cell is an ordinary stored cell holding the same `Remote` shape a source does — one vocabulary on both sides of the wire — and its single writer is the wire, so **demand crosses the boundary by itself**. Changes are coalesced per cell and flushed on a schedule you pass in — once a frame in a browser, at once in tests — and the frame races a timer, because a background tab's frame never arrives at all.
 
-`pairInMemory()` is the two ends in one process, and it clones messages on the way exactly as a real boundary would, so a value that could not survive the crossing fails in the tests rather than in the browser. `channelOverPort(port)` covers a browser worker or any message port that behaves like one; the test suite runs the whole protocol over a real `MessageChannel` as well as in memory.
+Two more arrangements come with it. `busHub(name)` and `channelOverBus(name)` put the graph in one tab and watchers in the others over a `BroadcastChannel`; because a bus carries everything to everybody, the envelope says who a message is from and for, and the hub hands each tab a channel of its own. `sharedWorkerHub(self)` and `channelToSharedWorker(port)` are the same shape for a shared worker. Where shared workers are missing, `leadOrFollow` decides which tab holds the graph by holding a lock: a tab follows at once and takes over the moment the lock comes to it, which in a browser is the moment the leading tab dies. The lock is passed in rather than reached for, so it is testable without a browser.
 
-**`src/react/hooks.ts` — the seam,** deliberately thin. `useCell` subscribes a component to one value through `useSyncExternalStore`. `useCommand` hands a command to the tree with a stable `start` reference, so it can go straight into handlers and dependency arrays.
+The graph announces itself when it starts, and a watcher asks again for everything it still watches — a worker restart or a change of leader costs a round trip, not a stale screen. A tab that dies cannot say goodbye, so both hubs hold each tab by a lease that anything it says renews, while the tab keeps a heartbeat with a fast introduction. An idle mirror is let go after `linger`, but its handle stays alive: the next look re-registers the very same mirror. And a call still waiting when the graph restarts, or when the link closes, is rejected with `Unknown` rather than an ordinary error — the other side may have done the work, and pretending it refused would license a retry that is only safe if the command is.
+
+`pairInMemory()` is the two ends in one process, cloning messages on the way exactly as a real boundary would, so a value that could not survive the crossing fails in the tests rather than in the browser. `channelOverPort(port)` covers a browser worker or any message port; the suite runs the whole protocol over a real `MessageChannel` as well as in memory.
+
+**`src/loom/` — the dialect.** Five words over the engine: `fact` (the door for what the person states), `truth` and `truthBy` (the door for what the world says — read as a plain value, with flight, fault and asked standing beside it as adjectives), `will` (the door for intent: a typed dictionary of messengers over the book), `view` (a formula), `laid` (the picture — truth plus the replay of the book). `useLive` and `useField` are its seam; `offer`, `adopt` and `carry` are the carrier, which decides where the station lives — inline, or in a leading tab with the others mirroring — without the dialect noticing. It is documented on its own; here it is enough to say that it imports the engine and the engine knows nothing about it.
+
+**`src/react/hooks.ts` — the engine's seam,** deliberately thin: `useCell`, `useCommand`, `useSource`, `useInputBinding`. The dialect's seam is separate, in `src/loom/react.ts`.
 
 ## Where it stands
 
-The line of work this repository set out to do is done: graph, commands, families, remote state, sources with demand-driven delivery, freshness requirements, persistence, an outbox, reconciliation — 164 tests, no build step, no runtime dependencies. `src/index.ts` is the front door; React lives behind `#weft/react` so the graph stays usable and testable without it.
+The engine is built: graph, commands, families, remote state, sources with demand-driven delivery and policies, parametric queries, live tables, persistence on IndexedDB, an outbox with keys and doors, projection and arrangement, regions, waves and a journal, the wire with leases and leadership — and the dialect on top of it. 266 tests, no build step, no runtime dependencies. `src/index.ts` is the front door; React lives behind `#weft/react`, the dialect behind `#loom`.
 
-What is not done, and should be said plainly: none of this has met a real application yet. The next honest step is one domain of a live product moved over whole — not a demo — and the numbers that come out of it. After that, the parts a library cannot reach: purity by construction, a verdict before the program runs, and incremental recomputation inside a formula rather than around it.
+What is not done, and should be said plainly. No live application has been moved onto this yet — the demos are stands, and the honest next step is one domain of a real product, whole. The block-wise totals that give the largest measured win still live in a demo rather than in the library. The dialect has no word for a delta-fed collection, so the rail stand reaches for the engine's table directly — the one leak the dialect promised not to have. And a leading tab is not yet obliged to keep its book on disk: the mechanism survives succession and a test proves it, but nothing in assembly enforces the shelf.
 
 ## What the library asks of values
 
@@ -62,13 +82,15 @@ The graph does not know what is in a cell, and does not want to. What it does re
 
 **Equality is a real equivalence relation.** Propagation stops where a recomputed value equals the old one, so `equal` decides what the rest of the system believes. The default is `Object.is`, which is right for numbers, strings and shared objects, and wrong for a value rebuilt on every run — pass an `equal` that compares content, or the wave never dies. (`0` and `-0` are different under `Object.is`; a formula flipping between them wakes watchers for nothing.)
 
-**Anything to be recomputed in pieces must be exact and associative in its own type.** This one is not needed yet — whole formulas are recomputed whole — but it is the price of the next step. A block-wise total is only the same number as a left-to-right total if addition is associative, and floating point's is not. That is why the demo carries its own decimal arithmetic (`demo/common/dec.ts`, a count of millionths in an integer), and why in Warp the decimal types are the floor while binary floats are for physics rather than for anything the engine reassembles.
+**Anything recomputed in pieces must be exact and associative in its own type.** A block-wise total is only the same number as a left-to-right total if addition is associative, and floating point's is not. That is why the demo carries its own decimal arithmetic (`demo/common/dec.ts`, a count of millionths in an integer), and why in Warp the decimal types are the floor while binary floats are for physics rather than for anything the engine reassembles.
+
+**Anything crossing a thread boundary must survive structural cloning.** No classes with methods, no functions inside values.
 
 ## Two spreadsheets
 
 `demo/` holds the same spreadsheet twice: `spreadsheet/` keeps its state by hand, `spreadsheet-weft/` keeps it on this library. The grid, the formula language, the sample sheet and the instrumentation are shared in `demo/common/`, so what differs is only who keeps the values.
 
-The hand-written one needs 175 lines for that — a 146-line store and a 29-line dependency scan it cannot do without: a store of texts, what each cell reads and who reads it kept in both directions, the transitive stain of a change, Kahn's order over it, a loop search for whatever the order leaves out, and a subscription per cell. The weft one needs 99, and none of those words appear in it — a cell's text is an `input`, its value is a `family` member whose formula reads its neighbours, and reading is what records the dependency. A loop is not searched for: reading a cell that is busy computing throws, and that becomes `#CYCLE!`.
+The hand-written one needs 175 lines for that — a 146-line store and a 29-line dependency scan it cannot do without: a store of texts, what each cell reads and who reads it kept in both directions, the transitive stain of a change, Kahn's order over it, a loop search for whatever the order leaves out, and a subscription per cell. The one on this library needs 99, and none of those words appear in it — a cell's text is an `input`, its value is a `family` member whose formula reads its neighbours, and reading is what records the dependency. A loop is not searched for: reading a cell that is busy computing throws, and that becomes `#CYCLE!`.
 
 Both pass the same seven questions (`store.test.ts`, `sheet.test.ts`) — the same values, the same cells told, the same recovery when a loop is cut. What differs is the bill. On a sheet of 26,000 cells with 780 on screen, measured by `pnpm demo:bench`:
 
@@ -85,7 +107,7 @@ Run it yourself rather than trusting the figures — they are one machine's, and
 
 `demo/spreadsheet-weft/blocks.ts` answers a long total from a tree of partial sums rather than by reading every cell: blocks of 32, blocks of blocks above them, each partial an ordinary cell. One edit then touches one partial per level and the total. Trees run both ways — down a column and along a row — and a rectangle is cut into lines along its longer side, since that is the side a tree pays on.
 
-It is worth building here and nowhere else. Each partial is a cell, so what depends on what — and what has to be redone — is the graph's business; the hand-written sheet could keep the same tree, but would have to invalidate it level by level, by hand. And it is only correct because the arithmetic underneath is exact: a total assembled from blocks is the same number as a total added left to right, which floating point would not give.
+It is worth building here and nowhere else. Each partial is a cell, so what depends on what — and what has to be redone — is the graph's business; the hand-written sheet could keep the same tree, but would have to invalidate it level by level, by hand. And it is only correct because the arithmetic underneath is exact.
 
 Measured with the totals row on screen, so the long column sums are live — the bench's second scene, a run of its own (so the classic row differs from the table above):
 
@@ -100,33 +122,46 @@ Three honest things in that table. The middle row is _worse_ than the hand-writt
 
 Chasing that middle row also found a real fault in the library: `family` reordered its LRU on every read — a map delete and insert per lookup — which is pure cost while the ceiling is far away. Reordering now happens only as the ceiling comes into sight, and the same scene went from 95ms to 16ms.
 
+This is the largest measured win above the graph, and it is still demo code. Moving it into the collections layer is an open debt.
+
+## The other stands
+
+`demo/kanban-classic` and `demo/kanban-weft` are the same board twice: Redux with redux-observable, reselect and hand-written optimism against the dialect over this engine — same server, same screen, same six trials. The trials are written once (`demo/kanban-weft/suite.ts`) and run twice: in place, and through a mirror against a station across a cloning channel, so the carrier has to prove that placement changes nothing. `demo/kanban-tabs` is that board carried — several tabs on one state, the leader elected by a lock, the book surviving succession. `demo/rail` is pages plus a live ticker: a table fed by deltas, shelves by status, a virtual window that anchors on the row you are looking at, search with `calm`, and two services reduced into one outcome. `demo/spreadsheet-tabs` is the older multi-window stand, kept for a simpler read of the same idea.
+
 ## One package
 
 The library, its tests and the demos are a single package with one `tsconfig.json` and one set of scripts. Nothing crosses a package boundary, so nothing has to be kept in step: no workspace, no alias table, no second compiler config.
 
-Anything crossing a directory goes through Node's own subpath imports, declared in `package.json`; inside a directory, relative paths stay relative.
+Anything crossing a directory goes through Node's own subpath imports, declared in `package.json`; inside a directory, relative paths stay relative. That rule is what keeps the units visible in one package: `src/loom` names its dependence on the engine as `#core/…` and `#link/…` lines rather than climbing `../` — grep those and you have the whole boundary. Tests are laid out the same way — `test/core`, `test/link` and `test/react` are the engine's, `test/loom` is the dialect's, and each stand keeps its own tests beside it.
 
 ```json
 "imports": {
   "#core/*": "./src/core/*",
   "#link/*": "./src/link/*",
   "#weft": "./src/index.ts",
-  "#weft/react": "./src/react/hooks.ts"
+  "#weft/react": "./src/react/hooks.ts",
+  "#loom": "./src/loom/index.ts",
+  "#loom/react": "./src/loom/react.ts"
 }
 ```
 
-`import { cell } from '#core/graph.ts'` inside the library, `import { input, family } from '#weft'` and `import { useCell } from '#weft/react'` from a demo — resolved by Node itself, understood by the compiler under `nodenext`, and understood by Vite. There is no `paths` mapping and no bundler alias to drift.
+`import { cell } from '#core/graph.ts'` inside the library, `import { input, family } from '#weft'` from a stand that works the engine, `import { fact, truth, will } from '#loom'` from one that speaks the dialect — resolved by Node itself, understood by the compiler under `nodenext`, and understood by Vite. There is no `paths` mapping and no bundler alias to drift.
 
 ## Running it
 
 ```
-pnpm test          # library and demo tests in one run
+pnpm test          # everything in one run, including the render lane
+pnpm test:weft     # the engine: core, the wire, the React seam
+pnpm test:loom     # the dialect and its render lane
+pnpm test:stands   # the demos
 pnpm check         # types, including the Vite config
 pnpm lint          # oxlint
 pnpm format        # oxfmt, in place (format:check to only look)
-pnpm demo          # the two spreadsheets, side by side
+pnpm demo          # every stand behind one menu
 pnpm demo:build    # then demo:preview to serve what was built
 pnpm demo:bench    # the two sheets measured against each other, without React
 ```
 
-Node 26 strips types on its own, so there is no build step for the library or its tests; Vite is only there for the demos.
+Node 26 strips types on its own, so there is no build step for the library or its tests; Vite is only there for the demos. The render lane runs in the same runner: happy-dom registered once at the top of the file, React under `act`, no second framework.
+
+Names in prose are capitalised — Warp, Weft, Loom; in code, paths and packages they stay lowercase — `weft`, `loom`, `@textrinum/weft`.

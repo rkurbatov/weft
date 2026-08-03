@@ -5,20 +5,20 @@
 // laying and the truths live in the station only; a tab holds nothing but
 // mirrors.
 
-import { cell, input } from '../core/graph.ts'
-import type { Input, Watchable } from '../core/graph.ts'
-import { heldOf } from '../core/remote.ts'
-import { preserve } from '../core/project.ts'
-import { journal } from '../core/journal.ts'
-import { quietly } from '../core/waves.ts'
-import type { WaveSummary } from '../core/waves.ts'
-import { serve } from '../link/serve.ts'
-import type { ServeOptions } from '../link/serve.ts'
-import { link } from '../link/link.ts'
-import type { LinkOptions } from '../link/link.ts'
-import type { Channel } from '../link/channel.ts'
-import type { Lock } from '../link/lead.ts'
-import { subscribe } from '../core/graph.ts'
+import { cell, input } from '#core/graph.ts'
+import type { Input, Watchable } from '#core/graph.ts'
+import { heldOf } from '#core/remote.ts'
+import { preserve } from '#core/project.ts'
+import { journal } from '#core/journal.ts'
+import { quietly } from '#core/waves.ts'
+import type { WaveSummary } from '#core/waves.ts'
+import { serve } from '#link/serve.ts'
+import type { ServeOptions } from '#link/serve.ts'
+import { link } from '#link/link.ts'
+import type { LinkOptions } from '#link/link.ts'
+import type { Channel } from '#link/channel.ts'
+import type { Lock } from '#link/lead.ts'
+import { subscribe } from '#core/graph.ts'
 
 export interface Offering {
   views?: Readonly<Record<string, Watchable<unknown>>>
@@ -120,9 +120,9 @@ export function adopt(channel: Channel, options: LinkOptions = {}): Adopted {
 // and serves the rest; without them the station lives right here, inline.
 // A SharedWorker carrier stays an explicit two-entry wiring for now.
 
-import { busHub, channelOverBus } from '../link/bus.ts'
-import { leadOrFollow, webLocks } from '../link/lead.ts'
-import { pairInMemory } from '../link/ports.ts'
+import { busHub, channelOverBus } from '#link/bus.ts'
+import { leadOrFollow, webLocks } from '#link/lead.ts'
+import { pairInMemory } from '#link/ports.ts'
 
 export interface Carried {
   /** This side's channel to whoever carries the station. */

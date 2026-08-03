@@ -3,11 +3,11 @@
 // what re-renders the component, structural equality gates the rest.
 
 import { useCallback, useRef, useSyncExternalStore } from 'react'
-import { cell, subscribe } from '../core/graph.ts'
-import type { Cell } from '../core/graph.ts'
-import { alike } from '../core/table.ts'
+import { cell, subscribe } from '#core/graph.ts'
+import type { Cell } from '#core/graph.ts'
+import { alike } from '#core/table.ts'
 
-export { useInputBinding as useField } from '../react/hooks.ts'
+export { useInputBinding as useField } from '#weft/react'
 
 export function useLive<T>(formula: () => T): T {
   const body = useRef(formula)

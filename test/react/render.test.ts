@@ -1,7 +1,7 @@
-// The render lane: the hooks under a real DOM and React's act, on the same
-// node:test runner as everything else. What is tested here is the seam law:
-// demand flows through the tree, gating reaches it, a suspended cold start
-// asks the world exactly once — StrictMode's double render included.
+// The engine seam's render lane: the hooks under a real DOM and React's act,
+// on the same node:test runner as everything else. What is tested here is the
+// seam law: demand flows through the tree, gating reaches it, a suspended cold
+// start asks the world exactly once — StrictMode's double render included.
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
@@ -148,36 +148,5 @@ test('useSourceValue: a refusal with empty hands lands in the boundary', async (
     await wait(20)
   })
   assert.match(shown.el.textContent ?? '', /the world is down/)
-  shown.unmount()
-})
-
-test('useLive under StrictMode: values keep flowing after the double mount, Maps included', async () => {
-  const { useLive } = await import('#loom/react')
-  const rows = input<ReadonlyMap<string, number>>(new Map([['a', 1]]), { name: 'rows' })
-  const label = input('cold', { name: 'label' })
-
-  function Live(): ReactNode {
-    const live = useLive(() => ({
-      label: label.get(),
-      total: [...rows.get().values()].reduce((s, n) => s + n, 0),
-    }))
-    return h('b', null, `${live.label}:${live.total}`)
-  }
-
-  const shown = mount(h(StrictMode, null, h(Live)))
-  assert.equal(shown.el.textContent, 'cold:1')
-
-  act(() => label.set('warm')) // after StrictMode's mount-unmount-mount
-  assert.equal(shown.el.textContent, 'warm:1') // the screen did not freeze
-
-  act(() =>
-    rows.set(
-      new Map([
-        ['a', 1],
-        ['b', 2],
-      ]),
-    ),
-  ) // a Map change must not be gated
-  assert.equal(shown.el.textContent, 'warm:3')
   shown.unmount()
 })

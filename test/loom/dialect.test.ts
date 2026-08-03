@@ -173,9 +173,9 @@ test('truth.suspend: a cold start throws the landing, anything held returns', as
 
 test('carry: without talking tabs the station lives inline, and the mirror cannot tell', async () => {
   const { carry, adopt } = await import('#loom')
-  const { kanbanServer } = await import('../demo/kanban-common/server.ts')
-  const { kanban } = await import('../demo/kanban-weft/state.ts')
-  const { serveKanban, kanbanMirror } = await import('../demo/kanban-weft/mirror.ts')
+  const { kanbanServer } = await import('../../demo/kanban-common/server.ts')
+  const { kanban } = await import('../../demo/kanban-weft/state.ts')
+  const { serveKanban, kanbanMirror } = await import('../../demo/kanban-weft/mirror.ts')
   const { atOnce } = await import('#link/channel.ts')
   void adopt
 

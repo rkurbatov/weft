@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { input, cell, watch, subscribe, batch, untracked } from '../src/core/graph.ts'
+import { input, cell, watch, subscribe, batch, untracked } from '#core/graph.ts'
 
 test('formula reads its inputs without declaring them', () => {
   const a = input(2)

@@ -13,7 +13,10 @@
     "#loom/react": "./src/loom/react.ts"
   },
   "scripts": {
-    "test": "node --test \"test/*.test.ts\" \"demo/**/*.test.ts\"",
+    "test": "node --test \"test/**/*.test.ts\" \"demo/**/*.test.ts\"",
+    "test:weft": "node --test \"test/core/*.test.ts\" \"test/link/*.test.ts\" \"test/react/*.test.ts\"",
+    "test:loom": "node --test \"test/loom/*.test.ts\"",
+    "test:stands": "node --test \"demo/**/*.test.ts\"",
     "check": "tsc --noEmit",
     "demo": "vite",
     "demo:build": "vite build",
