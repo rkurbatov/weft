@@ -9,9 +9,8 @@
 // such an app needs its own journals underneath. Watching is unaffected:
 // waves read fine either way.
 
-import { batch } from './graph.ts'
-import type { Input } from './graph.ts'
-import { attachProbe } from './waves.ts'
+import { attachProbe, batch } from './graph.ts'
+import type { Engine, Input } from './graph.ts'
 import type { WaveSummary } from './waves.ts'
 
 export interface Journal {
@@ -26,21 +25,28 @@ export interface Journal {
   clear(): void
 }
 
-export function journal(keep = 256, onWave?: (wave: WaveSummary) => void): Journal {
+export function journal(
+  keep = 256,
+  onWave?: (wave: WaveSummary) => void,
+  engine?: Engine,
+): Journal {
   const memory: WaveSummary[] = []
 
   return {
     start() {
-      attachProbe({
-        wave(summary) {
-          memory.push(summary)
-          while (memory.length > keep) memory.shift()
-          onWave?.(summary)
+      attachProbe(
+        {
+          wave(summary: WaveSummary) {
+            memory.push(summary)
+            while (memory.length > keep) memory.shift()
+            onWave?.(summary)
+          },
         },
-      })
+        engine,
+      )
     },
     stop() {
-      attachProbe(null)
+      attachProbe(null, engine)
     },
     waves: () => memory,
     why(node) {
@@ -57,8 +63,9 @@ export function journal(keep = 256, onWave?: (wave: WaveSummary) => void): Journ
       return undefined
     },
     replay(resolve) {
+      const group = engine === undefined ? batch : engine.batch
       for (const wave of memory) {
-        batch(() => {
+        group(() => {
           for (const write of wave.writes) resolve(write.node)?.set(write.value)
         })
       }

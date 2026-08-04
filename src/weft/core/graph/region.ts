@@ -5,51 +5,26 @@
 //
 // The region is what makes a module of the store autonomous: it can be raised,
 // used, and taken down whole, with nothing left ticking behind it.
+//
+// A region is a resident of an engine, not a second owner of life beside it:
+// the functions here work on the engine a bare build would use, and an engine
+// takes down the regions it holds.
 
-interface Owner {
-  name: string
-  teardowns: Array<() => void>
-}
+import { coreForBuild } from './engine.ts'
+import type { RegionOf } from './engine.ts'
 
-let current: Owner | null = null
+export type Region<T> = RegionOf<T>
 
-/** Give the enclosing region something to let go of. No region — no-op. */
+/** Give the enclosing region something to let go of. No region — the engine keeps it. */
 export function owned(teardown: () => void): void {
-  current?.teardowns.push(teardown)
+  coreForBuild().owned(teardown)
 }
 
 /** The name prefix of the enclosing region, if any. */
 export function regionName(): string | undefined {
-  return current?.name
-}
-
-export interface Region<T> {
-  readonly name: string
-  readonly value: T
-  dispose(): void
+  return coreForBuild().regionName()
 }
 
 export function region<T>(name: string, build: () => T): Region<T> {
-  const owner: Owner = {
-    name: current === null ? name : `${current.name}.${name}`,
-    teardowns: [],
-  }
-  const before = current
-  current = owner
-  let value: T
-  try {
-    value = build()
-  } finally {
-    current = before
-  }
-  let dead = false
-  return {
-    name: owner.name,
-    value,
-    dispose() {
-      if (dead) return
-      dead = true
-      for (let i = owner.teardowns.length - 1; i >= 0; i--) owner.teardowns[i]?.()
-    },
-  }
+  return coreForBuild().region(name, build)
 }

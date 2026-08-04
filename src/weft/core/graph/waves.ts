@@ -1,12 +1,14 @@
 // Waves. The graph's natural unit of work is not an action but a wave: one
 // batch of writes into inputs, the recomputes it causes, the places it dies on
-// equality, the watchers it wakes. The probe below taps exactly that — every
-// call from the hot path is behind one null check, so a detached probe costs
+// equality, the watchers it wakes. The tap below records exactly that — every
+// call from the hot path is behind one null check, so an unwatched tap costs
 // nothing but that check.
 //
 // A wave opens on the first write and closes when the outermost work ends.
 // Recomputes pulled by a plain read, with no write behind them, belong to no
 // wave: a wave is a consequence, a read is a question.
+//
+// One tap per engine: debugging one session is not mixed with another's.
 
 export interface WaveWrite {
   node: string
@@ -39,19 +41,9 @@ export interface Probe {
   wave?(summary: WaveSummary): void
 }
 
-let probe: Probe | null = null
-let hushed = false
-let open: WaveSummary | null = null
-let waveId = 0
-let openedAt = 0
-
 const clock = (): number => (typeof performance !== 'undefined' ? performance.now() : Date.now())
 
-/** Attach one probe (or null to detach). Composition is the caller's business. */
-export function attachProbe(next: Probe | null): void {
-  probe = next
-  open = null
-}
+let hushed = false
 
 /** Writes made in here are the probe's own plumbing: no probe sees itself. */
 export function quietly(work: () => void): void {
@@ -64,46 +56,71 @@ export function quietly(work: () => void): void {
   }
 }
 
-export const waves = {
+export class WaveTap {
+  /** Plain field, not a getter: the hot path reads it on every write. */
+  watching = false
+  private probe: Probe | null = null
+  private open: WaveSummary | null = null
+  private waveId = 0
+  private openedAt = 0
+
   /** Whether anything listens — hot paths use it to skip the timing calls. */
   get on(): boolean {
-    return probe !== null
-  },
+    return this.watching
+  }
 
-  now: clock,
+  now = clock
+
+  attach(next: Probe | null): void {
+    this.probe = next
+    this.watching = next !== null
+    this.open = null
+  }
+
+  detach(): void {
+    this.attach(null)
+  }
 
   write(node: string, value: unknown): void {
-    if (probe === null || hushed) return
-    if (open === null) {
-      openedAt = clock()
-      open = { id: ++waveId, at: Date.now(), ms: 0, writes: [], computed: [], gated: [], woke: 0 }
+    if (this.probe === null || hushed) return
+    if (this.open === null) {
+      this.openedAt = clock()
+      this.open = {
+        id: ++this.waveId,
+        at: Date.now(),
+        ms: 0,
+        writes: [],
+        computed: [],
+        gated: [],
+        woke: 0,
+      }
     }
-    open.writes.push({ node, value })
-    probe.write?.(node, value)
-  },
+    this.open.writes.push({ node, value })
+    this.probe.write?.(node, value)
+  }
 
   compute(node: string, ms: number, changed: boolean, hadValue: boolean): void {
-    if (probe === null || hushed) return
-    probe.compute?.(node, ms, changed)
+    if (this.probe === null || hushed) return
+    this.probe.compute?.(node, ms, changed)
     const gated = hadValue && !changed
-    if (gated) probe.gate?.(node)
-    if (open === null) return
-    open.computed.push({ node, ms, changed })
-    if (gated) open.gated.push(node)
-  },
+    if (gated) this.probe.gate?.(node)
+    if (this.open === null) return
+    this.open.computed.push({ node, ms, changed })
+    if (gated) this.open.gated.push(node)
+  }
 
   wake(): void {
-    if (probe === null || hushed) return
-    probe.wake?.()
-    if (open !== null) open.woke++
-  },
+    if (this.probe === null || hushed) return
+    this.probe.wake?.()
+    if (this.open !== null) this.open.woke++
+  }
 
   /** The outermost work ended: if a wave is open, it is done. */
   close(): void {
-    if (probe === null || open === null) return
-    const summary = open
-    open = null
-    summary.ms = clock() - openedAt
-    probe.wave?.(summary)
-  },
+    if (this.probe === null || this.open === null) return
+    const summary = this.open
+    this.open = null
+    summary.ms = clock() - this.openedAt
+    this.probe.wave?.(summary)
+  }
 }

@@ -13,6 +13,9 @@ export {
   Cell,
   Watcher,
   trace,
+  graph,
+  attachProbe,
+  engineOf,
 } from './core/graph/graph.ts'
 export type {
   Equal,
@@ -22,6 +25,7 @@ export type {
   Readable,
   Watchable,
   Trace,
+  Engine,
 } from './core/graph/graph.ts'
 
 export { command } from './core/graph/command.ts'
@@ -60,7 +64,7 @@ export type { Query, QueryOptions } from './core/remote/query.ts'
 export { region, owned, regionName } from './core/graph/region.ts'
 export type { Region } from './core/graph/region.ts'
 
-export { attachProbe, quietly } from './core/graph/waves.ts'
+export { quietly } from './core/graph/waves.ts'
 export type { Probe, WaveSummary, WaveWrite, WaveCompute } from './core/graph/waves.ts'
 export { journal } from './core/graph/journal.ts'
 export type { Journal } from './core/graph/journal.ts'

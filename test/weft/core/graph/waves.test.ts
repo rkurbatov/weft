@@ -5,14 +5,14 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { batch, cell, input, subscribe, trace } from '#weft/core/graph/graph.ts'
-import { attachProbe } from '#weft/core/graph/waves.ts'
+import { attachProbe } from '#weft/core/graph/graph.ts'
 import type { WaveSummary } from '#weft/core/graph/waves.ts'
 import { journal } from '#weft/core/graph/journal.ts'
 import type { Input } from '#weft/core/graph/graph.ts'
 
 test('the red dot: a wave dies on equality and the summary names the place', () => {
   const seen: WaveSummary[] = []
-  attachProbe({ wave: summary => seen.push(summary) })
+  attachProbe({ wave: (summary: WaveSummary) => seen.push(summary) })
   try {
     const raw = input(1, { name: 'raw' })
     const doubled = cell(() => raw.get() * 2, { name: 'doubled' })
@@ -44,7 +44,7 @@ test('the red dot: a wave dies on equality and the summary names the place', () 
 
 test('a batch is one wave with all its writes', () => {
   const seen: WaveSummary[] = []
-  attachProbe({ wave: summary => seen.push(summary) })
+  attachProbe({ wave: (summary: WaveSummary) => seen.push(summary) })
   try {
     const a = input(1, { name: 'a' })
     const b = input(1, { name: 'b' })
@@ -117,7 +117,7 @@ test('the journal is the full history: a fresh graph replayed lands in the same 
 
 test('a detached probe reports nothing and changes nothing', () => {
   const seen: WaveSummary[] = []
-  attachProbe({ wave: summary => seen.push(summary) })
+  attachProbe({ wave: (summary: WaveSummary) => seen.push(summary) })
   attachProbe(null)
   const raw = input(1, { name: 'raw' })
   const twice = cell(() => raw.get() * 2, { name: 'twice' })

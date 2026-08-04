@@ -3,195 +3,16 @@
 //
 // Demand is counted alongside the links: a source knows whether any live
 // watcher depends on it, which is how adapters learn when to start and stop.
+//
+// Every node belongs to an engine from birth and carries it in a field, so
+// reading, watching and tracing never have to be told which graph is meant.
+// The propagation core itself lives in engine.ts.
 
-import { owned, regionName } from './region.ts'
-import { waves } from './waves.ts'
+import { CHECK, CLEAN, Core, coreForBuild, declare, DIRTY, markOf, NODE, track } from './engine.ts'
+import type { Consumer, NodeKind, RegionOf as Region, Source, State } from './engine.ts'
+import type { Probe } from './waves.ts'
 
 export type Equal<T> = (a: T, b: T) => boolean
-
-/** Node states. CHECK means "an ancestor may have changed" — resolved by walking up. */
-const CLEAN = 0
-const CHECK = 1
-const DIRTY = 2
-
-type State = typeof CLEAN | typeof CHECK | typeof DIRTY
-
-interface Source {
-  readonly observers: Set<Consumer>
-  readonly demand: number
-  /** Bring own value up to date. Stored cells are always current. */
-  stabilize(): void
-  /** Called by the graph when the number of demanding paths changes. */
-  demandChanged(delta: number): void
-}
-
-interface Consumer {
-  state: State
-  readonly sources: Set<Source>
-  readonly observers: Set<Consumer>
-  /** 1 if links made by this consumer carry demand upward, 0 otherwise. */
-  contribution(): number
-  stabilize(): void
-}
-
-let active: Consumer | null = null
-let tracking: Set<Source> | null = null
-let batchDepth = 0
-let workDepth = 0
-const pending = new Set<Watcher>()
-const notices: Array<() => void> = []
-
-/**
- * Source lifecycle hooks run after the graph is quiet, never inside a formula:
- * an adapter is free to write its own cell from them.
- */
-function notice(fn: () => void): void {
-  notices.push(fn)
-  if (workDepth === 0) drain()
-}
-
-function drain(): void {
-  while (notices.length > 0) {
-    const fn = notices.shift()
-    if (fn !== undefined) fn()
-  }
-}
-
-function enter(): void {
-  workDepth++
-}
-
-function leave(): void {
-  workDepth--
-  if (workDepth === 0) {
-    waves.close()
-    drain()
-  }
-}
-
-function track(source: Source): void {
-  const consumer = active
-  if (consumer === null) return
-  if (consumer.sources.has(source)) return
-  consumer.sources.add(source)
-  // A link that survives a recompute keeps its observer slot and its demand.
-  if (tracking !== null && tracking.delete(source)) return
-  source.observers.add(consumer)
-  const carried = consumer.contribution()
-  if (carried > 0) source.demandChanged(carried)
-}
-
-/** Direct source changed: consumer must recompute. */
-function markDirty(node: Consumer): void {
-  if (node instanceof Watcher) {
-    // Always queue: a watcher marked while it runs must still be woken.
-    node.state = DIRTY
-    pending.add(node)
-    return
-  }
-  if (node.state === DIRTY) return
-  node.state = DIRTY
-  for (const o of node.observers) markCheck(o)
-}
-
-/** Something upstream changed: consumer must verify before trusting its value. */
-function markCheck(node: Consumer): void {
-  if (node instanceof Watcher) {
-    if (node.state === CLEAN) node.state = CHECK
-    pending.add(node)
-    return
-  }
-  if (node.state !== CLEAN) return
-  node.state = CHECK
-  for (const o of node.observers) markCheck(o)
-}
-
-/** Resolve CHECK by stabilizing sources; a changed source flips us to DIRTY. */
-function verify(node: Consumer): boolean {
-  for (const s of node.sources) {
-    s.stabilize()
-    if (node.state === DIRTY) return true
-  }
-  return false
-}
-
-function detach(node: Consumer, sources: Iterable<Source>): void {
-  const carried = node.contribution()
-  for (const s of sources) {
-    s.observers.delete(node)
-    if (carried > 0) s.demandChanged(-carried)
-  }
-}
-
-function unlink(node: Consumer): void {
-  detach(node, node.sources)
-  node.sources.clear()
-}
-
-/** Run a formula or a watcher body, keeping links that it reads again. */
-function retrack(node: Consumer, body: () => void): void {
-  const prevActive = active
-  const prevTracking = tracking
-  const previous = new Set(node.sources)
-  node.sources.clear()
-  active = node
-  tracking = previous
-  try {
-    body()
-  } finally {
-    active = prevActive
-    tracking = prevTracking
-    // Whatever was not read again is no longer a dependency.
-    detach(node, previous)
-  }
-}
-
-function flush(): void {
-  if (batchDepth > 0) return
-  enter()
-  try {
-    // Watchers may write, queueing more watchers; drain until quiet.
-    let guard = 0
-    while (pending.size > 0) {
-      if (++guard > 1000) throw new Error('weft: propagation did not settle')
-      const round = [...pending]
-      pending.clear()
-      for (const w of round) w.stabilize()
-    }
-  } finally {
-    leave()
-  }
-}
-
-/** Group writes so watchers see one settled picture. */
-export function batch<T>(fn: () => T): T {
-  batchDepth++
-  enter()
-  try {
-    return fn()
-  } finally {
-    batchDepth--
-    try {
-      flush()
-    } finally {
-      leave()
-    }
-  }
-}
-
-/** Read without becoming dependent on it. */
-export function untracked<T>(fn: () => T): T {
-  const prevActive = active
-  const prevTracking = tracking
-  active = null
-  tracking = null
-  try {
-    return fn()
-  } finally {
-    active = prevActive
-    tracking = prevTracking
-  }
-}
 
 export interface CellOptions<T> {
   equal?: Equal<T>
@@ -207,6 +28,12 @@ export interface InputOptions<T> extends CellOptions<T> {
 
 /** Stored cell: the only thing that can be written, by its single writer. */
 export class Input<T> implements Source {
+  // Mark and shape live on the prototype, not on every node: a table can hold
+  // a cell per row, and three extra slots per node are three too many.
+  get [NODE](): NodeKind {
+    return 'input'
+  }
+  readonly engine: Core
   readonly observers = new Set<Consumer>()
   readonly name: string
   demand = 0
@@ -215,10 +42,11 @@ export class Input<T> implements Source {
   private readonly onDemand: (() => void) | undefined
   private readonly onIdle: (() => void) | undefined
 
-  constructor(initial: T, options: InputOptions<T> = {}) {
+  constructor(initial: T, options: InputOptions<T> = {}, core: Core = coreForBuild()) {
+    this.engine = core
     this.current = initial
     this.equal = options.equal ?? Object.is
-    const prefix = regionName()
+    const prefix = core.regionName()
     const bare = options.name ?? 'input'
     this.name = prefix === undefined ? bare : `${prefix}.${bare}`
     this.onDemand = options.onDemand
@@ -230,8 +58,10 @@ export class Input<T> implements Source {
   demandChanged(delta: number): void {
     const before = this.demand
     this.demand += delta
-    if (before === 0 && this.demand > 0 && this.onDemand !== undefined) notice(this.onDemand)
-    else if (before > 0 && this.demand === 0 && this.onIdle !== undefined) notice(this.onIdle)
+    if (before === 0 && this.demand > 0 && this.onDemand !== undefined)
+      this.engine.notice(this.onDemand)
+    else if (before > 0 && this.demand === 0 && this.onIdle !== undefined)
+      this.engine.notice(this.onIdle)
   }
 
   /** Somebody live depends on this cell right now. */
@@ -251,13 +81,14 @@ export class Input<T> implements Source {
   set(next: T): void {
     if (this.equal(this.current, next)) return
     this.current = next
-    enter()
+    const core = this.engine
+    core.enter()
     try {
-      waves.write(this.name, next)
-      for (const o of this.observers) markDirty(o)
-      flush()
+      if (core.tap.watching) core.tap.write(this.name, next)
+      for (const o of this.observers) core.markDirty(o)
+      core.flush()
     } finally {
-      leave()
+      core.leave()
     }
   }
 
@@ -268,6 +99,14 @@ export class Input<T> implements Source {
 
 /** Derived cell: a formula. Nobody writes it; it recomputes when its inputs move. */
 export class Cell<T> implements Source, Consumer {
+  get [NODE](): NodeKind {
+    return 'cell'
+  }
+
+  get leaf(): boolean {
+    return false
+  }
+  readonly engine: Core
   state: State = DIRTY
   readonly sources = new Set<Source>()
   readonly observers = new Set<Consumer>()
@@ -279,10 +118,11 @@ export class Cell<T> implements Source, Consumer {
   private readonly formula: () => T
   private readonly equal: Equal<T>
 
-  constructor(formula: () => T, options: CellOptions<T> = {}) {
+  constructor(formula: () => T, options: CellOptions<T> = {}, core: Core = coreForBuild()) {
+    this.engine = core
     this.formula = formula
     this.equal = options.equal ?? Object.is
-    const prefix = regionName()
+    const prefix = core.regionName()
     const bare = options.name ?? 'cell'
     this.name = prefix === undefined ? bare : `${prefix}.${bare}`
   }
@@ -308,7 +148,7 @@ export class Cell<T> implements Source, Consumer {
   }
 
   peek(): T {
-    return untracked(() => this.get())
+    return this.engine.untracked(() => this.get())
   }
 
   /** Somebody downstream is reading this cell right now. */
@@ -325,7 +165,7 @@ export class Cell<T> implements Source, Consumer {
   dispose(): void {
     if (this.computing)
       throw new Error(`weft: cannot dispose cell "${this.name}" while it computes`)
-    unlink(this)
+    this.engine.unlink(this)
     this.state = DIRTY
     this.valued = false
   }
@@ -333,7 +173,7 @@ export class Cell<T> implements Source, Consumer {
   stabilize(): void {
     if (this.state === CLEAN) return
     if (this.computing) throw new Error(`weft: cycle through cell "${this.name}"`)
-    if (this.state === CHECK && !verify(this)) {
+    if (this.state === CHECK && !this.engine.verify(this)) {
       this.state = CLEAN
       return
     }
@@ -341,13 +181,14 @@ export class Cell<T> implements Source, Consumer {
   }
 
   private recompute(): void {
-    enter()
+    const core = this.engine
+    core.enter()
     try {
-      const started = waves.on ? waves.now() : 0
+      const started = core.tap.watching ? core.tap.now() : 0
       let next!: T
       this.computing = true
       try {
-        retrack(this, () => {
+        core.retrack(this, () => {
           next = this.formula()
         })
       } finally {
@@ -359,12 +200,13 @@ export class Cell<T> implements Source, Consumer {
       this.value = next
       this.valued = true
       this.state = CLEAN
-      waves.compute(this.name, waves.on ? waves.now() - started : 0, changed, hadValue)
+      if (core.tap.watching)
+        core.tap.compute(this.name, core.tap.now() - started, changed, hadValue)
       // Equal result stops here: observers stay CHECK and settle without recomputing.
-      if (changed) for (const o of this.observers) markDirty(o)
+      if (changed) for (const o of this.observers) core.markDirty(o)
     } finally {
       // Source hooks queued during the run fire here — value in place, state settled.
-      leave()
+      core.leave()
     }
   }
 }
@@ -380,6 +222,15 @@ export interface WatchOptions {
 }
 
 export class Watcher implements Consumer {
+  get [NODE](): NodeKind {
+    return 'watcher'
+  }
+
+  get leaf(): boolean {
+    return true
+  }
+  readonly engine: Core
+  readonly name = '(watcher)'
   state: State = DIRTY
   readonly sources = new Set<Source>()
   readonly observers = new Set<Consumer>()
@@ -387,9 +238,11 @@ export class Watcher implements Consumer {
   private readonly body: () => void
   private readonly demanding: boolean
 
-  constructor(body: () => void, options: WatchOptions = {}) {
+  constructor(body: () => void, options: WatchOptions = {}, core: Core = coreForBuild()) {
+    this.engine = core
     this.body = body
     this.demanding = options.demand ?? true
+    core.keepWatcher(this)
     this.run()
   }
 
@@ -399,7 +252,7 @@ export class Watcher implements Consumer {
 
   stabilize(): void {
     if (this.disposed || this.state === CLEAN) return
-    if (this.state === CHECK && !verify(this)) {
+    if (this.state === CHECK && !this.engine.verify(this)) {
       this.state = CLEAN
       return
     }
@@ -407,43 +260,29 @@ export class Watcher implements Consumer {
   }
 
   private run(): void {
-    enter()
+    const core = this.engine
+    core.enter()
     try {
-      waves.wake()
-      retrack(this, this.body)
+      if (core.tap.watching) core.tap.wake()
+      core.retrack(this, this.body)
     } finally {
       this.state = CLEAN
-      leave()
+      core.leave()
     }
   }
 
   dispose(): void {
     if (this.disposed) return
-    enter()
+    this.engine.enter()
     try {
-      unlink(this) // still contributing, so demand is given back before we go
+      this.engine.unlink(this) // still contributing, so demand is given back before we go
       this.disposed = true
-      pending.delete(this)
+      this.engine.unqueue(this)
+      this.engine.forgetWatcher(this)
     } finally {
-      leave()
+      this.engine.leave()
     }
   }
-}
-
-export function input<T>(initial: T, options?: InputOptions<T>): Input<T> {
-  return new Input(initial, options)
-}
-
-export function cell<T>(formula: () => T, options?: CellOptions<T>): Cell<T> {
-  const c = new Cell(formula, options)
-  owned(() => c.dispose())
-  return c
-}
-
-export function watch(body: () => void, options?: WatchOptions): () => void {
-  const w = new Watcher(body, options)
-  owned(() => w.dispose())
-  return () => w.dispose()
 }
 
 export type Readable<T> = Input<T> | Cell<T>
@@ -457,21 +296,72 @@ export interface Watchable<T> {
   peek(): T
 }
 
+/** The engine a node was born in, when the thing at hand is a node at all. */
+export function engineOf(value: unknown): Core | undefined {
+  return markOf(value) === undefined ? undefined : (value as { engine: Core }).engine
+}
+
+// ── Building in an engine ────────────────────────────────────────────────────
+
+function makeInput<T>(core: Core, initial: T, options?: InputOptions<T>): Input<T> {
+  return new Input(initial, options, core)
+}
+
+function makeCell<T>(core: Core, formula: () => T, options?: CellOptions<T>): Cell<T> {
+  const c = new Cell(formula, options, core)
+  core.owned(() => c.dispose())
+  return c
+}
+
+function makeWatcher(core: Core, body: () => void, options?: WatchOptions): () => void {
+  const w = new Watcher(body, options, core)
+  core.owned(() => w.dispose())
+  return () => w.dispose()
+}
+
+export function input<T>(initial: T, options?: InputOptions<T>): Input<T> {
+  return makeInput(coreForBuild(), initial, options)
+}
+
+export function cell<T>(formula: () => T, options?: CellOptions<T>): Cell<T> {
+  return makeCell(coreForBuild(), formula, options)
+}
+
+export function watch(body: () => void, options?: WatchOptions): () => void {
+  return makeWatcher(coreForBuild(), body, options)
+}
+
+/** Group writes so watchers see one settled picture. */
+export function batch<T>(fn: () => T): T {
+  return coreForBuild().batch(fn)
+}
+
+/** Read without becoming dependent on it. */
+export function untracked<T>(fn: () => T): T {
+  return coreForBuild().untracked(fn)
+}
+
 /** Watch one cell; the listener sees only actual changes. */
 export function subscribe<T>(
   source: Watchable<T>,
   listener: (value: T) => void,
   options?: WatchOptions,
 ): () => void {
+  // The node knows its engine, so subscribing never has to be told.
+  const core = engineOf(source) ?? coreForBuild()
   let first = true
-  return watch(() => {
-    const value = source.get()
-    if (first) {
-      first = false
-      return
-    }
-    untracked(() => listener(value))
-  }, options)
+  return makeWatcher(
+    core,
+    () => {
+      const value = source.get()
+      if (first) {
+        first = false
+        return
+      }
+      core.untracked(() => listener(value))
+    },
+    options,
+  )
 }
 
 // ── Looking at the graph ─────────────────────────────────────────────────────
@@ -487,8 +377,9 @@ export interface Trace {
 }
 
 function watcherName(consumer: Consumer): string {
-  if (consumer instanceof Cell) return consumer.name
-  if (consumer instanceof Watcher) return '(watcher)'
+  const kind = markOf(consumer)
+  if (kind === 'cell') return consumer.name
+  if (kind === 'watcher') return '(watcher)'
   return '(node)'
 }
 
@@ -498,31 +389,136 @@ function watcherName(consumer: Consumer): string {
  * account of being looked at; that is the whole point of a debugger.
  */
 export function trace(node: Watchable<unknown>, depth = 2): Trace {
-  if (node instanceof Input) {
+  const kind = markOf(node)
+  if (kind === 'input') {
+    const held = node as unknown as Input<unknown>
     return {
-      name: node.name,
+      name: held.name,
       kind: 'input',
       state: 'stored',
-      value: node.peek(),
-      readBy: [...node.observers].map(watcherName),
+      value: held.peek(),
+      readBy: [...held.observers].map(watcherName),
     }
   }
-  if (node instanceof Cell) {
+  if (kind === 'cell') {
+    const derived = node as unknown as Cell<unknown>
     const raw = node as unknown as { value?: unknown; state: State }
     const reads =
       depth > 0
-        ? [...node.sources].flatMap(s =>
-            s instanceof Input || s instanceof Cell ? [trace(s, depth - 1)] : [],
+        ? [...derived.sources].flatMap(s =>
+            markOf(s) === 'input' || markOf(s) === 'cell'
+              ? [trace(s as unknown as Watchable<unknown>, depth - 1)]
+              : [],
           )
         : undefined
     return {
-      name: node.name,
+      name: derived.name,
       kind: 'cell',
       state: raw.state === CLEAN ? 'clean' : raw.state === CHECK ? 'check' : 'dirty',
       value: raw.value,
       ...(reads === undefined ? {} : { reads }),
-      readBy: [...node.observers].map(watcherName),
+      readBy: [...derived.observers].map(watcherName),
     }
   }
   return { name: '(unknown)', kind: 'cell', state: 'dirty', value: undefined, readBy: [] }
+}
+
+/** Attach a probe. With no engine given, the one a bare build would use. */
+export function attachProbe(probe: Probe | null, engine?: Engine): void {
+  ;(engine === undefined ? coreForBuild() : engine.core).tap.attach(probe)
+}
+
+// ── The engine ───────────────────────────────────────────────────────────────
+
+/**
+ * An engine owned as a value: its own propagation, its own regions, its own
+ * probe, its own end of life. Nodes born in it carry it; nothing here is
+ * shared with a neighbouring engine except the platform underneath.
+ */
+export interface Engine {
+  readonly name: string
+  /** The propagation core. Library plumbing reaches for it; applications do not. */
+  readonly core: Core
+  readonly disposed: boolean
+  input<T>(initial: T, options?: InputOptions<T>): Input<T>
+  cell<T>(formula: () => T, options?: CellOptions<T>): Cell<T>
+  watch(body: () => void, options?: WatchOptions): () => void
+  batch<T>(fn: () => T): T
+  untracked<T>(fn: () => T): T
+  /** Build with this engine as the ambient one — for modules that use the bare functions. */
+  build<T>(fn: () => T): T
+  region<T>(name: string, build: () => T): Region<T>
+  /**
+   * Read something from another engine here. The only door between engines:
+   * readable, never writable, declared at build time and visible in a trace.
+   * Demand crosses with it — the shared engine works only while somebody looks.
+   */
+  adopt<T>(source: Watchable<T>): Watchable<T>
+  attachProbe(probe: Probe | null): void
+  dispose(): void
+}
+
+export function graph(name = 'engine'): Engine {
+  const core = new Core(name)
+  declare(core)
+  const engine: Engine = {
+    name,
+    core,
+    get disposed() {
+      return core.disposed
+    },
+    input: (initial, options) => makeInput(core, initial, options),
+    cell: (formula, options) => makeCell(core, formula, options),
+    watch: (body, options) => makeWatcher(core, body, options),
+    batch: fn => core.batch(fn),
+    untracked: fn => core.untracked(fn),
+    build: fn => core.build(fn),
+    region: (regionName, build) => core.region(regionName, build),
+    adopt: source => adopt(core, source),
+    attachProbe: probe => core.tap.attach(probe),
+    dispose: () => core.dispose(),
+  }
+  return engine
+}
+
+function adopt<T>(core: Core, source: Watchable<T>): Watchable<T> {
+  const home = engineOf(source)
+  if (home === undefined) throw new Error('weft: only a node of another engine can be adopted')
+  if (home === core) return source
+  const named = source as unknown as { name: string }
+  let hot: (() => void) | undefined
+  const mirror = makeInput(core, source.peek(), {
+    name: `adopted(${named.name})`,
+    // Demand crosses the border but is not what keeps the value true: the
+    // shared engine starts its own sources only while somebody here looks.
+    onDemand: () => {
+      hot = makeWatcher(home, () => {
+        source.get()
+      })
+    },
+    onIdle: () => {
+      hot?.()
+      hot = undefined
+    },
+  })
+  // A cold watcher, always: it carries the value across without asking the
+  // shared engine to work, so an unwatched formula here is as fresh as it
+  // would be reading an ordinary cell.
+  const cold = makeWatcher(
+    home,
+    () => {
+      const value = source.get()
+      core.untracked(() => mirror.set(value))
+    },
+    { demand: false },
+  )
+  core.owned(() => {
+    hot?.()
+    cold()
+  })
+  // Readable, never writable: a session cannot rewrite common truth.
+  return {
+    get: () => mirror.get(),
+    peek: () => mirror.peek(),
+  }
 }
