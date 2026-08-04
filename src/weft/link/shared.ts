@@ -10,7 +10,7 @@ import type { Port } from './ports.ts'
 import type { Channel } from './channel.ts'
 import { HELLO, LEASE, KEEP_ALIVE, heartbeat, isHello } from './bus.ts'
 import type { Hub, HubOptions, KeepAliveOptions } from './bus.ts'
-import { wallClock } from '../core/time.ts'
+import { wallClock } from '../core/graph/time.ts'
 
 /** What a shared worker's global scope offers: a connection per tab. */
 export interface SharedScope {

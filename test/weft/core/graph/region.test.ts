@@ -1,11 +1,11 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { cell, input, subscribe } from '#weft/core/graph.ts'
-import { region } from '#weft/core/region.ts'
-import { source } from '#weft/core/source.ts'
-import { outbox } from '#weft/core/outbox.ts'
-import { memoryStore } from '#weft/core/store.ts'
-import type { Timers } from '#weft/core/time.ts'
+import { cell, input, subscribe } from '#weft/core/graph/graph.ts'
+import { region } from '#weft/core/graph/region.ts'
+import { source } from '#weft/core/remote/source.ts'
+import { outbox } from '#weft/core/keep/outbox.ts'
+import { memoryStore } from '#weft/core/keep/store.ts'
+import type { Timers } from '#weft/core/graph/time.ts'
 
 function fakeWorld(start = 1000) {
   let time = start

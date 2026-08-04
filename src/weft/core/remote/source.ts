@@ -2,14 +2,14 @@
 // It runs only while somebody live is watching it — demand starts it, idleness
 // stops it — so an unwatched screen costs nothing.
 
-import { cell, input, subscribe, untracked } from './graph.ts'
-import type { Watchable } from './graph.ts'
-import { owned } from './region.ts'
-import type { Readable } from './graph.ts'
+import { cell, input, subscribe, untracked } from '../graph/graph.ts'
+import type { Watchable } from '../graph/graph.ts'
+import { owned } from '../graph/region.ts'
+import type { Readable } from '../graph/graph.ts'
 import { EMPTY, arrived, heldOf, loading, refused } from './remote.ts'
 import type { Fault, Remote } from './remote.ts'
-import { wallClock } from './time.ts'
-import type { Timers } from './time.ts'
+import { wallClock } from '../graph/time.ts'
+import type { Timers } from '../graph/time.ts'
 
 export interface SourceOptions {
   name?: string

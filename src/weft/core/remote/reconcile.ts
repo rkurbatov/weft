@@ -3,10 +3,10 @@
 // the row on show. The rule is to watch the value itself rather than the events
 // that might have changed it — then there is no list of triggers to go stale.
 
-import { cell, input, untracked, watch } from './graph.ts'
-import type { Readable } from './graph.ts'
-import { wallClock } from './time.ts'
-import type { Timers } from './time.ts'
+import { cell, input, untracked, watch } from '../graph/graph.ts'
+import type { Readable } from '../graph/graph.ts'
+import { wallClock } from '../graph/time.ts'
+import type { Timers } from '../graph/time.ts'
 
 export interface ReconcileOptions<T> {
   name?: string

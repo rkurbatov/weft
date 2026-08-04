@@ -1,8 +1,8 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { cell, subscribe } from '#weft/core/graph.ts'
-import { source } from '#weft/core/source.ts'
-import type { Timers } from '#weft/core/time.ts'
+import { cell, subscribe } from '#weft/core/graph/graph.ts'
+import { source } from '#weft/core/remote/source.ts'
+import type { Timers } from '#weft/core/graph/time.ts'
 
 /** A clock and a timer queue the test drives by hand. */
 function fakeWorld() {

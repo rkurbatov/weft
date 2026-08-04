@@ -6,8 +6,8 @@
 // at once, and each of them gets a channel of its own.
 
 import type { Channel } from './channel.ts'
-import { wallClock } from '../core/time.ts'
-import type { Timers } from '../core/time.ts'
+import { wallClock } from '../core/graph/time.ts'
+import type { Timers } from '../core/graph/time.ts'
 
 /** A place new watchers arrive at. Each one is handed its own channel. */
 export interface Hub {

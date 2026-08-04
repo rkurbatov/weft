@@ -2,15 +2,15 @@
 // it is written down before it is sent, carries an idempotency key so a repeat
 // is not a second purchase, and leaves the book only when the world confirms.
 
-import { cell, input } from './graph.ts'
-import { owned } from './region.ts'
-import type { Readable } from './graph.ts'
+import { cell, input } from '../graph/graph.ts'
+import { owned } from '../graph/region.ts'
+import type { Readable } from '../graph/graph.ts'
 import { SAVING } from './keep.ts'
 import type { Saving } from './keep.ts'
-import type { Fault } from './remote.ts'
+import type { Fault } from '../remote/remote.ts'
 import type { Store } from './store.ts'
-import { wallClock } from './time.ts'
-import type { Timers } from './time.ts'
+import { wallClock } from '../graph/time.ts'
+import type { Timers } from '../graph/time.ts'
 
 export type EntryState = 'waiting' | 'sending' | 'stuck' | 'done'
 

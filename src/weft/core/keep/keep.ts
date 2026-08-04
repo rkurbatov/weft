@@ -9,10 +9,10 @@
 // holds. And a refusal to write is a declared state, not a silence: `saving`
 // says whether writes are landing, and why not.
 
-import { input, subscribe } from './graph.ts'
-import type { Input, Watchable } from './graph.ts'
-import { heldOf } from './remote.ts'
-import type { Source } from './source.ts'
+import { input, subscribe } from '../graph/graph.ts'
+import type { Input, Watchable } from '../graph/graph.ts'
+import { heldOf } from '../remote/remote.ts'
+import type { Source } from '../remote/source.ts'
 import type { Store } from './store.ts'
 
 /** Why something on disk was not put back. */

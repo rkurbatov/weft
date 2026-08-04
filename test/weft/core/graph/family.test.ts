@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { input, cell, subscribe } from '#weft/core/graph.ts'
-import { family } from '#weft/core/family.ts'
+import { input, cell, subscribe } from '#weft/core/graph/graph.ts'
+import { family } from '#weft/core/graph/family.ts'
 
 test('same key gives the same cell, different keys different cells', () => {
   const table = input(new Map([['a', 1]]))

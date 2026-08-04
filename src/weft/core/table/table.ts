@@ -5,9 +5,9 @@
 // the cost of an edit is the size of the edit, not the size of the collection.
 // A follower that fell too far behind rebuilds once and goes on incrementally.
 
-import { cell, input } from './graph.ts'
-import type { Cell, Equal, Watchable } from './graph.ts'
-import { family } from './family.ts'
+import { cell, input } from '../graph/graph.ts'
+import type { Cell, Equal, Watchable } from '../graph/graph.ts'
+import { family } from '../graph/family.ts'
 import { TREE_SPAN, planFold } from './plan.ts'
 
 export type Key = string | number

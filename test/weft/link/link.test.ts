@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { MessageChannel } from 'node:worker_threads'
-import { cell, input, subscribe } from '#weft/core/graph.ts'
+import { cell, input, subscribe } from '#weft/core/graph/graph.ts'
 import { atOnce } from '#weft/link/channel.ts'
 import { portChannel, pairInMemory } from '#weft/link/ports.ts'
 import { link, Unknown } from '#weft/link/link.ts'
@@ -441,7 +441,7 @@ test('perFrame does not wait for a frame that never comes: a background tab stil
 })
 
 test('an idle mirror lingers, then is let go; a fresh look brings it back', async () => {
-  const { heldOf } = await import('#weft/core/remote.ts')
+  const { heldOf } = await import('#weft/core/remote/remote.ts')
   const rest = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms))
   const pair = pairInMemory()
   const feed = input(1, { name: 'n' })

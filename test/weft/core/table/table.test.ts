@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { input, subscribe, watch } from '#weft/core/graph.ts'
-import { table } from '#weft/core/table.ts'
+import { input, subscribe, watch } from '#weft/core/graph/graph.ts'
+import { table } from '#weft/core/table/table.ts'
 
 interface Row {
   id: number

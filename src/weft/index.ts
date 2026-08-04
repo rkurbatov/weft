@@ -13,7 +13,7 @@ export {
   Cell,
   Watcher,
   trace,
-} from './core/graph.ts'
+} from './core/graph/graph.ts'
 export type {
   Equal,
   CellOptions,
@@ -22,41 +22,41 @@ export type {
   Readable,
   Watchable,
   Trace,
-} from './core/graph.ts'
+} from './core/graph/graph.ts'
 
-export { command } from './core/command.ts'
-export type { Command, CommandOptions, CommandState, WhileRunning } from './core/command.ts'
+export { command } from './core/graph/command.ts'
+export type { Command, CommandOptions, CommandState, WhileRunning } from './core/graph/command.ts'
 
-export { family } from './core/family.ts'
-export type { Family, FamilyOptions } from './core/family.ts'
+export { family } from './core/graph/family.ts'
+export type { Family, FamilyOptions } from './core/graph/family.ts'
 
-export { planFold, onPlan, TREE_SPAN, TREE_WORTH_IT } from './core/plan.ts'
-export type { Plan, Carrier, FoldTraits } from './core/plan.ts'
-export { blocks } from './core/blocks.ts'
-export type { Blocks, BlockOptions } from './core/blocks.ts'
-export { offsets } from './core/offsets.ts'
-export type { Offsets } from './core/offsets.ts'
+export { planFold, onPlan, TREE_SPAN, TREE_WORTH_IT } from './core/table/plan.ts'
+export type { Plan, Carrier, FoldTraits } from './core/table/plan.ts'
+export { blocks } from './core/table/blocks.ts'
+export type { Blocks, BlockOptions } from './core/table/blocks.ts'
+export { offsets } from './core/table/offsets.ts'
+export type { Offsets } from './core/table/offsets.ts'
 
-export { source, fresh, arrivalOf } from './core/source.ts'
-export type { Source, SourceOptions } from './core/source.ts'
+export { source, fresh, arrivalOf } from './core/remote/source.ts'
+export type { Source, SourceOptions } from './core/remote/source.ts'
 
-export { query } from './core/query.ts'
-export type { Query, QueryOptions } from './core/query.ts'
+export { query } from './core/remote/query.ts'
+export type { Query, QueryOptions } from './core/remote/query.ts'
 
-export { region, owned, regionName } from './core/region.ts'
-export type { Region } from './core/region.ts'
+export { region, owned, regionName } from './core/graph/region.ts'
+export type { Region } from './core/graph/region.ts'
 
-export { attachProbe, quietly } from './core/waves.ts'
-export type { Probe, WaveSummary, WaveWrite, WaveCompute } from './core/waves.ts'
-export { journal } from './core/journal.ts'
-export type { Journal } from './core/journal.ts'
+export { attachProbe, quietly } from './core/graph/waves.ts'
+export type { Probe, WaveSummary, WaveWrite, WaveCompute } from './core/graph/waves.ts'
+export { journal } from './core/graph/journal.ts'
+export type { Journal } from './core/graph/journal.ts'
 
-export { projected, preserve } from './core/project.ts'
-export type { ProjectionSpec } from './core/project.ts'
-export { laneDrop, lanePlace, laneAppend, laneFind } from './core/arrange.ts'
-export type { Lanes } from './core/arrange.ts'
+export { projected, preserve } from './core/table/project.ts'
+export type { ProjectionSpec } from './core/table/project.ts'
+export { laneDrop, lanePlace, laneAppend, laneFind } from './core/table/arrange.ts'
+export type { Lanes } from './core/table/arrange.ts'
 
-export { table, alike } from './core/table.ts'
+export { table, alike } from './core/table/table.ts'
 export type {
   Table,
   SourceTable,
@@ -66,10 +66,10 @@ export type {
   Patch,
   Change,
   Key,
-} from './core/table.ts'
+} from './core/table/table.ts'
 
-export { wallClock } from './core/time.ts'
-export type { Timers } from './core/time.ts'
+export { wallClock } from './core/graph/time.ts'
+export type { Timers } from './core/graph/time.ts'
 
 export {
   EMPTY,
@@ -81,23 +81,23 @@ export {
   refused,
   together,
   firstOf,
-} from './core/remote.ts'
-export type { Remote, Held, Fault } from './core/remote.ts'
+} from './core/remote/remote.ts'
+export type { Remote, Held, Fault } from './core/remote/remote.ts'
 
-export { memoryStore, webStore } from './core/store.ts'
-export type { Store } from './core/store.ts'
+export { memoryStore, webStore } from './core/keep/store.ts'
+export type { Store } from './core/keep/store.ts'
 
-export { idbStore, bestStore } from './core/idb.ts'
-export type { IdbOptions } from './core/idb.ts'
+export { idbStore, bestStore } from './core/keep/idb.ts'
+export type { IdbOptions } from './core/keep/idb.ts'
 
-export { keepInput, keepSource } from './core/keep.ts'
-export type { Kept, KeepOptions, Saving, Dropped } from './core/keep.ts'
+export { keepInput, keepSource } from './core/keep/keep.ts'
+export type { Kept, KeepOptions, Saving, Dropped } from './core/keep/keep.ts'
 
-export { outbox } from './core/outbox.ts'
-export type { Outbox, OutboxOptions, Entry, EntryState, Handler } from './core/outbox.ts'
+export { outbox } from './core/keep/outbox.ts'
+export type { Outbox, OutboxOptions, Entry, EntryState, Handler } from './core/keep/outbox.ts'
 
-export { reconcile } from './core/reconcile.ts'
-export type { Reconciliation, ReconcileOptions } from './core/reconcile.ts'
+export { reconcile } from './core/remote/reconcile.ts'
+export type { Reconciliation, ReconcileOptions } from './core/remote/reconcile.ts'
 
 export { serve } from './link/serve.ts'
 export type { Surface, ServeOptions } from './link/serve.ts'

@@ -2,8 +2,8 @@
 // answers whoever asks. Watching from the other side is ordinary demand: the
 // first watcher wakes whatever the cell depends on, the last one lets it go.
 
-import { subscribe, untracked } from '../core/graph.ts'
-import type { Watchable } from '../core/graph.ts'
+import { subscribe, untracked } from '../core/graph/graph.ts'
+import type { Watchable } from '../core/graph/graph.ts'
 import { perFrame } from './channel.ts'
 import type { Channel, Schedule, ToGraph } from './channel.ts'
 

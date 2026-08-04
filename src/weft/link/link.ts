@@ -2,13 +2,13 @@
 // writer is the wire, and watching it is what asks the other side for it:
 // demand crosses the boundary by itself, so nothing has to be released by hand.
 
-import { input, untracked } from '../core/graph.ts'
-import type { Input, Watchable } from '../core/graph.ts'
-import { EMPTY, arrived, heldOf, refused } from '../core/remote.ts'
-import { preserve } from '../core/project.ts'
-import type { Remote } from '../core/remote.ts'
-import { wallClock } from '../core/time.ts'
-import type { Timers } from '../core/time.ts'
+import { input, untracked } from '../core/graph/graph.ts'
+import type { Input, Watchable } from '../core/graph/graph.ts'
+import { EMPTY, arrived, heldOf, refused } from '../core/remote/remote.ts'
+import { preserve } from '../core/table/project.ts'
+import type { Remote } from '../core/remote/remote.ts'
+import { wallClock } from '../core/graph/time.ts'
+import type { Timers } from '../core/graph/time.ts'
 import type { Channel, ToWatcher } from './channel.ts'
 
 /**

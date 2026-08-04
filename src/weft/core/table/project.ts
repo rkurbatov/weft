@@ -5,9 +5,9 @@
 // stays quiet. The identity keeping is the one deliberately impure spot, and
 // it lives here, under the floor, not in application formulas.
 
-import { cell } from './graph.ts'
-import type { Cell, Watchable } from './graph.ts'
-import type { Entry } from './outbox.ts'
+import { cell } from '../graph/graph.ts'
+import type { Cell, Watchable } from '../graph/graph.ts'
+import type { Entry } from '../keep/outbox.ts'
 
 /**
  * Rebuild `next` out of `prev` wherever the two are structurally the same:
