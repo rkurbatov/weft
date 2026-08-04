@@ -1,0 +1,139 @@
+{
+  "name": "agg-having",
+  "tree": {
+    "prim": "filter",
+    "input": {
+      "prim": "agg",
+      "input": {
+        "prim": "source",
+        "source": "orders",
+        "key": ["id"]
+      },
+      "by": ["client"],
+      "folds": {
+        "n": {
+          "fold": "count"
+        },
+        "total": {
+          "fold": "sum",
+          "of": {
+            "is": "field",
+            "path": ["sum"]
+          }
+        },
+        "top": {
+          "fold": "max",
+          "of": {
+            "is": "field",
+            "path": ["sum"]
+          }
+        },
+        "ids": {
+          "fold": "collect",
+          "of": {
+            "is": "field",
+            "path": ["id"]
+          }
+        }
+      }
+    },
+    "test": {
+      "is": "cmp",
+      "op": ">",
+      "left": {
+        "is": "field",
+        "path": ["total"]
+      },
+      "right": {
+        "is": "lit",
+        "value": 50
+      }
+    }
+  },
+  "steps": [
+    {
+      "source": "orders",
+      "put": [
+        {
+          "id": 1,
+          "client": 7,
+          "sum": 40
+        },
+        {
+          "id": 2,
+          "client": 7,
+          "sum": 30
+        },
+        {
+          "id": 3,
+          "client": 8,
+          "sum": 20
+        }
+      ],
+      "expect": [
+        {
+          "client": 7,
+          "n": 2,
+          "total": 70,
+          "top": 40,
+          "ids": [1, 2]
+        }
+      ]
+    },
+    {
+      "source": "orders",
+      "put": [
+        {
+          "id": 4,
+          "client": 8,
+          "sum": 45
+        }
+      ],
+      "expect": [
+        {
+          "client": 7,
+          "n": 2,
+          "total": 70,
+          "top": 40,
+          "ids": [1, 2]
+        },
+        {
+          "client": 8,
+          "n": 2,
+          "total": 65,
+          "top": 45,
+          "ids": [3, 4]
+        }
+      ]
+    },
+    {
+      "source": "orders",
+      "put": [
+        {
+          "id": 2,
+          "client": 8,
+          "sum": 30
+        }
+      ],
+      "expect": [
+        {
+          "client": 8,
+          "n": 3,
+          "total": 95,
+          "top": 45,
+          "ids": [2, 3, 4]
+        }
+      ]
+    },
+    {
+      "source": "orders",
+      "drop": [4],
+      "expect": []
+    },
+    {
+      "source": "orders",
+      "drop": [1],
+      "expect": []
+    }
+  ]
+}

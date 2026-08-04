@@ -1,0 +1,68 @@
+{
+  "name": "agg-whole-table",
+  "tree": {
+    "prim": "agg",
+    "input": {
+      "prim": "source",
+      "source": "orders",
+      "key": ["id"]
+    },
+    "by": [],
+    "folds": {
+      "n": {
+        "fold": "count"
+      },
+      "total": {
+        "fold": "sum",
+        "of": {
+          "is": "field",
+          "path": ["sum"]
+        }
+      }
+    }
+  },
+  "steps": [
+    {
+      "source": "orders",
+      "put": [
+        {
+          "id": 1,
+          "client": 5,
+          "sum": 40
+        }
+      ],
+      "expect": [
+        {
+          "n": 1,
+          "total": 40
+        }
+      ]
+    },
+    {
+      "source": "orders",
+      "put": [
+        {
+          "id": 2,
+          "client": 6,
+          "sum": 2
+        }
+      ],
+      "expect": [
+        {
+          "n": 2,
+          "total": 42
+        }
+      ]
+    },
+    {
+      "source": "orders",
+      "drop": [1, 2],
+      "expect": [
+        {
+          "n": 0,
+          "total": 0
+        }
+      ]
+    }
+  ]
+}
