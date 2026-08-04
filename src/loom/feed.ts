@@ -98,6 +98,17 @@ function reading<R>(
   }
 }
 
+// The engine table behind a feed — for the shape layer, which compiles a
+// declared form into a relational tree over this very table. Not part of the
+// feed's own surface: applications never need it.
+const tables = new WeakMap<object, unknown>()
+
+export function tableOfFeed<R>(of: Feed<R>): EngineTable<R> {
+  const held = tables.get(of as unknown as object)
+  if (held === undefined) throw new Error(`loom: ${of.name} has no table behind it`)
+  return held as EngineTable<R>
+}
+
 export function feed<R>(passport: FeedPassport<R>): Feed<R> {
   const name = passport.name ?? 'feed'
   let stopLive: (() => void) | undefined
@@ -117,7 +128,7 @@ export function feed<R>(passport: FeedPassport<R>): Feed<R> {
         }),
   })
 
-  return {
+  const self = {
     ...reading(t),
     take: (...rows) => t.put(...rows),
     lose: (...keys) => t.drop(...keys),
@@ -125,4 +136,6 @@ export function feed<R>(passport: FeedPassport<R>): Feed<R> {
     reset: rows => t.replace(rows),
     peek: key => t.peek(key),
   } as Feed<R>
+  tables.set(self as unknown as object, t)
+  return self
 }

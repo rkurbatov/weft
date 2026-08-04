@@ -68,7 +68,7 @@ export type FoldDecl =
   | { fold: 'max'; of: Expr | RowFn }
   /** The group gathered into an array, ordered by row key — the one order two
    *  implementations can agree on. The inverse of a future expand. */
-  | { fold: 'collect'; of?: Expr | RowFn }
+  | { fold: 'collect'; of?: Expr | RowFn; by?: ReadonlyArray<{ field: string; down?: boolean }> }
   /** The escape hatch: a passport of closures. Non-canonical by nature. */
   | {
       fold: 'custom'
@@ -247,8 +247,13 @@ export function canonNode(node: RelNode): string | null {
       )) {
         if (decl.fold === 'custom') return null
         if (decl.fold === 'count') parts.push(`${name}=(count)`)
-        else if (decl.fold === 'collect' && decl.of === undefined) parts.push(`${name}=(collect)`)
-        else {
+        else if (decl.fold === 'collect' && decl.of === undefined) {
+          const by =
+            decl.by === undefined
+              ? ''
+              : ` by=${decl.by.map(o => `${o.down === true ? '-' : '+'}${o.field}`).join(',')}`
+          parts.push(`${name}=(collect${by})`)
+        } else {
           const of = decl.of as Expr | RowFn
           if (!isExpr(of)) return null
           parts.push(`${name}=(${decl.fold} ${canonExpr(of)})`)
@@ -458,7 +463,14 @@ export function foldOne(decl: FoldDecl, rows: ReadonlyMap<Key, Row>): unknown {
       return best
     }
     case 'collect': {
-      const byKey = [...rows.keys()].toSorted((a, b) => (String(a) < String(b) ? -1 : 1))
+      const order = decl.by
+      const byKey = [...rows.keys()].toSorted((a, b) => {
+        if (order !== undefined) {
+          const moved = orderCompare(order, rows.get(a) as Row, rows.get(b) as Row)
+          if (moved !== 0) return moved
+        }
+        return String(a) < String(b) ? -1 : 1
+      })
       return byKey.map(k => {
         const row = rows.get(k) as Row
         return decl.of === undefined ? row : foldOf(decl, row)

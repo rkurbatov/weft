@@ -23,3 +23,6 @@ export { region } from '#weft'
 
 export { offer, adopt, carry } from './carry.ts'
 export type { Offering, OfferOptions, Adopted, Carried, CarrySpec } from './carry.ts'
+
+export { shape, byEach, fold, keyedBy } from './shape.ts'
+export type { Group } from './shape.ts'
