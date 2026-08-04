@@ -5,7 +5,17 @@ import { table } from '#weft'
 import type { Key } from '#weft'
 import { and, canonExpr, cmp, evalExpr, field, lit, math } from '#weft/rel/expr.ts'
 import type { Row } from '#weft/rel/expr.ts'
-import { checkNode, filter, join, pure, recount, source } from '#weft/rel/node.ts'
+import {
+  agg,
+  checkNode,
+  expand,
+  filter,
+  join,
+  pure,
+  recount,
+  source,
+  union,
+} from '#weft/rel/node.ts'
 import { relate } from '#weft/rel/live.ts'
 
 const sale = (id: number, qty: number, price: number): Row => ({ id, qty, price })
@@ -282,4 +292,254 @@ test('why splits a composite key; a keeping phantom names only its left parent',
   live.dispose()
   orders.dispose()
   clients.dispose()
+})
+
+test('agg parity: groups move, folds follow, against the oracle at every step', () => {
+  const orders = table<Row>({ key: r => r['id'] as Key, name: 'orders' })
+  const tree = agg(source('orders', ['id']), {
+    by: ['client'],
+    folds: {
+      n: { fold: 'count' },
+      total: { fold: 'sum', of: field('sum') },
+      top: { fold: 'max', of: field('sum') },
+      ids: { fold: 'collect', of: field('id') },
+    },
+  })
+  const live = relate(tree, { orders })
+  const stop = subscribe(live.all, () => {})
+  let seed = 91
+  const rand = (n: number): number => {
+    seed = (seed * 1103515245 + 12345) & 0x7fffffff
+    return seed % n
+  }
+  for (let tick = 0; tick < 250; tick++) {
+    if (rand(3) === 0) orders.drop(rand(24))
+    else orders.put(order(rand(24), rand(5), rand(50)))
+    const rows = new Map<Key, Row>()
+    for (const r of orders.all.peek()) rows.set(r['id'] as Key, r)
+    const truth = recount(tree, { orders: rows })
+    const got = live.all.peek()
+    assert.equal(got.length, truth.size, `tick ${tick}`)
+    for (const row of got) assert.deepEqual(row, truth.get(row['client'] as Key), `tick ${tick}`)
+  }
+  stop()
+  live.dispose()
+  orders.dispose()
+})
+
+test('having: a filter over an agg eats the fold deltas like any other change', () => {
+  const orders = table<Row>({ key: r => r['id'] as Key, name: 'orders' })
+  const tree = filter(
+    agg(source('orders', ['id']), {
+      by: ['client'],
+      folds: { total: { fold: 'sum', of: field('sum') } },
+    }),
+    cmp('>', field('total'), lit(100)),
+  )
+  const live = relate(tree, { orders })
+  const stop = subscribe(live.all, () => {})
+  orders.put(order(1, 7, 60), order(2, 7, 50), order(3, 8, 30))
+  assert.equal(live.size.peek(), 1, 'client 7 crossed the bar, client 8 did not')
+  orders.drop(2)
+  assert.equal(live.size.peek(), 0, 'the group fell back under and left the view')
+  orders.put(order(4, 8, 90))
+  assert.equal((live.row(8).peek() as Row)['total'], 120)
+  stop()
+  live.dispose()
+  orders.dispose()
+})
+
+test('an agg edit pays its group: a stranger group never wakes', () => {
+  const orders = table<Row>({ key: r => r['id'] as Key })
+  for (let i = 0; i < 60; i++) orders.put(order(i, i % 6, 10))
+  const live = relate(
+    agg(source('orders', ['id']), {
+      by: ['client'],
+      folds: { total: { fold: 'sum', of: field('sum') } },
+    }),
+    { orders },
+  )
+  const stopAll = subscribe(live.all, () => {})
+  let strangerWakes = 0
+  const stopOne = subscribe(live.row(2), () => strangerWakes++)
+  strangerWakes = 0
+  orders.put(order(6, 0, 999)) // group 0 moved; group 2 stands still
+  assert.equal(strangerWakes, 0)
+  assert.equal((live.row(0).peek() as Row)['total'], 999 + 9 * 10)
+  stopOne()
+  stopAll()
+  live.dispose()
+  orders.dispose()
+})
+
+test('fold carriers are named at the same door: an inverse runs, the rest recount', async () => {
+  const { onPlan } = await import('#weft')
+  const heard: Array<{ name: string; carrier: string }> = []
+  const stopEar = onPlan((name, plan) => heard.push({ name, carrier: plan.carrier }))
+  const orders = table<Row>({ key: r => r['id'] as Key })
+  const live = relate(
+    agg(source('orders', ['id']), {
+      by: ['client'],
+      folds: { total: { fold: 'sum', of: field('sum') }, top: { fold: 'max', of: field('sum') } },
+    }),
+    { orders },
+  )
+  assert.deepEqual(
+    heard.filter(h => h.name.startsWith('agg.')),
+    [
+      { name: 'agg.total', carrier: 'running' },
+      { name: 'agg.top', carrier: 'recount' },
+    ],
+  )
+  stopEar()
+  live.dispose()
+  orders.dispose()
+})
+
+test('why for a group names its members, found when asked', () => {
+  const orders = table<Row>({ key: r => r['id'] as Key })
+  orders.put(order(1, 7, 10), order(2, 7, 20), order(3, 8, 30))
+  const live = relate(
+    agg(source('orders', ['id']), {
+      by: ['client'],
+      folds: { n: { fold: 'count' } },
+    }),
+    { orders },
+  )
+  const stop = subscribe(live.all, () => {})
+  assert.deepEqual(live.why(7), [
+    { source: 'orders', key: 1 },
+    { source: 'orders', key: 2 },
+  ])
+  stop()
+  live.dispose()
+  orders.dispose()
+})
+
+test('the whole-table fold is one row that exists even over nothing', () => {
+  const orders = table<Row>({ key: r => r['id'] as Key })
+  const live = relate(
+    agg(source('orders', ['id']), {
+      by: [],
+      folds: { n: { fold: 'count' }, total: { fold: 'sum', of: field('sum') } },
+    }),
+    { orders },
+  )
+  const stop = subscribe(live.all, () => {})
+  assert.equal(live.size.peek(), 1)
+  assert.deepEqual(live.all.peek()[0], { n: 0, total: 0 })
+  orders.put(order(1, 5, 40), order(2, 6, 2))
+  assert.deepEqual(live.all.peek()[0], { n: 2, total: 42 })
+  orders.drop(1)
+  orders.drop(2)
+  assert.deepEqual(live.all.peek()[0], { n: 0, total: 0 }, 'emptied, not gone')
+  stop()
+  live.dispose()
+  orders.dispose()
+})
+
+test('union parity: two feeds, one table, against the oracle at every step', () => {
+  const fresh = table<Row>({ key: r => r['id'] as Key, name: 'fresh' })
+  const stale = table<Row>({ key: r => r['id'] as Key, name: 'stale' })
+  const tree = union(source('fresh', ['id']), source('stale', ['id']))
+  const live = relate(tree, { fresh, stale })
+  const stop = subscribe(live.all, () => {})
+  let seed = 17
+  const rand = (n: number): number => {
+    seed = (seed * 1103515245 + 12345) & 0x7fffffff
+    return seed % n
+  }
+  for (let tick = 0; tick < 250; tick++) {
+    const move = rand(4)
+    // Disjoint by construction: fresh holds even ids, stale holds odd.
+    if (move === 0) fresh.put(order(rand(15) * 2, rand(5), rand(50)))
+    else if (move === 1) fresh.drop(rand(15) * 2)
+    else if (move === 2) stale.put(order(rand(15) * 2 + 1, rand(5), rand(50)))
+    else stale.drop(rand(15) * 2 + 1)
+    const held: Record<string, Map<Key, Row>> = {}
+    for (const [name, t] of [
+      ['fresh', fresh],
+      ['stale', stale],
+    ] as const) {
+      const rows = new Map<Key, Row>()
+      for (const r of t.all.peek()) rows.set(r['id'] as Key, r)
+      held[name] = rows
+    }
+    const truth = recount(tree, held)
+    const got = live.all.peek()
+    assert.equal(got.length, truth.size, `tick ${tick}`)
+    for (const row of got) assert.deepEqual(row, truth.get(row['id'] as Key), `tick ${tick}`)
+  }
+  stop()
+  live.dispose()
+  fresh.dispose()
+  stale.dispose()
+})
+
+test('union: a key on both sides is a named error, and mismatched keying never builds', () => {
+  const a = table<Row>({ key: r => r['id'] as Key })
+  const b = table<Row>({ key: r => r['id'] as Key })
+  a.put(order(5, 1, 10))
+  const live = relate(union(source('a', ['id']), source('b', ['id'])), { a, b })
+  const stop = subscribe(live.all, () => {})
+  assert.throws(() => b.put(order(5, 2, 20)), /union key collision on 5/)
+  stop()
+  live.dispose()
+  a.dispose()
+  b.dispose()
+  assert.throws(
+    () => checkNode(union(source('a', ['id']), source('b', ['other']))),
+    /union sides key differently/,
+  )
+})
+
+test('expand parity: nested tables unfold and follow, against the oracle', () => {
+  const docs = table<Row>({ key: r => r['id'] as Key, name: 'docs' })
+  const tree = expand(source('docs', ['id']), { field: 'links', as: 'link', key: ['to'] })
+  const live = relate(tree, { docs })
+  const stop = subscribe(live.all, () => {})
+  let seed = 29
+  const rand = (n: number): number => {
+    seed = (seed * 1103515245 + 12345) & 0x7fffffff
+    return seed % n
+  }
+  const doc = (id: number): Row => {
+    const links: Row[] = []
+    const n = rand(4)
+    for (let i = 0; i < n; i++) {
+      const to = rand(9)
+      if (!links.some(l => l['to'] === to)) links.push({ to, weight: rand(5) })
+    }
+    return { id, links }
+  }
+  for (let tick = 0; tick < 250; tick++) {
+    if (rand(3) === 0) docs.drop(rand(12))
+    else docs.put(doc(rand(12)))
+    const rows = new Map<Key, Row>()
+    for (const r of docs.all.peek()) rows.set(r['id'] as Key, r)
+    const truth = recount(tree, { docs: rows })
+    const got = live.all.peek()
+    assert.equal(got.length, truth.size, `tick ${tick}`)
+    for (const row of got) {
+      const key = JSON.stringify([row['id'], (row['link'] as Row)['to']])
+      assert.deepEqual(row, truth.get(key), `tick ${tick}`)
+    }
+  }
+  stop()
+  live.dispose()
+  docs.dispose()
+})
+
+test('expand consumes the table field and why names the parent alone', () => {
+  const docs = table<Row>({ key: r => r['id'] as Key })
+  docs.put({ id: 1, title: 'a', links: [{ to: 9, weight: 2 }] })
+  const live = relate(expand(source('docs', ['id']), { field: 'links', as: 'link', key: ['to'] }), {
+    docs,
+  })
+  const stop = subscribe(live.all, () => {})
+  assert.deepEqual(live.all.peek()[0], { id: 1, title: 'a', link: { to: 9, weight: 2 } })
+  assert.deepEqual(live.why(JSON.stringify([1, 9])), [{ source: 'docs', key: 1 }])
+  stop()
+  live.dispose()
+  docs.dispose()
 })

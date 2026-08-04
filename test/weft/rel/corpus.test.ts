@@ -38,8 +38,11 @@ function sourceDecls(
       return out
     case 'filter':
     case 'pure':
+    case 'agg':
+    case 'expand':
       return sourceDecls(node.input, out)
     case 'join':
+    case 'union':
       sourceDecls(node.left, out)
       return sourceDecls(node.right, out)
   }

@@ -1,0 +1,111 @@
+{
+  "name": "expand-links",
+  "tree": {
+    "prim": "expand",
+    "input": {
+      "prim": "source",
+      "source": "docs",
+      "key": ["id"]
+    },
+    "field": "links",
+    "as": "link",
+    "key": ["to"]
+  },
+  "steps": [
+    {
+      "source": "docs",
+      "put": [
+        {
+          "id": 1,
+          "title": "a",
+          "links": [
+            {
+              "to": 9,
+              "weight": 2
+            },
+            {
+              "to": 4,
+              "weight": 1
+            }
+          ]
+        }
+      ],
+      "expect": [
+        {
+          "id": 1,
+          "title": "a",
+          "link": {
+            "to": 9,
+            "weight": 2
+          }
+        },
+        {
+          "id": 1,
+          "title": "a",
+          "link": {
+            "to": 4,
+            "weight": 1
+          }
+        }
+      ]
+    },
+    {
+      "source": "docs",
+      "put": [
+        {
+          "id": 2,
+          "title": "b",
+          "links": []
+        }
+      ],
+      "expect": [
+        {
+          "id": 1,
+          "title": "a",
+          "link": {
+            "to": 9,
+            "weight": 2
+          }
+        },
+        {
+          "id": 1,
+          "title": "a",
+          "link": {
+            "to": 4,
+            "weight": 1
+          }
+        }
+      ]
+    },
+    {
+      "source": "docs",
+      "put": [
+        {
+          "id": 1,
+          "title": "a",
+          "links": [
+            {
+              "to": 4,
+              "weight": 5
+            }
+          ]
+        }
+      ],
+      "expect": [
+        {
+          "id": 1,
+          "title": "a",
+          "link": {
+            "to": 4,
+            "weight": 5
+          }
+        }
+      ]
+    },
+    {
+      "source": "docs",
+      "drop": [1],
+      "expect": []
+    }
+  ]
+}
