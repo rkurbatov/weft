@@ -6,6 +6,7 @@
   "type": "module",
   "imports": {
     "#weft": "./src/weft/index.ts",
+    "#weft/rel": "./src/weft/rel/index.ts",
     "#weft/*": "./src/weft/*",
     "#weft-react": "./src/weft-react/index.ts",
     "#loom": "./src/loom/index.ts",

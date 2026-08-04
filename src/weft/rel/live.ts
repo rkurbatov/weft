@@ -15,7 +15,8 @@
 // dA⋈B + (A+dA)⋈dB, which sums to exactly the derivative, self-joins
 // included, with no pair counted twice.
 
-import { watch } from '../core/graph/graph.ts'
+import { untracked, watch } from '../core/graph/graph.ts'
+import type { Watchable } from '../core/graph/graph.ts'
 import { table, feedOf, follow } from '../core/table/table.ts'
 import type { Table, Change, Patch, Key } from '../core/table/table.ts'
 import { alike } from '../core/table/table.ts'
@@ -32,8 +33,10 @@ import {
   onKeyOf,
   passesFilter,
   passesResidual,
+  paramsOfNode,
   pureRow,
   recount,
+  substituteNode,
   whyRow,
 } from './node.ts'
 import type { AggNode, FoldDecl, JoinNode, RelNode } from './node.ts'
@@ -48,6 +51,11 @@ export interface Relation extends Table<Row> {
 
 export interface RelateOptions {
   name?: string
+  /** Values for the tree's ?holes — ordinary cells; a change substitutes and
+   *  rebuilds, and subscribers still hear only the difference, because a
+   *  replace gates equal rows. A rebuild per change is the naive floor;
+   *  a plan that re-judges in place may replace it without touching this. */
+  params?: Record<string, Watchable<unknown>>
 }
 
 type Sources = Record<string, ReadonlyMap<Key, Row>>
@@ -496,7 +504,22 @@ export function relate(
     if (sources[name] === undefined) throw new Error(`weft rel: source '${name}' is not provided`)
   }
   const name = options.name ?? 'rel'
-  const runner = runnerFor(root)
+
+  const holes = [...paramsOfNode(root)]
+  const cells = options.params ?? {}
+  for (const hole of holes) {
+    if (cells[hole] === undefined) {
+      throw new Error(`weft rel: parameter ?${hole} is not provided`)
+    }
+  }
+  const valuesNow = (): Map<string, unknown> => {
+    const values = new Map<string, unknown>()
+    for (const hole of holes) values.set(hole, (cells[hole] as Watchable<unknown>).get())
+    return values
+  }
+
+  let resolved = holes.length === 0 ? root : untracked(() => substituteNode(root, valuesNow()))
+  let runner = runnerFor(resolved)
 
   let stops: Array<() => void> = []
 
@@ -521,6 +544,12 @@ export function relate(
 
   const rebuild = (): void => out.replace(runner.rebuild(snapshot()).values())
 
+  const retune = (): void => {
+    resolved = untracked(() => substituteNode(root, valuesNow()))
+    runner = runnerFor(resolved)
+    rebuild()
+  }
+
   const applyFrom = (from: string, changes: readonly Change<Row>[]): void => {
     const patch: { put: Row[]; drop: Key[] } = { put: [], drop: [] }
     for (const change of runner.feed(from, changes)) {
@@ -532,6 +561,19 @@ export function relate(
 
   function start(): void {
     let built = false
+    if (holes.length > 0) {
+      let tuned = false
+      stops.push(
+        watch(() => {
+          const values = valuesNow() // reading is the dependency
+          if (tuned) {
+            void values
+            retune()
+          }
+          tuned = true
+        }),
+      )
+    }
     for (const sourceName of named) {
       const feed = feedOf(sources[sourceName] as Table<Row>)
       const ensure = follow(feed, {
@@ -554,7 +596,7 @@ export function relate(
 
   return {
     ...out,
-    why: key => whyRow(root, key, snapshot()),
+    why: key => whyRow(resolved, key, snapshot()),
     canon: canonNode(root),
     dispose() {
       stop()

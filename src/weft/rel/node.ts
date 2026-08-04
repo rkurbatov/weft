@@ -17,7 +17,7 @@
 // floor every faster path is measured against — and the resync path when a
 // follower falls too far behind.
 
-import { canonExpr, evalExpr, truthy } from './expr.ts'
+import { canonExpr, evalExpr, paramsOfExpr, substituteExpr, truthy } from './expr.ts'
 import type { Expr, Row } from './expr.ts'
 import type { Key } from '../core/table/table.ts'
 
@@ -549,6 +549,95 @@ export function recount(
       }
       return out
     }
+  }
+}
+
+const subExpr = <E extends Expr | RowFn>(e: E, values: ReadonlyMap<string, unknown>): E =>
+  (isExpr(e) ? substituteExpr(e, values) : e) as E
+
+const subFold = (decl: FoldDecl, values: ReadonlyMap<string, unknown>): FoldDecl => {
+  if (decl.fold === 'count' || decl.fold === 'custom') return decl
+  if (decl.of === undefined) return decl
+  return { ...decl, of: subExpr(decl.of, values) }
+}
+
+/** The same tree with every hole filled — what actually runs; the original,
+ *  holes and all, stays the tree's identity. */
+export function substituteNode(node: RelNode, values: ReadonlyMap<string, unknown>): RelNode {
+  switch (node.prim) {
+    case 'source':
+      return node
+    case 'filter':
+      return {
+        ...node,
+        input: substituteNode(node.input, values),
+        test: subExpr(node.test, values),
+      }
+    case 'pure': {
+      const out: PureNode = { ...node, input: substituteNode(node.input, values) }
+      if (node.fields !== undefined) {
+        const fields: Record<string, Expr | RowFn> = {}
+        for (const [name, e] of Object.entries(node.fields)) fields[name] = subExpr(e, values)
+        out.fields = fields
+      }
+      return out
+    }
+    case 'join': {
+      const out: JoinNode = {
+        ...node,
+        left: substituteNode(node.left, values),
+        right: substituteNode(node.right, values),
+      }
+      if (node.residual !== undefined) out.residual = subExpr(node.residual, values)
+      return out
+    }
+    case 'agg': {
+      const folds: Record<string, FoldDecl> = {}
+      for (const [name, decl] of Object.entries(node.folds)) folds[name] = subFold(decl, values)
+      return { ...node, input: substituteNode(node.input, values), folds }
+    }
+    case 'union':
+      return {
+        ...node,
+        left: substituteNode(node.left, values),
+        right: substituteNode(node.right, values),
+      }
+    case 'expand':
+      return { ...node, input: substituteNode(node.input, values) }
+  }
+}
+
+const paramsOfE = (e: Expr | RowFn, out: Set<string>): void => {
+  if (isExpr(e)) paramsOfExpr(e, out)
+}
+
+/** Every hole under a node, by name. */
+export function paramsOfNode(node: RelNode, out: Set<string> = new Set()): Set<string> {
+  switch (node.prim) {
+    case 'source':
+      return out
+    case 'filter':
+      paramsOfE(node.test, out)
+      return paramsOfNode(node.input, out)
+    case 'pure':
+      for (const e of Object.values(node.fields ?? {})) paramsOfE(e, out)
+      return paramsOfNode(node.input, out)
+    case 'join':
+      if (node.residual !== undefined) paramsOfE(node.residual, out)
+      paramsOfNode(node.left, out)
+      return paramsOfNode(node.right, out)
+    case 'agg':
+      for (const decl of Object.values(node.folds)) {
+        if (decl.fold !== 'count' && decl.fold !== 'custom' && decl.of !== undefined) {
+          paramsOfE(decl.of, out)
+        }
+      }
+      return paramsOfNode(node.input, out)
+    case 'union':
+      paramsOfNode(node.left, out)
+      return paramsOfNode(node.right, out)
+    case 'expand':
+      return paramsOfNode(node.input, out)
   }
 }
 
