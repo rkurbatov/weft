@@ -22,6 +22,8 @@ export interface List {
   /** How many rows had to be added up since the last reset. */
   walked(): number
   resetWalked(): void
+  /** Layouts that hold live state let the bench put them down. */
+  close?(): void
 }
 
 export function classicList(heights: number[]): List {

@@ -8,10 +8,16 @@
 //   one measured   — an image arrives near the top and one row grows
 //   many measured  — a screenful of rows report their real heights
 //   fed from top   — a live feed pushes a hundred rows in above
+//
+// The last subject, `scan through rel`, reaches the same flat carrier by
+// declaring a scan rather than calling a structure; its scenes are translated
+// into the edits an application would make, so it measures the layer's price,
+// not another algorithm.
 
 import { classicList } from './list/classic.ts'
 import { weftList } from './list/weft.ts'
 import { flatList } from './list/flat.ts'
+import { scanList } from './list/scan.ts'
 import type { List } from './list/classic.ts'
 
 const arg = (name: string, fallback: number): number => {
@@ -76,6 +82,8 @@ const subjects: Array<{ name: string; open: () => List }> = [
   { name: 'cached offsets', open: () => classicList(rows) },
   { name: 'graph tree', open: () => weftList(rows) },
   { name: 'flat tree, delta-fed', open: () => flatList(rows) },
+  // Same carrier underneath, declared instead of called: the layer's price.
+  { name: 'scan through rel', open: () => scanList(rows) },
 ]
 
 const median = (xs: number[]): number =>
@@ -110,6 +118,7 @@ for (const scene of scenes) {
     {
       const list = subject.open()
       scene.run(list)
+      list.close?.()
     }
     for (let run = 0; run < runs; run++) {
       const list = subject.open()
@@ -119,6 +128,7 @@ for (const scene of scenes) {
       scene.run(list)
       times.push(performance.now() - at)
       walked = list.walked()
+      list.close?.()
     }
     const took = median(times)
     if (subject.name === 'cached offsets') baseline = took
