@@ -7,6 +7,7 @@ import assert from 'node:assert/strict'
 import { subscribe } from '#weft'
 import { createSheet } from './sheet.ts'
 import { sampleSheet, key } from '../common/sample.ts'
+import { until } from '../../test/kit/index.ts'
 
 function small() {
   return createSheet(
@@ -21,15 +22,9 @@ function small() {
 }
 
 /** Watch the cells a screen would be showing. */
-function watching(
-  sheet: ReturnType<typeof createSheet>,
-  cells: string[],
-  told: string[],
-): () => void {
-  const stops = cells.map(at => subscribe(sheet.shown(at), () => told.push(at)))
-  return () => {
-    for (const stop of stops) stop()
-  }
+/** Watch a handful of cells and record which of them were told about. */
+function watching(sheet: ReturnType<typeof createSheet>, cells: string[], told: string[]): void {
+  for (const at of cells) until(subscribe(sheet.shown(at), () => told.push(at)))
 }
 
 test('it works out what is asked for', () => {
@@ -42,22 +37,20 @@ test('it works out what is asked for', () => {
 test('a change travels as far as it has to and no further', () => {
   const sheet = small()
   const told: string[] = []
-  const stop = watching(sheet, ['A1', 'A2', 'A3', 'B1', 'C1'], told)
+  watching(sheet, ['A1', 'A2', 'A3', 'B1', 'C1'], told)
   sheet.set('A1', '5')
   assert.equal(sheet.shown('A3').peek(), '7')
   assert.equal(sheet.shown('B1').peek(), '70')
   assert.equal(sheet.shown('C1').peek(), '14')
   assert.deepEqual(told.toSorted(), ['A1', 'A3', 'B1', 'C1'])
-  stop()
 })
 
 test('a change that alters nothing tells nobody', () => {
   const sheet = small()
   const told: string[] = []
-  const stop = watching(sheet, ['B1'], told)
+  watching(sheet, ['B1'], told)
   sheet.set('A1', '1')
   assert.deepEqual(told, [])
-  stop()
 })
 
 test('editing a formula rewires what it depends on', () => {
@@ -116,7 +109,7 @@ test('an edit costs what is on screen, not what is in the sheet', () => {
   for (let row = 0; row < 2; row++) {
     for (let col = 0; col < shape.cols; col++) shownCells.push(key(row, col))
   }
-  const stop = watching(sheet, shownCells, told)
+  watching(sheet, shownCells, told)
   sheet.resetRecomputes()
   sheet.set('A1', '2')
   // The hand-written sheet recomputes every dependant in the book — over two
@@ -124,5 +117,4 @@ test('an edit costs what is on screen, not what is in the sheet', () => {
   assert.ok(sheet.recomputes() < 60, `worked out ${sheet.recomputes()} cells`)
   assert.ok(told.length > 0)
   assert.ok(told.every(at => shownCells.includes(at)))
-  stop()
 })

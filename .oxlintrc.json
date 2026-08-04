@@ -36,7 +36,7 @@
   },
   "overrides": [
     {
-      "files": ["**/*.test.ts", "demo/bench.ts"],
+      "files": ["**/*.test.ts", "test/kit/*.ts", "demo/bench.ts"],
       "rules": {
         "no-console": "off",
         "no-await-in-loop": "off",
