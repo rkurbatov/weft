@@ -114,9 +114,11 @@ export interface ScanNode {
   order: ReadonlyArray<{ field: string; down?: boolean }>
   /** What each row contributes to the carry. */
   step: Expr | RowFn
-  /** The carry BEFORE this row lands here — a running total is the row's
-   *  offset, which is the whole point on a virtualised list. */
-  as: string
+  /** A field to write the carry BEFORE this row into. Optional on purpose:
+   *  a scan always answers `offsetOf`/`at` through its view, and writing the
+   *  number into every row is a separate, and often wrong, request — see the
+   *  plan's `form`. */
+  as?: string
   /** The carry including this row, when the screen wants both ends. */
   through?: string
   /** Where the pass starts. */
@@ -161,7 +163,7 @@ export const scan = (
   attrs: {
     order: ReadonlyArray<{ field: string; down?: boolean }>
     step: Expr | RowFn
-    as: string
+    as?: string
     through?: string
     from?: number
   },
@@ -264,9 +266,10 @@ export function canonNode(node: RelNode): string | null {
       const under = canonNode(node.input)
       if (under === null || !isExpr(node.step)) return null
       const order = node.order.map(o => `${o.down === true ? '-' : '+'}${o.field}`).join(',')
+      const as = node.as === undefined ? '' : ` as=${node.as}`
       const through = node.through === undefined ? '' : ` through=${node.through}`
       const from = node.from === undefined ? '' : ` from=${node.from}`
-      return `(scan by=${order} step=${canonExpr(node.step)} as=${node.as}${through}${from} ${under})`
+      return `(scan by=${order} step=${canonExpr(node.step)}${as}${through}${from} ${under})`
     }
     case 'expand': {
       const under = canonNode(node.input)
@@ -363,7 +366,6 @@ export function checkNode(node: RelNode): void {
     case 'scan': {
       checkNode(node.input)
       if (node.order.length === 0) throw new Error('weft rel: scan declares no order')
-      if (node.as.length === 0) throw new Error('weft rel: scan declares no carry field')
       for (const path of keyPaths(node)) {
         const head = path[0] as string
         if (head === node.as || head === node.through) {
@@ -574,7 +576,12 @@ export function recount(
       for (const [key, row] of under) {
         const before = carry
         carry += stepOf(node, row)
-        const marked: Row = { ...row, [node.as]: before }
+        if (node.as === undefined && node.through === undefined) {
+          out.set(key, row)
+          continue
+        }
+        const marked: Row = { ...row }
+        if (node.as !== undefined) marked[node.as] = before
         if (node.through !== undefined) marked[node.through] = carry
         out.set(key, marked)
       }

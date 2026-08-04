@@ -217,10 +217,13 @@ export class Rel<R> {
    *  each row — its offset — and `through` the carry including it. This is
    *  what a virtualised list asks: where a row starts, and how tall the
    *  whole is. The carrier is chosen by the same door as folds. */
-  scan<N extends string, T extends string = never>(spec: {
+  scan<N extends string = never, T extends string = never>(spec: {
     by: ScanOrder<R>
     step: NumericField<R> | Expr | RowFn
-    as: N
+    /** Name it only if the screen shows it per row: naming asks for the carry
+     *  to be written into every row, and over a long list the plan takes that
+     *  back — the view answers offsets either way. */
+    as?: N
     through?: T
     from?: number
   }): Rel<R & { [K in N | T]: number }> {
@@ -231,7 +234,7 @@ export class Rel<R> {
       scanNode(this.node, {
         order: order.map(o => (typeof o === 'string' ? { field: o } : o)),
         step: typeof spec.step === 'string' ? fieldExpr(spec.step) : spec.step,
-        as: spec.as,
+        ...(spec.as === undefined ? {} : { as: spec.as }),
         ...(spec.through === undefined ? {} : { through: spec.through }),
         ...(spec.from === undefined ? {} : { from: spec.from }),
       }),

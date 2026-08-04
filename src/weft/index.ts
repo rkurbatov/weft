@@ -30,8 +30,22 @@ export type { Command, CommandOptions, CommandState, WhileRunning } from './core
 export { family } from './core/graph/family.ts'
 export type { Family, FamilyOptions } from './core/graph/family.ts'
 
-export { planFold, onPlan, TREE_SPAN, TREE_WORTH_IT } from './core/table/plan.ts'
-export type { Plan, Carrier, FoldTraits } from './core/table/plan.ts'
+export {
+  planFold,
+  planScan,
+  onPlan,
+  onScanPlan,
+  TREE_SPAN,
+  TREE_WORTH_IT,
+} from './core/table/plan.ts'
+export type {
+  Plan,
+  Carrier,
+  FoldTraits,
+  ScanPlan,
+  ScanCarrier,
+  ScanTraits,
+} from './core/table/plan.ts'
 export { blocks } from './core/table/blocks.ts'
 export type { Blocks, BlockOptions } from './core/table/blocks.ts'
 export { offsets } from './core/table/offsets.ts'

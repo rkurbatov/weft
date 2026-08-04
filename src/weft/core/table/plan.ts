@@ -42,19 +42,32 @@ export function onPlan(listener: (name: string, plan: Plan) => void): () => void
 /** A scan's carrier: a prefix line of plain numbers, or an honest recount of
  *  the tail from the edit. The same door, the same announcement. */
 export type ScanCarrier = 'offsets' | 'tail'
+/** Where the carry lives: written into every row, or answered when asked.
+ *  Stored is what a ledger's balance column wants — a short list where the
+ *  running total is shown. Asked is what a virtualised list wants: an edit
+ *  near the top must not rewrite the tail. */
+export type ScanForm = 'stored' | 'asked'
 
 export interface ScanTraits {
   /** Rows in the ordered view when the scan is built. */
   size: number
   /** The carry is a number added along — the only shape a prefix line holds. */
   numeric: boolean
+  /** The tree names a carry field: the application asked to see it per row. */
+  named: boolean
   forced?: ScanCarrier | 'auto'
 }
 
 export interface ScanPlan {
   carrier: ScanCarrier
+  form: ScanForm
   reason: string
 }
+
+/** Above this many rows, writing a carry into every row costs more than the
+ *  screen that reads it — measured on the list bench, where a stored carry
+ *  ran three orders behind an asked one on the very first edit. */
+export const STORED_CARRY_LIMIT = 4096
 
 const scanListeners = new Set<(name: string, plan: ScanPlan) => void>()
 
@@ -70,24 +83,40 @@ export function planScan(name: string, traits: ScanTraits): ScanPlan {
 }
 
 function decideScan(traits: ScanTraits): ScanPlan {
+  // The form first: a carry nobody named is never written down, and a named
+  // one is dropped from the rows once the tail outgrows the screen — the
+  // answer stays reachable either way, through the view's own offsetOf.
+  const form: ScanForm = traits.named && traits.size < STORED_CARRY_LIMIT ? 'stored' : 'asked'
+  const why = !traits.named
+    ? 'no carry field named: nothing to write into rows'
+    : form === 'stored'
+      ? `${traits.size} rows: writing the carry into rows is still cheap`
+      : `${traits.size} rows: a stored carry would rewrite the tail on every edit`
+
   if (traits.forced !== undefined && traits.forced !== 'auto') {
     if (traits.forced === 'offsets' && !traits.numeric) {
       throw new Error("weft: an 'offsets' carrier needs a numeric carry — it adds along a line")
     }
-    return { carrier: traits.forced, reason: 'forced by the passport' }
+    return { carrier: traits.forced, form, reason: `forced by the passport; ${why}` }
   }
   if (!traits.numeric) {
-    return { carrier: 'tail', reason: 'the carry is not a number: only a tail recount is lawful' }
+    return {
+      carrier: 'tail',
+      form,
+      reason: `the carry is not a number: only a tail recount is lawful; ${why}`,
+    }
   }
   if (traits.size >= TREE_WORTH_IT) {
     return {
       carrier: 'offsets',
-      reason: `a numeric carry over ${traits.size} rows: a point update, not a tail`,
+      form,
+      reason: `a numeric carry over ${traits.size} rows: a point update, not a tail; ${why}`,
     }
   }
   return {
     carrier: 'tail',
-    reason: `only ${traits.size} rows: walking the tail is cheaper than a line's upkeep`,
+    form,
+    reason: `only ${traits.size} rows: walking the tail is cheaper than a line's upkeep; ${why}`,
   }
 }
 

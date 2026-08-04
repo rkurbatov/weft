@@ -9,7 +9,8 @@
 // `prepend(hs)` becomes a hundred rows entering with smaller ranks. The
 // answers are the same answers; the calls are the calls an application makes.
 //
-// WHAT THIS ROW FOUND, and it is a finding about the design, not the code:
+// WHAT THIS ROW FOUND FIRST, and it was a finding about the design, not the
+// code — since fixed by the plan's `form`, kept here as the reason it exists:
 // a scan that writes the carry INTO EVERY ROW materialises its own tail. One
 // row growing near the top gives every row below it a new offset, so an edit
 // that costs `offsets` a point update costs this a rewrite of the tail — the
@@ -20,12 +21,16 @@
 // same one — but a scan that answers offsets ON DEMAND (a view with
 // `offsetOf`/`at`) instead of storing them, keeping the materialised form for
 // the case it is actually for: a short ordered list whose running total is
-// shown, like a ledger's balance column.
+// shown, like a ledger's balance column. That is now what happens: naming no
+// carry field leaves the numbers in the line, the plan says `asked`, and only
+// the rows that truly changed travel. What is left in this row's column is
+// the layer's own price — a table, changes by rule, subscribers — against a
+// carrier called directly.
 
 import { table, watch } from '#weft'
 import type { Key } from '#weft'
 import { from } from '#weft/rel'
-import type { Row } from '#weft/rel'
+import type { Ordering, Row } from '#weft/rel'
 import type { List } from './classic.ts'
 
 interface ListRow {
@@ -33,70 +38,39 @@ interface ListRow {
   rank: number
   height: number
 }
-type Placed = ListRow & { offset: number; end: number }
 
 export function scanList(heights: number[]): List {
   const rows = table<Row>({ key: r => r['id'] as Key, name: 'rows' })
   rows.put(...heights.map((height, i) => ({ id: i, rank: i, height })))
 
-  const live = from<ListRow>('rows', 'id')
-    .scan({ by: 'rank', step: 'height', as: 'offset', through: 'end' })
-    .live({ rows })
-  // A screen watches; without demand nothing feeds at all.
+  // No carry field is named: the screen wants offsets, not a number in every
+  // row. The plan sees that and keeps the carry in the line.
+  const live = from<ListRow>('rows', 'id').scan({ by: 'rank', step: 'height' }).live({ rows })
+  // Demand, the way a screen actually holds it: a virtualised list never
+  // watches the whole array — it watches the size and asks the view for the
+  // window it draws. Watching `all` here would rebuild a 20k-row array on
+  // every edit and drown what the scan itself costs.
   const stop = watch(() => {
-    live.all.get()
+    live.size.get()
   })
-
-  // A cheap stamp: the derived table's row objects change identity on every
-  // change, so one of them plus the size is enough to notice movement.
-  let ticks = 0
-  const bump = watch(() => {
-    live.all.get()
-    ticks++
-  })
-  const version = (): number => ticks
 
   let nextId = heights.length
   let top = 0 // prepended rows walk their ranks downwards
-
-  // Sorted once per change, not per question: the layer's version tells us
-  // when the answer moved. Without this the adapter's own sort would drown
-  // whatever the layer costs.
-  let sorted: Placed[] = []
-  let seenAt = -1
-  const ordered = (): Placed[] => {
-    const now = live.size.peek() + (live.all.peek().length === 0 ? 0 : 0)
-    void now
-    const stamp = version()
-    if (stamp !== seenAt) {
-      sorted = [...(live.all.peek() as readonly Placed[])].toSorted((a, b) => a.rank - b.rank)
-      seenAt = stamp
-    }
-    return sorted
-  }
+  const order = (): Ordering => live.order as Ordering
 
   return {
     offsetOf(index) {
-      return ordered()[index]?.offset ?? 0
+      const key = order().keyAt(index)
+      return key === null ? 0 : (order().offsetOf(key) ?? 0)
     },
     at(pixel) {
-      // The layer answers by row; the hit test is the screen's own search.
-      const all = ordered()
-      let low = 0
-      let high = all.length
-      while (low < high) {
-        const mid = (low + high) >> 1
-        if ((all[mid] as Placed).offset <= pixel) low = mid + 1
-        else high = mid
-      }
-      const at = Math.max(0, low - 1)
-      const row = all[at]
-      return row === undefined
-        ? { index: -1, into: pixel }
-        : { index: at, into: pixel - row.offset }
+      const found = order().at(pixel)
+      return found === null ? { index: -1, into: pixel } : { index: found.place, into: found.into }
     },
     measure(index, height) {
-      const row = ordered()[index]
+      const key = order().keyAt(index)
+      if (key === null) return
+      const row = live.row(key).peek() as ListRow | undefined
       if (row !== undefined) rows.put({ id: row.id, rank: row.rank, height })
     },
     prepend(fresh) {
@@ -107,13 +81,12 @@ export function scanList(heights: number[]): List {
       }
       rows.put(...put)
     },
-    size: () => live.size.peek(),
+    size: () => order().size(),
     // The layer's own accounting lives behind onScanPlan and the journal;
     // this column stays empty rather than pretending to compare.
     walked: () => 0,
     resetWalked: () => {},
     close: () => {
-      bump()
       stop()
       live.dispose()
       rows.dispose()
