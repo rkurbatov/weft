@@ -3,7 +3,7 @@
 // needs — absolute, total, void and idempotent by construction, so a replay
 // on any base is safe. Untouched lanes keep their identity.
 
-import type { Key } from './table.ts'
+import type { Key } from '../data/key.ts'
 
 export type Lanes<K extends Key = Key> = Readonly<Record<string, readonly K[]>>
 

@@ -10,7 +10,9 @@ import type { Cell, Equal, Watchable } from '../graph/graph.ts'
 import { family } from '../graph/family.ts'
 import { TREE_SPAN, planFold } from './plan.ts'
 
-export type Key = string | number
+import type { Key } from '../data/key.ts'
+
+export type { Key }
 
 /** One key's move: insert (no prev), update (both sides), removal (no next). */
 export interface Change<R> {

@@ -1,14 +1,13 @@
-import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { test } from 'node:test'
 import { subscribe } from '#weft'
 import { railServer } from './server.ts'
 import { rail } from './state.ts'
-
-const wait = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms))
+import { held, wait } from '../../test/kit/index.ts'
 
 test('the rail feeds itself: a look starts the feed and loads pages; leaving stops both', async () => {
   const server = railServer({ seed: 3, size: 90, pageDelay: 5, tickEvery: 10 })
-  const app = rail(server)
+  const app = held(rail(server))
   assert.equal(server.watching(), 0)
 
   const stop = subscribe(app.shelves.all.window(0, 12), () => {})
@@ -31,13 +30,12 @@ test('the rail feeds itself: a look starts the feed and loads pages; leaving sto
 
   stop()
   assert.equal(server.watching(), 0) // nobody looks — the feed rests
-  app.dispose()
 })
 
 test('a page that arrives late cannot roll a live game back', async () => {
   // Pages travel six times longer than a tick: every page lands already stale.
   const server = railServer({ seed: 5, size: 60, pageDelay: 30, tickEvery: 5 })
-  const app = rail(server)
+  const app = held(rail(server))
 
   const seen = new Map<number, number>()
   const rollbacks: number[] = []
@@ -53,12 +51,11 @@ test('a page that arrives late cannot roll a live game back', async () => {
   assert.ok(seen.size >= 40) // plenty of rows went through
   assert.deepEqual(rollbacks, [])
   stop()
-  app.dispose()
 })
 
 test('typing churn asks the search once: the calm holds the abandoned questions', async () => {
   const server = railServer({ seed: 7, size: 60, pageDelay: 4, tickEvery: 1000 })
-  const app = rail(server)
+  const app = held(rail(server))
 
   // Three keystrokes, each look shorter than the calm (250ms in the passport).
   let stop = subscribe(app.find('no').flight, () => {})
@@ -75,12 +72,11 @@ test('typing churn asks the search once: the calm holds the abandoned questions'
   assert.ok(found.length > 0)
   assert.ok(found.every(g => `${g.home} ${g.away}`.toLowerCase().includes('north')))
   stop()
-  app.dispose()
 })
 
 test('details come from two services and meet in one outcome', async () => {
   const server = railServer({ seed: 7, size: 60, pageDelay: 4, tickEvery: 1000 })
-  const app = rail(server)
+  const app = held(rail(server))
   const someId = 3
 
   const info = app.gameInfo(someId)
@@ -95,5 +91,4 @@ test('details come from two services and meet in one outcome', async () => {
   assert.equal(info.flight.peek(), false)
   stopInfo()
   stopOdds()
-  app.dispose()
 })

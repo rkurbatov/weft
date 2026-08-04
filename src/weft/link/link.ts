@@ -5,7 +5,7 @@
 import { input, untracked } from '../core/graph/graph.ts'
 import type { Input, Watchable } from '../core/graph/graph.ts'
 import { EMPTY, arrived, heldOf, refused } from '../core/remote/remote.ts'
-import { preserve } from '../core/table/project.ts'
+import { preserve } from '../core/data/preserve.ts'
 import type { Remote } from '../core/remote/remote.ts'
 import { wallClock } from '../core/graph/time.ts'
 import type { Timers } from '../core/graph/time.ts'

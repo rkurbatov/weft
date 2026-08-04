@@ -15,13 +15,14 @@ import { kanbanMirror, serveKanban } from './mirror.ts'
 import { kanbanSuite } from './suite.ts'
 import type { Make } from './suite.ts'
 import type { KanbanServer } from '../kanban-common/server.ts'
+import { held } from '../../test/kit/index.ts'
 
 const wait = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms))
 
 // The station and its tabs, across a structured-clone boundary. Every view is
 // warmed for the trial's lifetime — what a mounted screen would do.
 const make = (server: KanbanServer, pollMs: number, tabs = 1) => {
-  const box = region('station', () => kanban(server, pollMs))
+  const box = held(region('station', () => kanban(server, pollMs)))
   const stops: Array<() => void> = []
   const mirrors = Array.from({ length: tabs }, () => {
     const pair = pairInMemory()
@@ -69,7 +70,7 @@ const column = (
 
 test('two tabs, one state', async () => {
   const server = kanbanServer({ latency: 3, grumpiness: 0 })
-  const app = make(server, 60_000, 2)
+  const app = held(make(server, 60_000, 2))
   const [one, two] = app.tabs
   assert.ok(one !== undefined && two !== undefined)
   await one.actions.load()
@@ -81,13 +82,12 @@ test('two tabs, one state', async () => {
   await one.actions.move(moved, 'progress', 0)
   await wait(1)
   assert.equal(column(two, 'progress')[0], moved) // one hope, every mirror
-  app.dispose()
 })
 
 test("instruments cross the wire: the tab sees the station's waves", async () => {
   const { adopt } = await import('#loom')
   const server = kanbanServer({ latency: 3, grumpiness: 0 })
-  const box = region('station', () => kanban(server, 60_000))
+  const box = held(region('station', () => kanban(server, 60_000)))
   const pair = pairInMemory()
   const stop = serveKanban(box.value, pair.graph, { schedule: atOnce, instruments: true })
   const tab = adopt(pair.watcher)
@@ -102,12 +102,11 @@ test("instruments cross the wire: the tab sees the station's waves", async () =>
   tab.close()
   stop()
   box.value.dispose()
-  box.dispose()
 })
 
 test('the law of the key on the tab seam: a repeat under one key is one note, one card', async () => {
   const server = kanbanServer({ latency: 4, grumpiness: 0 })
-  const app = make(server, 60_000)
+  const app = held(make(server, 60_000))
   await app.actions.load()
   await wait(1)
   const before = app.state.cards.peek().size
@@ -122,5 +121,4 @@ test('the law of the key on the tab seam: a repeat under one key is one note, on
   await app.actions.load()
   await wait(1)
   assert.equal(app.state.cards.peek().size, before + 1) // one key — one card
-  app.dispose()
 })

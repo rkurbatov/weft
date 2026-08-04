@@ -70,10 +70,11 @@ export type { EngineOptions } from './core/graph/engine.ts'
 export { journal } from './core/graph/journal.ts'
 export type { Journal } from './core/graph/journal.ts'
 
-export { projected, preserve } from './core/table/project.ts'
-export type { ProjectionSpec } from './core/table/project.ts'
-export { laneDrop, lanePlace, laneAppend, laneFind } from './core/table/arrange.ts'
-export type { Lanes } from './core/table/arrange.ts'
+export { projected } from './core/keep/project.ts'
+export { preserve } from './core/data/preserve.ts'
+export type { ProjectionSpec } from './core/keep/project.ts'
+export { laneDrop, lanePlace, laneAppend, laneFind } from './core/data/arrange.ts'
+export type { Lanes } from './core/data/arrange.ts'
 
 export { table, alike } from './core/table/table.ts'
 export type {

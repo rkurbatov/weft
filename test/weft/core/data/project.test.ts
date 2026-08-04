@@ -4,9 +4,10 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { input } from '#weft/core/graph/graph.ts'
-import { preserve, projected } from '#weft/core/table/project.ts'
-import { laneDrop, laneFind, lanePlace } from '#weft/core/table/arrange.ts'
-import type { Lanes } from '#weft/core/table/arrange.ts'
+import { projected } from '#weft/core/keep/project.ts'
+import { preserve } from '#weft/core/data/preserve.ts'
+import { laneDrop, laneFind, lanePlace } from '#weft/core/data/arrange.ts'
+import type { Lanes } from '#weft/core/data/arrange.ts'
 import type { Entry } from '#weft/core/keep/outbox.ts'
 
 const entry = (name: string, args: unknown, state: Entry['state'] = 'waiting'): Entry => ({
