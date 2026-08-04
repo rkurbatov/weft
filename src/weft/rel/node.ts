@@ -107,6 +107,22 @@ export interface ExpandNode {
   key: readonly string[]
 }
 
+export interface ScanNode {
+  prim: 'scan'
+  input: RelNode
+  /** The order the pass follows: fields, each ascending or descending. */
+  order: ReadonlyArray<{ field: string; down?: boolean }>
+  /** What each row contributes to the carry. */
+  step: Expr | RowFn
+  /** The carry BEFORE this row lands here — a running total is the row's
+   *  offset, which is the whole point on a virtualised list. */
+  as: string
+  /** The carry including this row, when the screen wants both ends. */
+  through?: string
+  /** Where the pass starts. */
+  from?: number
+}
+
 export type RelNode =
   | SourceNode
   | PureNode
@@ -115,6 +131,7 @@ export type RelNode =
   | AggNode
   | UnionNode
   | ExpandNode
+  | ScanNode
 
 export const source = (name: string, key: readonly string[]): SourceNode => ({
   prim: 'source',
@@ -139,6 +156,16 @@ export const union = (left: RelNode, right: RelNode): UnionNode => ({
   left,
   right,
 })
+export const scan = (
+  input: RelNode,
+  attrs: {
+    order: ReadonlyArray<{ field: string; down?: boolean }>
+    step: Expr | RowFn
+    as: string
+    through?: string
+    from?: number
+  },
+): ScanNode => ({ prim: 'scan', input, ...attrs })
 export const expand = (
   input: RelNode,
   attrs: { field: string; as: string; key: readonly string[] },
@@ -163,6 +190,7 @@ export function keyPaths(node: RelNode): ReadonlyArray<readonly string[]> {
       return node.key.map(f => [f])
     case 'pure':
     case 'filter':
+    case 'scan':
       return keyPaths(node.input)
     case 'join':
       return [...keyPaths(node.left), ...keyPaths(node.right).map(p => [node.as].concat(p))]
@@ -231,6 +259,14 @@ export function canonNode(node: RelNode): string | null {
       const right = canonNode(node.right)
       if (left === null || right === null) return null
       return `(union ${left} ${right})`
+    }
+    case 'scan': {
+      const under = canonNode(node.input)
+      if (under === null || !isExpr(node.step)) return null
+      const order = node.order.map(o => `${o.down === true ? '-' : '+'}${o.field}`).join(',')
+      const through = node.through === undefined ? '' : ` through=${node.through}`
+      const from = node.from === undefined ? '' : ` from=${node.from}`
+      return `(scan by=${order} step=${canonExpr(node.step)} as=${node.as}${through}${from} ${under})`
     }
     case 'expand': {
       const under = canonNode(node.input)
@@ -322,6 +358,18 @@ export function checkNode(node: RelNode): void {
       checkNode(node.right)
       if (node.on.length === 0) throw new Error('weft rel: join declares no on-keys')
       if (node.as.length === 0) throw new Error('weft rel: join declares no alias')
+      return
+    }
+    case 'scan': {
+      checkNode(node.input)
+      if (node.order.length === 0) throw new Error('weft rel: scan declares no order')
+      if (node.as.length === 0) throw new Error('weft rel: scan declares no carry field')
+      for (const path of keyPaths(node)) {
+        const head = path[0] as string
+        if (head === node.as || head === node.through) {
+          throw new Error(`weft rel: scan writes over key field '${head}'`)
+        }
+      }
       return
     }
     case 'union': {
@@ -448,6 +496,25 @@ export function expandRows(node: ExpandNode, row: Row): Row[] {
 /** The values a row files under — the group it belongs to. */
 export const groupOf = (node: AggNode, row: Row): unknown[] => node.by.map(f => row[f] ?? null)
 
+/** The comparison a scan's order declares. */
+export function orderCompare(
+  order: ReadonlyArray<{ field: string; down?: boolean }>,
+  a: Row,
+  b: Row,
+): number {
+  for (const { field: f, down } of order) {
+    const l = a[f]
+    const r = b[f]
+    if (l === r) continue
+    const less = (l as number) < (r as number)
+    return (less ? -1 : 1) * (down === true ? -1 : 1)
+  }
+  return 0
+}
+
+export const stepOf = (node: ScanNode, row: Row): number =>
+  (isExpr(node.step) ? evalExpr(node.step, row) : node.step(row)) as number
+
 /** The oracle: the whole answer, recounted from the sources. */
 export function recount(
   node: RelNode,
@@ -493,6 +560,23 @@ export function recount(
       if (node.by.length === 0 && out.size === 0) {
         const empty = foldGroup(node, new Map(), [])
         out.set(keyOfRow(node, empty), empty)
+      }
+      return out
+    }
+    case 'scan': {
+      const under = [...recount(node.input, sources)]
+      // Ties are broken by key, so two implementations agree on the order.
+      under.sort(
+        ([ka, a], [kb, b]) => orderCompare(node.order, a, b) || (String(ka) < String(kb) ? -1 : 1),
+      )
+      const out = new Map<Key, Row>()
+      let carry = node.from ?? 0
+      for (const [key, row] of under) {
+        const before = carry
+        carry += stepOf(node, row)
+        const marked: Row = { ...row, [node.as]: before }
+        if (node.through !== undefined) marked[node.through] = carry
+        out.set(key, marked)
       }
       return out
     }
@@ -604,6 +688,12 @@ export function substituteNode(node: RelNode, values: ReadonlyMap<string, unknow
       }
     case 'expand':
       return { ...node, input: substituteNode(node.input, values) }
+    case 'scan':
+      return {
+        ...node,
+        input: substituteNode(node.input, values),
+        step: subExpr(node.step, values),
+      }
   }
 }
 
@@ -638,6 +728,9 @@ export function paramsOfNode(node: RelNode, out: Set<string> = new Set()): Set<s
       return paramsOfNode(node.right, out)
     case 'expand':
       return paramsOfNode(node.input, out)
+    case 'scan':
+      paramsOfE(node.step, out)
+      return paramsOfNode(node.input, out)
   }
 }
 
@@ -654,6 +747,7 @@ export function whyRow(
       return [{ source: node.source, key }]
     case 'filter':
     case 'pure':
+    case 'scan':
       return whyRow(node.input, key, sources)
     case 'join': {
       const values = JSON.parse(key as string) as unknown[]

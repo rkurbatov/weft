@@ -13,6 +13,7 @@ import {
   join,
   pure,
   recount,
+  scan,
   source,
   union,
 } from '#weft/rel/node.ts'
@@ -542,4 +543,67 @@ test('expand consumes the table field and why names the parent alone', () => {
   stop()
   live.dispose()
   docs.dispose()
+})
+
+test('scan parity: a running total in order, against the oracle at every step', () => {
+  const rows = table<Row>({ key: r => r['id'] as Key, name: 'rows' })
+  const tree = scan(source('rows', ['id']), {
+    order: [{ field: 'rank' }],
+    step: field('height'),
+    as: 'offset',
+    through: 'end',
+  })
+  const live = relate(tree, { rows })
+  const stop = subscribe(live.all, () => {})
+  let seed = 53
+  const rand = (n: number): number => {
+    seed = (seed * 1103515245 + 12345) & 0x7fffffff
+    return seed % n
+  }
+  for (let tick = 0; tick < 250; tick++) {
+    if (rand(4) === 0) rows.drop(rand(20))
+    else rows.put({ id: rand(20), rank: rand(100), height: 20 + rand(80) })
+    const held = new Map<Key, Row>()
+    for (const r of rows.all.peek()) held.set(r['id'] as Key, r)
+    const truth = recount(tree, { rows: held })
+    const got = live.all.peek()
+    assert.equal(got.length, truth.size, `tick ${tick}`)
+    for (const row of got) assert.deepEqual(row, truth.get(row['id'] as Key), `tick ${tick}`)
+  }
+  stop()
+  live.dispose()
+  rows.dispose()
+})
+
+test('a scan pays its tail, and the carrier is named at the same door', async () => {
+  const { onScanPlan } = await import('#weft')
+  const heard: string[] = []
+  const stopEar = onScanPlan((name, plan) => heard.push(`${name}:${plan.carrier}`))
+
+  const rows = table<Row>({ key: r => r['id'] as Key })
+  for (let i = 0; i < 400; i++) rows.put({ id: i, rank: i, height: 50 })
+  const live = relate(
+    scan(source('rows', ['id']), {
+      order: [{ field: 'rank' }],
+      step: field('height'),
+      as: 'offset',
+    }),
+    { rows },
+  )
+  const stopAll = subscribe(live.all, () => {})
+  assert.deepEqual(heard, ['scan.offset:offsets'], 'a numeric carry over 400 rows takes the line')
+
+  assert.equal((live.row(10).peek() as Row)['offset'], 500)
+  let aheadWakes = 0
+  const stopAhead = subscribe(live.row(5), () => aheadWakes++)
+  aheadWakes = 0
+  rows.put({ id: 300, rank: 300, height: 90 }) // a row far below moves
+  assert.equal(aheadWakes, 0, 'a scan owes its tail, never its head')
+  assert.equal((live.row(301).peek() as Row)['offset'], 300 * 50 + 90)
+
+  stopAhead()
+  stopAll()
+  stopEar()
+  live.dispose()
+  rows.dispose()
 })

@@ -17,10 +17,11 @@
 
 import { untracked, watch } from '../core/graph/graph.ts'
 import type { Watchable } from '../core/graph/graph.ts'
+import { offsets } from '../core/table/offsets.ts'
 import { table, feedOf, follow } from '../core/table/table.ts'
 import type { Table, Change, Patch, Key } from '../core/table/table.ts'
 import { alike } from '../core/table/table.ts'
-import { planFold } from '../core/table/plan.ts'
+import { planFold, planScan } from '../core/table/plan.ts'
 import {
   checkNode,
   canonNode,
@@ -31,15 +32,17 @@ import {
   keyOfRow,
   mergedRow,
   onKeyOf,
+  orderCompare,
   passesFilter,
   passesResidual,
   paramsOfNode,
   pureRow,
   recount,
+  stepOf,
   substituteNode,
   whyRow,
 } from './node.ts'
-import type { AggNode, FoldDecl, JoinNode, RelNode } from './node.ts'
+import type { AggNode, FoldDecl, JoinNode, RelNode, ScanNode } from './node.ts'
 import type { Row } from './expr.ts'
 
 export interface Relation extends Table<Row> {
@@ -118,6 +121,8 @@ function runnerFor(node: RelNode): Runner {
       return joinRunner(node)
     case 'agg':
       return aggRunner(node)
+    case 'scan':
+      return scanRunner(node)
     case 'union': {
       const left = runnerFor(node.left)
       const right = runnerFor(node.right)
@@ -475,6 +480,99 @@ function joinRunner(node: JoinNode): Runner {
   }
 }
 
+function scanRunner(node: ScanNode): Runner {
+  const input = runnerFor(node.input)
+  // The pass, in order: rows by place, and their steps as a line of numbers.
+  let placed: Array<{ key: Key; row: Row }> = []
+  let line = offsets()
+  let carrier: 'offsets' | 'tail' = 'tail'
+  let announced = false
+
+  const compare = (a: { key: Key; row: Row }, b: { key: Key; row: Row }): number =>
+    orderCompare(node.order, a.row, b.row) || (String(a.key) < String(b.key) ? -1 : 1)
+
+  /** Where a row sits, or where it would sit — binary search over the pass. */
+  const placeOf = (probe: { key: Key; row: Row }): number => {
+    let low = 0
+    let high = placed.length
+    while (low < high) {
+      const mid = (low + high) >> 1
+      if (compare(placed[mid] as { key: Key; row: Row }, probe) < 0) low = mid + 1
+      else high = mid
+    }
+    return low
+  }
+
+  const marked = (at: number): Row => {
+    const { row } = placed[at] as { key: Key; row: Row }
+    const before = (node.from ?? 0) + line.offsetOf(at)
+    const out: Row = { ...row, [node.as]: before }
+    if (node.through !== undefined) out[node.through] = before + stepOf(node, row)
+    return out
+  }
+
+  const plan = (): void => {
+    const decided = planScan(`scan.${node.as}`, {
+      size: placed.length,
+      numeric: true,
+      ...(announced ? { forced: carrier } : {}),
+    })
+    carrier = decided.carrier
+    announced = true
+  }
+
+  return {
+    feed(from, changes) {
+      // A row leaving or arriving shifts every place after it — the tail is
+      // what a scan owes, and the line pays it as a point update.
+      const gone = new Map<Key, Row>()
+      let earliest = placed.length
+      let touched = false
+      for (const change of input.feed(from, changes)) {
+        if (change.prev !== undefined) {
+          const at = placeOf({ key: change.key, row: change.prev })
+          if (placed[at]?.key === change.key) {
+            placed.splice(at, 1)
+            line.remove(at)
+            earliest = Math.min(earliest, at)
+            touched = true
+            if (change.next === undefined) gone.set(change.key, change.prev)
+          }
+        }
+        if (change.next !== undefined) {
+          const one = { key: change.key, row: change.next }
+          const at = placeOf(one)
+          placed.splice(at, 0, one)
+          line.insert(at, [stepOf(node, change.next)])
+          earliest = Math.min(earliest, at)
+          touched = true
+          gone.delete(change.key)
+        }
+      }
+      if (!touched) return []
+      const out: Change<Row>[] = []
+      for (const [key, prev] of gone) out.push({ key, prev })
+      // Everything from the earliest touch on carries a new answer.
+      for (let at = earliest; at < placed.length; at++) {
+        out.push({ key: (placed[at] as { key: Key }).key, next: marked(at) })
+      }
+      return out
+    },
+    rebuild(sources) {
+      const under = input.rebuild(sources)
+      placed = [...under].map(([key, row]) => ({ key, row }))
+      placed.sort(compare)
+      line = offsets(placed.map(one => stepOf(node, one.row)))
+      plan()
+      const out = new Map<Key, Row>()
+      for (let at = 0; at < placed.length; at++) {
+        out.set((placed[at] as { key: Key }).key, marked(at))
+      }
+      return out
+    },
+  }
+}
+
 /** Every source leaf under a node, by name. */
 function leaves(node: RelNode, out: Set<string> = new Set()): Set<string> {
   switch (node.prim) {
@@ -485,6 +583,7 @@ function leaves(node: RelNode, out: Set<string> = new Set()): Set<string> {
     case 'pure':
     case 'agg':
     case 'expand':
+    case 'scan':
       return leaves(node.input, out)
     case 'join':
     case 'union':

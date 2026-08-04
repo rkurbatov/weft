@@ -22,6 +22,7 @@ import {
   expand as expandNode,
   filter as filterNode,
   join as joinNode,
+  scan as scanNode,
   pure as pureNode,
   source as sourceNode,
   union as unionNode,
@@ -79,6 +80,11 @@ const toolkit = <R>(): Folds<R> => ({
 })
 
 type FoldAnswers<S> = { [K in keyof S]: S[K] extends Fold<infer T> ? T : never }
+
+/** How a scan is ordered: a field, or fields with direction. */
+type ScanOrder<R> =
+  | ScalarField<R>
+  | ReadonlyArray<ScalarField<R> | { field: ScalarField<R>; down?: boolean }>
 
 // ── the chain ────────────────────────────────────────────────────────────
 
@@ -204,6 +210,31 @@ export class Rel<R> {
   ): Rel<Omit<R, F> & { [K in A]: R[F] extends readonly (infer E)[] ? E : never }> {
     return this.grow(
       expandNode(this.node, { field, as: spec.as, key: spec.key as readonly string[] }),
+    ) as never
+  }
+
+  /** An ordered pass carrying a running total: `as` holds the carry BEFORE
+   *  each row — its offset — and `through` the carry including it. This is
+   *  what a virtualised list asks: where a row starts, and how tall the
+   *  whole is. The carrier is chosen by the same door as folds. */
+  scan<N extends string, T extends string = never>(spec: {
+    by: ScanOrder<R>
+    step: NumericField<R> | Expr | RowFn
+    as: N
+    through?: T
+    from?: number
+  }): Rel<R & { [K in N | T]: number }> {
+    const order = (typeof spec.by === 'string' ? [spec.by] : spec.by) as ReadonlyArray<
+      string | { field: string; down?: boolean }
+    >
+    return this.grow(
+      scanNode(this.node, {
+        order: order.map(o => (typeof o === 'string' ? { field: o } : o)),
+        step: typeof spec.step === 'string' ? fieldExpr(spec.step) : spec.step,
+        as: spec.as,
+        ...(spec.through === undefined ? {} : { through: spec.through }),
+        ...(spec.from === undefined ? {} : { from: spec.from }),
+      }),
     ) as never
   }
 

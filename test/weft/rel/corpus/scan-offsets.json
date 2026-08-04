@@ -1,0 +1,167 @@
+{
+  "name": "scan-offsets",
+  "tree": {
+    "prim": "scan",
+    "input": {
+      "prim": "source",
+      "source": "rows",
+      "key": ["id"]
+    },
+    "order": [
+      {
+        "field": "rank"
+      }
+    ],
+    "step": {
+      "is": "field",
+      "path": ["height"]
+    },
+    "as": "offset",
+    "through": "end"
+  },
+  "steps": [
+    {
+      "source": "rows",
+      "put": [
+        {
+          "id": 1,
+          "rank": 1,
+          "height": 50
+        },
+        {
+          "id": 2,
+          "rank": 2,
+          "height": 30
+        },
+        {
+          "id": 3,
+          "rank": 3,
+          "height": 70
+        }
+      ],
+      "expect": [
+        {
+          "id": 1,
+          "rank": 1,
+          "height": 50,
+          "offset": 0,
+          "end": 50
+        },
+        {
+          "id": 2,
+          "rank": 2,
+          "height": 30,
+          "offset": 50,
+          "end": 80
+        },
+        {
+          "id": 3,
+          "rank": 3,
+          "height": 70,
+          "offset": 80,
+          "end": 150
+        }
+      ]
+    },
+    {
+      "source": "rows",
+      "put": [
+        {
+          "id": 2,
+          "rank": 2,
+          "height": 90
+        }
+      ],
+      "expect": [
+        {
+          "id": 1,
+          "rank": 1,
+          "height": 50,
+          "offset": 0,
+          "end": 50
+        },
+        {
+          "id": 2,
+          "rank": 2,
+          "height": 90,
+          "offset": 50,
+          "end": 140
+        },
+        {
+          "id": 3,
+          "rank": 3,
+          "height": 70,
+          "offset": 140,
+          "end": 210
+        }
+      ]
+    },
+    {
+      "source": "rows",
+      "put": [
+        {
+          "id": 4,
+          "rank": 0,
+          "height": 20
+        }
+      ],
+      "expect": [
+        {
+          "id": 4,
+          "rank": 0,
+          "height": 20,
+          "offset": 0,
+          "end": 20
+        },
+        {
+          "id": 1,
+          "rank": 1,
+          "height": 50,
+          "offset": 20,
+          "end": 70
+        },
+        {
+          "id": 2,
+          "rank": 2,
+          "height": 90,
+          "offset": 70,
+          "end": 160
+        },
+        {
+          "id": 3,
+          "rank": 3,
+          "height": 70,
+          "offset": 160,
+          "end": 230
+        }
+      ]
+    },
+    {
+      "source": "rows",
+      "drop": [1],
+      "expect": [
+        {
+          "id": 4,
+          "rank": 0,
+          "height": 20,
+          "offset": 0,
+          "end": 20
+        },
+        {
+          "id": 2,
+          "rank": 2,
+          "height": 90,
+          "offset": 20,
+          "end": 110
+        },
+        {
+          "id": 3,
+          "rank": 3,
+          "height": 70,
+          "offset": 110,
+          "end": 180
+        }
+      ]
+    }
+  ]
+}

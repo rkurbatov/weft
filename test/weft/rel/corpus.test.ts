@@ -40,6 +40,7 @@ function sourceDecls(
     case 'pure':
     case 'agg':
     case 'expand':
+    case 'scan':
       return sourceDecls(node.input, out)
     case 'join':
     case 'union':

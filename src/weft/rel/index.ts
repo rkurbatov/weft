@@ -21,6 +21,7 @@ export {
   agg,
   union,
   expand,
+  scan,
   checkNode,
   canonNode,
   recount,
@@ -39,6 +40,7 @@ export type {
   AggNode,
   UnionNode,
   ExpandNode,
+  ScanNode,
   FoldDecl,
   RowFn,
 } from './node.ts'

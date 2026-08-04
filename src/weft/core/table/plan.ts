@@ -39,6 +39,58 @@ export function onPlan(listener: (name: string, plan: Plan) => void): () => void
   return () => listeners.delete(listener)
 }
 
+/** A scan's carrier: a prefix line of plain numbers, or an honest recount of
+ *  the tail from the edit. The same door, the same announcement. */
+export type ScanCarrier = 'offsets' | 'tail'
+
+export interface ScanTraits {
+  /** Rows in the ordered view when the scan is built. */
+  size: number
+  /** The carry is a number added along — the only shape a prefix line holds. */
+  numeric: boolean
+  forced?: ScanCarrier | 'auto'
+}
+
+export interface ScanPlan {
+  carrier: ScanCarrier
+  reason: string
+}
+
+const scanListeners = new Set<(name: string, plan: ScanPlan) => void>()
+
+export function onScanPlan(listener: (name: string, plan: ScanPlan) => void): () => void {
+  scanListeners.add(listener)
+  return () => scanListeners.delete(listener)
+}
+
+export function planScan(name: string, traits: ScanTraits): ScanPlan {
+  const plan = decideScan(traits)
+  for (const listener of scanListeners) listener(name, plan)
+  return plan
+}
+
+function decideScan(traits: ScanTraits): ScanPlan {
+  if (traits.forced !== undefined && traits.forced !== 'auto') {
+    if (traits.forced === 'offsets' && !traits.numeric) {
+      throw new Error("weft: an 'offsets' carrier needs a numeric carry — it adds along a line")
+    }
+    return { carrier: traits.forced, reason: 'forced by the passport' }
+  }
+  if (!traits.numeric) {
+    return { carrier: 'tail', reason: 'the carry is not a number: only a tail recount is lawful' }
+  }
+  if (traits.size >= TREE_WORTH_IT) {
+    return {
+      carrier: 'offsets',
+      reason: `a numeric carry over ${traits.size} rows: a point update, not a tail`,
+    }
+  }
+  return {
+    carrier: 'tail',
+    reason: `only ${traits.size} rows: walking the tail is cheaper than a line's upkeep`,
+  }
+}
+
 export function planFold(name: string, traits: FoldTraits): Plan {
   const plan = decide(traits)
   for (const listener of listeners) listener(name, plan)
