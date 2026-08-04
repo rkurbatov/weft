@@ -130,7 +130,7 @@ const sameItems = (a: readonly unknown[], b: readonly unknown[]): boolean =>
 
 // What a derived thing needs from what it follows. State reads are only valid
 // after reading version: the read is what brings the follower up to date.
-interface Feed<R> {
+export interface Feed<R> {
   readonly name: string
   readonly version: Watchable<number>
   keyOf(row: R): Key
@@ -164,14 +164,14 @@ function changeLog<R>(keep: number): ChangeLog<R> {
   }
 }
 
-interface Follower<R> {
+export interface Follower<R> {
   first(): void
   apply(changes: readonly Change<R>[]): void
   resync(): void
 }
 
 /** The one pattern every derived thing shares: build once, then eat changes. */
-function follow<R>(feed: Feed<R>, on: Follower<R>): () => void {
+export function follow<R>(feed: Feed<R>, on: Follower<R>): () => void {
   let started = false
   let seen = 0
   return () => {
@@ -521,6 +521,18 @@ function whereOver<R>(parent: Feed<R>, pick: () => (row: R) => boolean, name: st
 }
 
 /** The reading surface every table shares, source and derived alike. */
+// Engine-internal: the relational layer (src/weft/rel) consumes a table's
+// changes through its feed instead of diffing snapshots. Not in the front
+// door on purpose — a feed's state reads are only valid after reading its
+// version, which is a contract for engine code, not for applications.
+const feeds = new WeakMap<Table<unknown>, Feed<unknown>>()
+
+export function feedOf<R>(t: Table<R>): Feed<R> {
+  const feed = feeds.get(t as Table<unknown>)
+  if (feed === undefined) throw new Error(`weft: ${t.name} has no feed — not an engine table`)
+  return feed as Feed<R>
+}
+
 function tableOver<R>(feed: Feed<R>, dispose: () => void): Table<R> {
   const rows = family<Key, R | undefined>(
     key => {
@@ -581,6 +593,7 @@ function tableOver<R>(feed: Feed<R>, dispose: () => void): Table<R> {
       ),
     dispose,
   }
+  feeds.set(self as Table<unknown>, feed as Feed<unknown>)
   return self
 }
 
@@ -652,7 +665,7 @@ export function table<R>(options: TableOptions<R>): SourceTable<R> {
     changesSince: seen => log.since(seen, v),
   }
 
-  return {
+  const self: SourceTable<R> = {
     ...tableOver(feed, () => {}),
     apply,
     put: (...rows) => apply({ put: rows }),
@@ -661,4 +674,7 @@ export function table<R>(options: TableOptions<R>): SourceTable<R> {
     has: key => state.has(key),
     peek: key => state.get(key),
   }
+  // The spread made a new object; the feed registry must know this one too.
+  feeds.set(self as Table<unknown>, feed as Feed<unknown>)
+  return self
 }
