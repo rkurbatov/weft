@@ -1,0 +1,165 @@
+{
+  "name": "join-inner-residual",
+  "tree": {
+    "prim": "join",
+    "left": {
+      "prim": "source",
+      "source": "orders",
+      "key": ["id"]
+    },
+    "right": {
+      "prim": "source",
+      "source": "clients",
+      "key": ["id"]
+    },
+    "as": "c",
+    "on": [
+      {
+        "left": "client",
+        "right": "id"
+      }
+    ],
+    "residual": {
+      "is": "cmp",
+      "op": ">",
+      "left": {
+        "is": "field",
+        "path": ["sum"]
+      },
+      "right": {
+        "is": "lit",
+        "value": 10
+      }
+    }
+  },
+  "steps": [
+    {
+      "source": "clients",
+      "put": [
+        {
+          "id": 5,
+          "tier": "gold"
+        },
+        {
+          "id": 6,
+          "tier": "plain"
+        }
+      ],
+      "expect": []
+    },
+    {
+      "source": "orders",
+      "put": [
+        {
+          "id": 1,
+          "client": 5,
+          "sum": 20
+        },
+        {
+          "id": 2,
+          "client": 5,
+          "sum": 5
+        },
+        {
+          "id": 3,
+          "client": 7,
+          "sum": 30
+        }
+      ],
+      "expect": [
+        {
+          "id": 1,
+          "client": 5,
+          "sum": 20,
+          "c": {
+            "id": 5,
+            "tier": "gold"
+          }
+        }
+      ]
+    },
+    {
+      "source": "orders",
+      "put": [
+        {
+          "id": 2,
+          "client": 5,
+          "sum": 15
+        }
+      ],
+      "expect": [
+        {
+          "id": 1,
+          "client": 5,
+          "sum": 20,
+          "c": {
+            "id": 5,
+            "tier": "gold"
+          }
+        },
+        {
+          "id": 2,
+          "client": 5,
+          "sum": 15,
+          "c": {
+            "id": 5,
+            "tier": "gold"
+          }
+        }
+      ]
+    },
+    {
+      "source": "clients",
+      "put": [
+        {
+          "id": 7,
+          "tier": "plain"
+        }
+      ],
+      "expect": [
+        {
+          "id": 1,
+          "client": 5,
+          "sum": 20,
+          "c": {
+            "id": 5,
+            "tier": "gold"
+          }
+        },
+        {
+          "id": 2,
+          "client": 5,
+          "sum": 15,
+          "c": {
+            "id": 5,
+            "tier": "gold"
+          }
+        },
+        {
+          "id": 3,
+          "client": 7,
+          "sum": 30,
+          "c": {
+            "id": 7,
+            "tier": "plain"
+          }
+        }
+      ]
+    },
+    {
+      "source": "clients",
+      "drop": [5],
+      "expect": [
+        {
+          "id": 3,
+          "client": 7,
+          "sum": 30,
+          "c": {
+            "id": 7,
+            "tier": "plain"
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,105 @@
+{
+  "name": "filter-pure-chain",
+  "tree": {
+    "prim": "pure",
+    "input": {
+      "prim": "filter",
+      "input": {
+        "prim": "source",
+        "source": "sales",
+        "key": ["id"]
+      },
+      "test": {
+        "is": "cmp",
+        "op": ">",
+        "left": {
+          "is": "field",
+          "path": ["qty"]
+        },
+        "right": {
+          "is": "lit",
+          "value": 0
+        }
+      }
+    },
+    "fields": {
+      "total": {
+        "is": "math",
+        "op": "*",
+        "left": {
+          "is": "field",
+          "path": ["qty"]
+        },
+        "right": {
+          "is": "field",
+          "path": ["price"]
+        }
+      }
+    },
+    "pick": ["id", "total"]
+  },
+  "steps": [
+    {
+      "source": "sales",
+      "put": [
+        {
+          "id": 1,
+          "qty": 2,
+          "price": 10
+        },
+        {
+          "id": 2,
+          "qty": 0,
+          "price": 5
+        }
+      ],
+      "expect": [
+        {
+          "id": 1,
+          "total": 20
+        }
+      ]
+    },
+    {
+      "source": "sales",
+      "put": [
+        {
+          "id": 2,
+          "qty": 3,
+          "price": 5
+        }
+      ],
+      "expect": [
+        {
+          "id": 1,
+          "total": 20
+        },
+        {
+          "id": 2,
+          "total": 15
+        }
+      ]
+    },
+    {
+      "source": "sales",
+      "put": [
+        {
+          "id": 1,
+          "qty": -1,
+          "price": 10
+        }
+      ],
+      "expect": [
+        {
+          "id": 2,
+          "total": 15
+        }
+      ]
+    },
+    {
+      "source": "sales",
+      "drop": [2],
+      "expect": []
+    }
+  ]
+}

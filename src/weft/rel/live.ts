@@ -1,16 +1,36 @@
 // The tree, running: sources in, a live table out, changes travelling by each
-// primitive's own derivative rule — a filtered edit costs the edit, never the
-// collection. The output is an ordinary engine table, so views, folds and
-// subscribers work on it unchanged, and demand flows through it: the first
-// watcher downstream starts the following, the last one leaving stops it.
-// A follower that fell too far behind resyncs from the oracle's recount —
-// the naive answer is the floor, here quite literally the fallback.
+// primitive's own derivative rule — a filtered edit costs the edit, a join
+// edit costs its partners, never the collection. Each node gets a runner;
+// stateless ones (filter, pure) map changes through, stateful ones (join)
+// keep the indexes their derivative needs. The output is an ordinary engine
+// table, so views, folds and subscribers work on it unchanged, and demand
+// flows through it: the first watcher downstream starts the following, the
+// last one leaving stops it. A follower that fell too far behind resyncs
+// from the oracle's recount — the naive answer is the floor, here quite
+// literally the fallback.
+//
+// A join is bilinear, and the order of application is the whole trick: a
+// batch is pushed through the left side against the right index as it was,
+// then through the right side against the left index as it now is — that is
+// dA⋈B + (A+dA)⋈dB, which sums to exactly the derivative, self-joins
+// included, with no pair counted twice.
 
 import { watch } from '../core/graph/graph.ts'
 import { table, feedOf, follow } from '../core/table/table.ts'
 import type { Table, Change, Patch, Key } from '../core/table/table.ts'
-import { checkNode, canonNode, keyOfRow, passesFilter, pureRow, recount, whyRow } from './node.ts'
-import type { RelNode } from './node.ts'
+import {
+  checkNode,
+  canonNode,
+  keyOfRow,
+  mergedRow,
+  onKeyOf,
+  passesFilter,
+  passesResidual,
+  pureRow,
+  recount,
+  whyRow,
+} from './node.ts'
+import type { JoinNode, RelNode } from './node.ts'
 import type { Row } from './expr.ts'
 
 export interface Relation extends Table<Row> {
@@ -24,6 +44,191 @@ export interface RelateOptions {
   name?: string
 }
 
+type Sources = Record<string, ReadonlyMap<Key, Row>>
+
+/** One node, running: state where the derivative needs it. */
+interface Runner {
+  /** Changes from one source pushed through; out come this node's changes. */
+  feed(from: string, changes: readonly Change<Row>[]): Change<Row>[]
+  /** The whole answer anew; resets whatever state the node keeps. */
+  rebuild(sources: Sources): Map<Key, Row>
+}
+
+function runnerFor(node: RelNode): Runner {
+  switch (node.prim) {
+    case 'source':
+      return {
+        feed: (from, changes) => (node.source === from ? [...changes] : []),
+        rebuild: sources => recount(node, sources),
+      }
+    case 'filter': {
+      const input = runnerFor(node.input)
+      return {
+        feed(from, changes) {
+          const out: Change<Row>[] = []
+          for (const under of input.feed(from, changes)) {
+            const prev =
+              under.prev !== undefined && passesFilter(node, under.prev) ? under.prev : undefined
+            const next =
+              under.next !== undefined && passesFilter(node, under.next) ? under.next : undefined
+            if (prev === undefined && next === undefined) continue
+            out.push({
+              key: under.key,
+              ...(prev === undefined ? {} : { prev }),
+              ...(next === undefined ? {} : { next }),
+            })
+          }
+          return out
+        },
+        rebuild: sources => recount(node, sources),
+      }
+    }
+    case 'pure': {
+      const input = runnerFor(node.input)
+      return {
+        feed(from, changes) {
+          const out: Change<Row>[] = []
+          for (const under of input.feed(from, changes)) {
+            out.push({
+              key: under.key,
+              ...(under.prev === undefined ? {} : { prev: pureRow(node, under.prev) }),
+              ...(under.next === undefined ? {} : { next: pureRow(node, under.next) }),
+            })
+          }
+          return out
+        },
+        rebuild: sources => recount(node, sources),
+      }
+    }
+    case 'join':
+      return joinRunner(node)
+  }
+}
+
+type OnIndex = Map<string, Map<Key, Row>>
+
+const put = (index: OnIndex, at: string, key: Key, row: Row): void => {
+  let held = index.get(at)
+  if (held === undefined) {
+    held = new Map()
+    index.set(at, held)
+  }
+  held.set(key, row)
+}
+
+const cut = (index: OnIndex, at: string, key: Key): void => {
+  const held = index.get(at)
+  if (held === undefined) return
+  held.delete(key)
+  if (held.size === 0) index.delete(at)
+}
+
+const diffInto = (
+  out: Map<Key, Change<Row>>,
+  before: Map<Key, Row>,
+  after: Map<Key, Row>,
+): void => {
+  const land = (key: Key, prev: Row | undefined, next: Row | undefined): void => {
+    const held = out.get(key)
+    const first = held === undefined ? prev : held.prev
+    out.set(key, {
+      key,
+      ...(first === undefined ? {} : { prev: first }),
+      ...(next === undefined ? {} : { next }),
+    })
+  }
+  for (const [key, prev] of before) if (!after.has(key)) land(key, prev, undefined)
+  for (const [key, next] of after) land(key, before.get(key), next)
+}
+
+function joinRunner(node: JoinNode): Runner {
+  const left = runnerFor(node.left)
+  const right = runnerFor(node.right)
+  // The indexes the derivative needs: each side's rows, grouped by equi-key.
+  const leftByOn: OnIndex = new Map()
+  const rightByOn: OnIndex = new Map()
+  const leftKeyOf = (row: Row): Key => keyOfRow(node.left, row)
+  const rightKeyOf = (row: Row): Key => keyOfRow(node.right, row)
+
+  /** Everything one left row stands for right now: its pairs, or its phantom. */
+  const outsOf = (leftRow: Row): Map<Key, Row> => {
+    const out = new Map<Key, Row>()
+    for (const rightRow of rightByOn.get(onKeyOf(node.on, 'left', leftRow))?.values() ?? []) {
+      const pair = mergedRow(node, leftRow, rightRow)
+      if (!passesResidual(node, pair)) continue
+      out.set(keyOfRow(node, pair), pair)
+    }
+    if (out.size === 0 && node.keeping === true) {
+      const alone = mergedRow(node, leftRow, null)
+      out.set(keyOfRow(node, alone), alone)
+    }
+    return out
+  }
+
+  const applyLeft = (out: Map<Key, Change<Row>>, change: Change<Row>): void => {
+    const before = change.prev === undefined ? new Map<Key, Row>() : outsOf(change.prev)
+    if (change.prev !== undefined) {
+      cut(leftByOn, onKeyOf(node.on, 'left', change.prev), change.key)
+    }
+    if (change.next !== undefined) {
+      put(leftByOn, onKeyOf(node.on, 'left', change.next), change.key, change.next)
+    }
+    const after = change.next === undefined ? new Map<Key, Row>() : outsOf(change.next)
+    diffInto(out, before, after)
+  }
+
+  const applyRight = (out: Map<Key, Change<Row>>, change: Change<Row>): void => {
+    // The left rows this change can touch: the partners of its old and new keys.
+    const touched = new Map<Key, Row>()
+    for (const side of [change.prev, change.next]) {
+      if (side === undefined) continue
+      for (const [key, row] of leftByOn.get(onKeyOf(node.on, 'right', side)) ?? []) {
+        touched.set(key, row)
+      }
+    }
+    const before = new Map<Key, Map<Key, Row>>()
+    for (const [key, row] of touched) before.set(key, outsOf(row))
+    if (change.prev !== undefined) {
+      cut(rightByOn, onKeyOf(node.on, 'right', change.prev), change.key)
+    }
+    if (change.next !== undefined) {
+      put(rightByOn, onKeyOf(node.on, 'right', change.next), change.key, change.next)
+    }
+    for (const [key, row] of touched) {
+      diffInto(out, before.get(key) as Map<Key, Row>, outsOf(row))
+    }
+  }
+
+  return {
+    feed(from, changes) {
+      // Left against the right index as it was, then right against the left
+      // index as it now is — the bilinear derivative, in that order.
+      const leftIn = left.feed(from, changes)
+      const rightIn = right.feed(from, changes)
+      const out = new Map<Key, Change<Row>>()
+      for (const change of leftIn) applyLeft(out, change)
+      for (const change of rightIn) applyRight(out, change)
+      const landed: Change<Row>[] = []
+      for (const change of out.values()) {
+        if (change.prev === undefined && change.next === undefined) continue
+        landed.push(change)
+      }
+      return landed
+    },
+    rebuild(sources) {
+      leftByOn.clear()
+      rightByOn.clear()
+      for (const row of left.rebuild(sources).values()) {
+        put(leftByOn, onKeyOf(node.on, 'left', row), leftKeyOf(row), row)
+      }
+      for (const row of right.rebuild(sources).values()) {
+        put(rightByOn, onKeyOf(node.on, 'right', row), rightKeyOf(row), row)
+      }
+      return recount(node, sources)
+    },
+  }
+}
+
 /** Every source leaf under a node, by name. */
 function leaves(node: RelNode, out: Set<string> = new Set()): Set<string> {
   switch (node.prim) {
@@ -33,37 +238,9 @@ function leaves(node: RelNode, out: Set<string> = new Set()): Set<string> {
     case 'filter':
     case 'pure':
       return leaves(node.input, out)
-  }
-}
-
-/** One input change pushed down through the tree; null when it dies inside. */
-function throughTree(node: RelNode, from: string, change: Change<Row>): Change<Row> | null {
-  switch (node.prim) {
-    case 'source':
-      return node.source === from ? change : null
-    case 'filter': {
-      const under = throughTree(node.input, from, change)
-      if (under === null) return null
-      const prev =
-        under.prev !== undefined && passesFilter(node, under.prev) ? under.prev : undefined
-      const next =
-        under.next !== undefined && passesFilter(node, under.next) ? under.next : undefined
-      if (prev === undefined && next === undefined) return null
-      return {
-        key: under.key,
-        ...(prev === undefined ? {} : { prev }),
-        ...(next === undefined ? {} : { next }),
-      }
-    }
-    case 'pure': {
-      const under = throughTree(node.input, from, change)
-      if (under === null) return null
-      return {
-        key: under.key,
-        ...(under.prev === undefined ? {} : { prev: pureRow(node, under.prev) }),
-        ...(under.next === undefined ? {} : { next: pureRow(node, under.next) }),
-      }
-    }
+    case 'join':
+      leaves(node.left, out)
+      return leaves(node.right, out)
   }
 }
 
@@ -78,6 +255,7 @@ export function relate(
     if (sources[name] === undefined) throw new Error(`weft rel: source '${name}' is not provided`)
   }
   const name = options.name ?? 'rel'
+  const runner = runnerFor(root)
 
   let stops: Array<() => void> = []
 
@@ -88,8 +266,8 @@ export function relate(
     onIdle: stop,
   })
 
-  const snapshot = (): Record<string, ReadonlyMap<Key, Row>> => {
-    const held: Record<string, ReadonlyMap<Key, Row>> = {}
+  const snapshot = (): Sources => {
+    const held: Sources = {}
     for (const sourceName of named) {
       const feed = feedOf(sources[sourceName] as Table<Row>)
       feed.version.peek()
@@ -100,15 +278,13 @@ export function relate(
     return held
   }
 
-  const rebuild = (): void => out.replace(recount(root, snapshot()).values())
+  const rebuild = (): void => out.replace(runner.rebuild(snapshot()).values())
 
   const applyFrom = (from: string, changes: readonly Change<Row>[]): void => {
     const patch: { put: Row[]; drop: Key[] } = { put: [], drop: [] }
-    for (const change of changes) {
-      const landed = throughTree(root, from, change)
-      if (landed === null) continue
-      if (landed.next !== undefined) patch.put.push(landed.next)
-      else patch.drop.push(keyOfRow(root, landed.prev as Row))
+    for (const change of runner.feed(from, changes)) {
+      if (change.next !== undefined) patch.put.push(change.next)
+      else patch.drop.push(change.key)
     }
     if (patch.put.length > 0 || patch.drop.length > 0) out.apply(patch as Patch<Row>)
   }

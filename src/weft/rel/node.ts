@@ -47,7 +47,21 @@ export interface FilterNode {
   test: Expr | RowFn
 }
 
-export type RelNode = SourceNode | PureNode | FilterNode
+export interface JoinNode {
+  prim: 'join'
+  left: RelNode
+  right: RelNode
+  /** The right row lands nested under this name in the merged row. */
+  as: string
+  /** Equi keys: left field == right field, both top-level names. */
+  on: ReadonlyArray<{ left: string; right: string }>
+  /** Over the merged row; a pair failing it is not a match. */
+  residual?: Expr | RowFn
+  /** All left rows survive; an unmatched right side is null, its fields t?. */
+  keeping?: boolean
+}
+
+export type RelNode = SourceNode | PureNode | FilterNode | JoinNode
 
 export const source = (name: string, key: readonly string[]): SourceNode => ({
   prim: 'source',
@@ -63,24 +77,51 @@ export const filter = (input: RelNode, test: Expr | RowFn): FilterNode => ({
   input,
   test,
 })
+export const join = (
+  left: RelNode,
+  right: RelNode,
+  attrs: {
+    as: string
+    on: ReadonlyArray<{ left: string; right: string }>
+    residual?: Expr | RowFn
+    keeping?: boolean
+  },
+): JoinNode => ({ prim: 'join', left, right, ...attrs })
 
-/** The fields a node's key is made of — inherited until a primitive says otherwise. */
-export function keyFields(node: RelNode): readonly string[] {
+/** The paths a node's key is made of — inherited until a primitive says
+ *  otherwise; a join's key is both parents' keys, the right side under its
+ *  alias. Paths, not names, because a merged row nests. */
+export function keyPaths(node: RelNode): ReadonlyArray<readonly string[]> {
   switch (node.prim) {
     case 'source':
-      return node.key
+      return node.key.map(f => [f])
     case 'pure':
     case 'filter':
-      return keyFields(node.input)
+      return keyPaths(node.input)
+    case 'join':
+      return [...keyPaths(node.left), ...keyPaths(node.right).map(p => [node.as].concat(p))]
   }
 }
 
-/** A row's key under a node's rule: one field plain, several as a joined form. */
-export function keyOfRow(node: RelNode, row: Row): Key {
-  const fields = keyFields(node)
-  if (fields.length === 1) return row[fields[0] as string] as Key
-  return JSON.stringify(fields.map(f => row[f]))
+const readPath = (row: Row, path: readonly string[]): unknown => {
+  let at: unknown = row
+  for (const step of path) {
+    if (at === null || typeof at !== 'object') return null
+    at = (at as Row)[step]
+  }
+  return at ?? null
 }
+
+/** A row's key under a node's rule: one path plain, several as a joined form. */
+export function keyOfRow(node: RelNode, row: Row): Key {
+  const paths = keyPaths(node)
+  if (paths.length === 1) return readPath(row, paths[0] as readonly string[]) as Key
+  return JSON.stringify(paths.map(p => readPath(row, p)))
+}
+
+/** A parent's key value inside a composite, back in its own form. */
+const recomposeKey = (node: RelNode, values: unknown[]): Key =>
+  keyPaths(node).length === 1 ? (values[0] as Key) : JSON.stringify(values)
 
 const isExpr = (e: Expr | RowFn): e is Expr => typeof e !== 'function'
 
@@ -93,6 +134,19 @@ export function canonNode(node: RelNode): string | null {
       const under = canonNode(node.input)
       if (under === null || !isExpr(node.test)) return null
       return `(filter ${canonExpr(node.test)} ${under})`
+    }
+    case 'join': {
+      const left = canonNode(node.left)
+      const right = canonNode(node.right)
+      if (left === null || right === null) return null
+      let residual = ''
+      if (node.residual !== undefined) {
+        if (!isExpr(node.residual)) return null
+        residual = ` where=${canonExpr(node.residual)}`
+      }
+      const on = node.on.map(p => `${p.left}=${p.right}`).join(',')
+      const keeping = node.keeping === true ? ' keeping' : ''
+      return `(join as=${node.as} on=${on}${residual}${keeping} ${left} ${right})`
     }
     case 'pure': {
       const under = canonNode(node.input)
@@ -140,10 +194,10 @@ export function checkNode(node: RelNode): void {
       return
     case 'pure': {
       checkNode(node.input)
-      const keys = keyFields(node)
+      const heads = new Set(keyPaths(node).map(p => p[0] as string))
       if (node.fields !== undefined) {
         for (const name of Object.keys(node.fields)) {
-          if (keys.includes(name)) {
+          if (heads.has(name)) {
             throw new Error(
               `weft rel: pure recomputes key field '${name}' — that is a new identity, not an edit`,
             )
@@ -151,18 +205,45 @@ export function checkNode(node: RelNode): void {
         }
       }
       if (node.pick !== undefined) {
-        for (const f of keys) {
-          if (!node.pick.includes(f)) {
+        for (const head of heads) {
+          if (!node.pick.includes(head)) {
             throw new Error(
-              `weft rel: pure picks away key field '${f}' — a row would lose its identity`,
+              `weft rel: pure picks away key field '${head}' — a row would lose its identity`,
             )
           }
         }
       }
       return
     }
+    case 'join': {
+      checkNode(node.left)
+      checkNode(node.right)
+      if (node.on.length === 0) throw new Error('weft rel: join declares no on-keys')
+      if (node.as.length === 0) throw new Error('weft rel: join declares no alias')
+      return
+    }
   }
 }
+
+/** The equi-key a row stands under, for one side of a join. */
+export const onKeyOf = (
+  pairs: ReadonlyArray<{ left: string; right: string }>,
+  side: 'left' | 'right',
+  row: Row,
+): string => JSON.stringify(pairs.map(p => row[p[side]] ?? null))
+
+/** The merged row of a pair; the phantom of a keeping row stands with null. */
+export const mergedRow = (node: JoinNode, left: Row, right: Row | null): Row => ({
+  ...left,
+  [node.as]: right,
+})
+
+export const passesResidual = (node: JoinNode, merged: Row): boolean =>
+  node.residual === undefined
+    ? true
+    : isExpr(node.residual)
+      ? truthy(node.residual, merged)
+      : node.residual(merged) === true
 
 /** The oracle: the whole answer, recounted from the sources. */
 export function recount(
@@ -187,10 +268,38 @@ export function recount(
       for (const [key, row] of recount(node.input, sources)) out.set(key, pureRow(node, row))
       return out
     }
+    case 'join': {
+      const left = recount(node.left, sources)
+      const right = recount(node.right, sources)
+      const rightByOn = new Map<string, Row[]>()
+      for (const row of right.values()) {
+        const at = onKeyOf(node.on, 'right', row)
+        const held = rightByOn.get(at)
+        if (held === undefined) rightByOn.set(at, [row])
+        else held.push(row)
+      }
+      const out = new Map<Key, Row>()
+      for (const leftRow of left.values()) {
+        let matched = 0
+        for (const rightRow of rightByOn.get(onKeyOf(node.on, 'left', leftRow)) ?? []) {
+          const pair = mergedRow(node, leftRow, rightRow)
+          if (!passesResidual(node, pair)) continue
+          matched++
+          out.set(keyOfRow(node, pair), pair)
+        }
+        if (matched === 0 && node.keeping === true) {
+          const alone = mergedRow(node, leftRow, null)
+          out.set(keyOfRow(node, alone), alone)
+        }
+      }
+      return out
+    }
   }
 }
 
-/** Why this row: the source rows it came from, found by descent, stored nowhere. */
+/** Why this row: the source rows it came from, found by descent, stored
+ *  nowhere. A join splits its composite key back into its parents'; a keeping
+ *  phantom, whose right half is all null, names only its left parent. */
 export function whyRow(node: RelNode, key: Key): Array<{ source: string; key: Key }> {
   switch (node.prim) {
     case 'source':
@@ -198,5 +307,13 @@ export function whyRow(node: RelNode, key: Key): Array<{ source: string; key: Ke
     case 'filter':
     case 'pure':
       return whyRow(node.input, key)
+    case 'join': {
+      const values = JSON.parse(key as string) as unknown[]
+      const split = keyPaths(node.left).length
+      const leftWhy = whyRow(node.left, recomposeKey(node.left, values.slice(0, split)))
+      const rightValues = values.slice(split)
+      if (node.keeping === true && rightValues.every(v => v === null)) return leftWhy
+      return [...leftWhy, ...whyRow(node.right, recomposeKey(node.right, rightValues))]
+    }
   }
 }
