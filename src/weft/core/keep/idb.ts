@@ -99,6 +99,11 @@ export function idbStore(name: string, options: IdbOptions = {}): Store {
     read: key => run('readonly', store => store.get(key)),
     write: (key, value) => run<unknown>('readwrite', store => store.put(value, key)).then(() => {}),
     remove: key => run<unknown>('readwrite', store => store.delete(key)).then(() => {}),
+    keys: async prefix => {
+      const all = await run<string[]>('readonly', store => store.getAllKeys())
+      const strings = all.filter(key => typeof key === 'string')
+      return prefix === undefined ? strings : strings.filter(key => key.startsWith(prefix))
+    },
   }
 }
 
@@ -147,6 +152,7 @@ interface ObjectStoreish {
   get(key: string): Requestish<unknown>
   put(value: unknown, key: string): Requestish<unknown>
   delete(key: string): Requestish<unknown>
+  getAllKeys(): Requestish<string[]>
 }
 
 /**

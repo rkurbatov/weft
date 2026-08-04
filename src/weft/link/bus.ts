@@ -24,6 +24,14 @@ export interface HubOptions {
    */
   lease?: number | false
   timers?: Timers
+  /**
+   * Who may be served. A tab says whose it is when it says hello; a hub that
+   * holds one person's household refuses anybody else's — by name, so the tab
+   * learns why it sees nothing instead of watching an empty screen. Without
+   * this everyone is admitted, which is right for an application with one
+   * graph and one person.
+   */
+  admit?: (claim: string | undefined) => boolean
 }
 
 export interface KeepAliveOptions {
@@ -65,6 +73,17 @@ interface Envelope {
 
 export const HELLO = { hello: true } as const
 
+/** Hello with a claim: whose tab this is. The hub decides whether to serve it. */
+export function helloFrom(claim: string | undefined): unknown {
+  return claim === undefined ? HELLO : { hello: true, claim }
+}
+
+export function claimOf(body: unknown): string | undefined {
+  if (typeof body !== 'object' || body === null) return undefined
+  const claim = (body as { claim?: unknown }).claim
+  return typeof claim === 'string' ? claim : undefined
+}
+
 function isEnvelope(message: unknown): message is Envelope {
   return typeof message === 'object' && message !== null && (message as Envelope).weft === true
 }
@@ -97,6 +116,7 @@ export function busHub(name: string, bus?: Bus, options: HubOptions = {}): Hub {
   const me = 'graph'
   const lease = options.lease ?? LEASE
   const timers = options.timers ?? wallClock
+  const admit = options.admit
   return {
     accept(onWatcher) {
       const serving = new Map<string, { stop: () => void; held?: unknown }>()
@@ -123,6 +143,18 @@ export function busHub(name: string, bus?: Bus, options: HubOptions = {}): Hub {
         const envelope = event.data
         if (!isEnvelope(envelope) || envelope.to !== me) return
         const them = envelope.from
+
+        if (!serving.has(them) && admit !== undefined && !admit(claimOf(envelope.body))) {
+          // Somebody else's tab. Say so and serve nothing: a mirror handed to
+          // the wrong session is a leak, and silence would look like a bug.
+          line.postMessage({
+            weft: true,
+            from: me,
+            to: them,
+            body: { kind: 'refused', why: `not this station's session` },
+          })
+          return
+        }
 
         if (!serving.has(them)) {
           // A tab we have not met — or one whose lease ran out and who is back:
@@ -166,7 +198,12 @@ export function isHello(body: unknown): boolean {
 }
 
 /** A watcher's side of a bus. Says hello, so the hub knows to serve it. */
-export function busChannel(name: string, bus?: Bus, options: KeepAliveOptions = {}): Channel {
+export interface ChannelOptions extends KeepAliveOptions {
+  /** Whose tab this is. The hub of a station serving one person checks it. */
+  claim?: string
+}
+
+export function busChannel(name: string, bus?: Bus, options: ChannelOptions = {}): Channel {
   const owned = bus === undefined
   const line = bus ?? openBus(name)
   const keepAlive = options.keepAlive ?? KEEP_ALIVE
@@ -175,7 +212,8 @@ export function busChannel(name: string, bus?: Bus, options: KeepAliveOptions = 
   const send = (body: unknown): void => {
     line.postMessage({ weft: true, from: me, to: 'graph', body })
   }
-  send(HELLO)
+  const hello = helloFrom(options.claim)
+  send(hello)
   return {
     send,
     listen: handler => {
@@ -187,7 +225,7 @@ export function busChannel(name: string, bus?: Bus, options: KeepAliveOptions = 
       line.addEventListener('message', onMessage)
       // The heartbeat lives with the listener: while somebody listens on this
       // end, the hub's lease on us is kept; stop listening and it runs out.
-      const stopBeating = heartbeat(() => send(HELLO), keepAlive, timers)
+      const stopBeating = heartbeat(() => send(hello), keepAlive, timers)
       return () => {
         line.removeEventListener('message', onMessage)
         stopBeating()

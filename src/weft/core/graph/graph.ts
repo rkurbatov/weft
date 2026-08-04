@@ -9,7 +9,14 @@
 // The propagation core itself lives in engine.ts.
 
 import { CHECK, CLEAN, Core, coreForBuild, declare, DIRTY, markOf, NODE, track } from './engine.ts'
-import type { Consumer, NodeKind, RegionOf as Region, Source, State } from './engine.ts'
+import type {
+  Consumer,
+  EngineOptions,
+  NodeKind,
+  RegionOf as Region,
+  Source,
+  State,
+} from './engine.ts'
 import type { Probe } from './waves.ts'
 
 export type Equal<T> = (a: T, b: T) => boolean
@@ -115,6 +122,12 @@ export class Cell<T> implements Source, Consumer {
   private value!: T
   private valued = false
   private computing = false
+  /**
+   * What the formula threw last time, if it did. Held rather than rethrown from
+   * a fresh run: a formula that fails on every read would otherwise fail once
+   * per reader, side effects and all.
+   */
+  private failure: { error: unknown } | null = null
   private readonly formula: () => T
   private readonly equal: Equal<T>
 
@@ -144,11 +157,17 @@ export class Cell<T> implements Source, Consumer {
   get(): T {
     track(this)
     this.stabilize()
+    if (this.failure !== null) throw this.failure.error
     return this.value
   }
 
   peek(): T {
     return this.engine.untracked(() => this.get())
+  }
+
+  /** The formula threw and the cell has not recovered. Its links are still live. */
+  get broken(): boolean {
+    return this.failure !== null
   }
 
   /** Somebody downstream is reading this cell right now. */
@@ -168,6 +187,7 @@ export class Cell<T> implements Source, Consumer {
     this.engine.unlink(this)
     this.state = DIRTY
     this.valued = false
+    this.failure = null
   }
 
   stabilize(): void {
@@ -186,24 +206,40 @@ export class Cell<T> implements Source, Consumer {
     try {
       const started = core.tap.watching ? core.tap.now() : 0
       let next!: T
+      let thrown: { error: unknown } | null = null
       this.computing = true
       try {
         core.retrack(this, () => {
           next = this.formula()
         })
+      } catch (error) {
+        // The links read before the throw stay: they are the way back. When one
+        // of them moves, the formula runs again and may well succeed.
+        thrown = { error }
       } finally {
         this.computing = false
       }
+      if (thrown !== null) {
+        const wasBroken = this.failure !== null
+        this.failure = thrown
+        this.state = CLEAN
+        core.tap.fail(this.name, thrown.error)
+        // Breaking is a change like any other: whoever reads this must hear it.
+        if (!wasBroken) for (const o of this.observers) core.markDirty(o)
+        return
+      }
       // A first value is not a change: nobody held a previous one from us.
-      const hadValue = this.valued
+      const hadValue = this.valued && this.failure === null
       const changed = hadValue && !this.equal(this.value, next)
+      const recovered = this.failure !== null
+      this.failure = null
       this.value = next
       this.valued = true
       this.state = CLEAN
       if (core.tap.watching)
         core.tap.compute(this.name, core.tap.now() - started, changed, hadValue)
       // Equal result stops here: observers stay CHECK and settle without recomputing.
-      if (changed) for (const o of this.observers) core.markDirty(o)
+      if (changed || recovered) for (const o of this.observers) core.markDirty(o)
     } finally {
       // Source hooks queued during the run fire here — value in place, state settled.
       core.leave()
@@ -265,6 +301,11 @@ export class Watcher implements Consumer {
     try {
       if (core.tap.watching) core.tap.wake()
       core.retrack(this, this.body)
+    } catch (error) {
+      // Named in the wave, then rethrown: the round that woke us decides what
+      // to do with it — carry on and report, rather than stop here.
+      core.tap.fail(this.name, error)
+      throw error
     } finally {
       this.state = CLEAN
       core.leave()
@@ -370,7 +411,7 @@ export interface Trace {
   name: string
   kind: 'input' | 'cell'
   /** 'stored' for inputs; for cells, the truth about how current `value` is. */
-  state: 'stored' | 'clean' | 'check' | 'dirty'
+  state: 'stored' | 'clean' | 'check' | 'dirty' | 'failed'
   value: unknown
   reads?: Trace[]
   readBy: string[]
@@ -402,7 +443,7 @@ export function trace(node: Watchable<unknown>, depth = 2): Trace {
   }
   if (kind === 'cell') {
     const derived = node as unknown as Cell<unknown>
-    const raw = node as unknown as { value?: unknown; state: State }
+    const raw = node as unknown as { value?: unknown; state: State; failure: unknown }
     const reads =
       depth > 0
         ? [...derived.sources].flatMap(s =>
@@ -414,7 +455,13 @@ export function trace(node: Watchable<unknown>, depth = 2): Trace {
     return {
       name: derived.name,
       kind: 'cell',
-      state: raw.state === CLEAN ? 'clean' : raw.state === CHECK ? 'check' : 'dirty',
+      state: derived.broken
+        ? 'failed'
+        : raw.state === CLEAN
+          ? 'clean'
+          : raw.state === CHECK
+            ? 'check'
+            : 'dirty',
       value: raw.value,
       ...(reads === undefined ? {} : { reads }),
       readBy: [...derived.observers].map(watcherName),
@@ -458,8 +505,8 @@ export interface Engine {
   dispose(): void
 }
 
-export function graph(name = 'engine'): Engine {
-  const core = new Core(name)
+export function graph(name = 'engine', how?: EngineOptions): Engine {
+  const core = new Core(name, how)
   declare(core)
   const engine: Engine = {
     name,

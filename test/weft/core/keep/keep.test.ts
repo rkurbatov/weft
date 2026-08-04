@@ -73,6 +73,10 @@ function slowStore(seed: Record<string, unknown> = {}) {
       wait('remove', () => {
         cells.delete(key)
       }),
+    keys: prefix =>
+      wait('keys', () =>
+        [...cells.keys()].filter(key => prefix === undefined || key.startsWith(prefix)),
+      ),
   }
   return {
     cells,

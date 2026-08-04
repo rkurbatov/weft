@@ -29,6 +29,8 @@ export interface WaveSummary {
   computed: WaveCompute[]
   /** Where the wave died on equality: recomputed, same value, nobody below woke. */
   gated: string[]
+  /** Where it broke: a formula or a watcher body threw during this wave. */
+  failed: string[]
   woke: number
 }
 
@@ -37,6 +39,8 @@ export interface Probe {
   compute?(node: string, ms: number, changed: boolean): void
   /** The red dot: this node recomputed to an equal value and stopped the wave. */
   gate?(node: string): void
+  /** A formula or a watcher body threw. The node is named; the error is as thrown. */
+  fail?(node: string, error: unknown): void
   wake?(): void
   wave?(summary: WaveSummary): void
 }
@@ -92,6 +96,7 @@ export class WaveTap {
         writes: [],
         computed: [],
         gated: [],
+        failed: [],
         woke: 0,
       }
     }
@@ -107,6 +112,12 @@ export class WaveTap {
     if (this.open === null) return
     this.open.computed.push({ node, ms, changed })
     if (gated) this.open.gated.push(node)
+  }
+
+  fail(node: string, error: unknown): void {
+    if (this.probe === null || hushed) return
+    this.probe.fail?.(node, error)
+    if (this.open !== null) this.open.failed.push(node)
   }
 
   wake(): void {

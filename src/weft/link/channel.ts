@@ -28,6 +28,8 @@ export type ToWatcher =
   | { readonly kind: 'values'; readonly changed: ReadonlyArray<{ id: number; value: unknown }> }
   | { readonly kind: 'done'; readonly id: number; readonly value: unknown }
   | { readonly kind: 'failed'; readonly id: number; readonly error: string }
+  /** The station will not serve this watcher: not its session. */
+  | { readonly kind: 'refused'; readonly why: string }
 
 /** What to do with work that must not happen more than once a frame. */
 export type Schedule = (work: () => void) => void

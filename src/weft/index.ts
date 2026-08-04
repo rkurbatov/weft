@@ -66,6 +66,7 @@ export type { Region } from './core/graph/region.ts'
 
 export { quietly } from './core/graph/waves.ts'
 export type { Probe, WaveSummary, WaveWrite, WaveCompute } from './core/graph/waves.ts'
+export type { EngineOptions } from './core/graph/engine.ts'
 export { journal } from './core/graph/journal.ts'
 export type { Journal } from './core/graph/journal.ts'
 
@@ -102,8 +103,8 @@ export {
 } from './core/remote/remote.ts'
 export type { Remote, Held, Fault } from './core/remote/remote.ts'
 
-export { memoryStore, webStore } from './core/keep/store.ts'
-export type { Store } from './core/keep/store.ts'
+export { memoryStore, webStore, within } from './core/keep/store.ts'
+export type { Store, Scope } from './core/keep/store.ts'
 
 export { idbStore, bestStore } from './core/keep/idb.ts'
 export type { IdbOptions } from './core/keep/idb.ts'

@@ -84,8 +84,18 @@ interface Owner {
   teardowns: Array<() => void>
 }
 
+export interface EngineOptions {
+  /**
+   * Where failures of this engine are reported. Without one, the first failure
+   * of a round is thrown once the round has been carried to its end — loudly,
+   * but never instead of waking the rest.
+   */
+  onError?: (error: unknown) => void
+}
+
 export class Core {
   readonly name: string
+  private readonly onError: ((error: unknown) => void) | undefined
   private batchDepth = 0
   private workDepth = 0
   private readonly pending = new Set<Consumer>()
@@ -101,8 +111,9 @@ export class Core {
   private readonly household: Array<() => void> = []
   private dead = false
 
-  constructor(name: string) {
+  constructor(name: string, options: EngineOptions = {}) {
     this.name = name
+    this.onError = options.onError
   }
 
   get disposed(): boolean {
@@ -292,18 +303,36 @@ export class Core {
   flush(): void {
     if (this.batchDepth > 0) return
     this.enter()
+    const failures: unknown[] = []
     try {
       // Watchers may write, queueing more watchers; drain until quiet.
       let guard = 0
       while (this.pending.size > 0) {
         if (++guard > 1000) throw new Error(`weft: propagation did not settle in "${this.name}"`)
-        const round = [...this.pending]
+        const round = Array.from(this.pending)
         this.pending.clear()
-        for (const w of round) w.stabilize()
+        // One watcher failing is not a reason for its neighbours to sleep
+        // through the change: the round is carried to its end, and what fell
+        // is collected on the way.
+        for (const w of round) {
+          try {
+            w.stabilize()
+          } catch (error) {
+            failures.push(error)
+          }
+        }
       }
     } finally {
       this.leave()
+      this.report(failures)
     }
+  }
+
+  /** A failure the engine has to answer for: reported, or thrown — never swallowed. */
+  report(failures: readonly unknown[]): void {
+    if (failures.length === 0) return
+    if (this.onError === undefined) throw failures[0]
+    for (const error of failures) this.onError(error)
   }
 
   /** Group writes so watchers see one settled picture. */

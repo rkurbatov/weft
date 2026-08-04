@@ -49,6 +49,13 @@ export interface LinkOptions {
    *  re-creates it. Keeps a family of mirrors from growing immortal. */
   linger?: number
   timers?: Timers
+  /**
+   * The station refused to serve this side — it holds somebody else's
+   * household. Nothing will ever arrive; the screen should say so rather than
+   * spin. Without a handler the refusal is thrown, since silence here looks
+   * exactly like a slow wire.
+   */
+  onRefused?: (why: string) => void
 }
 
 export function link(channel: Channel, options: LinkOptions = {}): Link {
@@ -104,6 +111,12 @@ export function link(channel: Channel, options: LinkOptions = {}): Link {
         return
       case 'done': {
         settleCall(message.id)?.resolve(message.value as never)
+        return
+      }
+      case 'refused': {
+        const told = options.onRefused
+        if (told === undefined) throw new Error(`weft: station refused this side — ${message.why}`)
+        told(message.why)
         return
       }
       case 'failed': {
