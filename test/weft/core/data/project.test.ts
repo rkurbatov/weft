@@ -5,7 +5,8 @@ import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { input } from '#weft/core/graph/graph.ts'
 import { projected } from '#weft/core/keep/project.ts'
-import { onWholesale, PRESERVE_LIMIT, preserve } from '#weft/core/data/preserve.ts'
+import { PRESERVE_LIMIT, preserve } from '#weft/core/data/preserve.ts'
+import { forgetNotices, onNotice } from '#weft/core/data/notice.ts'
 import { laneDrop, laneFind, lanePlace } from '#weft/core/data/arrange.ts'
 import type { Lanes } from '#weft/core/data/arrange.ts'
 import type { Entry } from '#weft/core/keep/outbox.ts'
@@ -108,7 +109,9 @@ describe('the ceiling on keeping identity', () => {
 
   test('a collection past the ceiling is handed back whole, and said so', () => {
     const heard: number[] = []
-    const stop = onWholesale(size => heard.push(size))
+    const stop = onNotice(what => {
+      if (what.kind === 'wholesale') heard.push(Number(what.detail?.['size']))
+    })
 
     const size = PRESERVE_LIMIT + 1
     const before = new Map(Array.from({ length: size }, (_, i) => [i, { n: i }]))
@@ -128,6 +131,7 @@ describe('the ceiling on keeping identity', () => {
   })
 
   test('with nobody listening it complains once, not on every redraw', () => {
+    forgetNotices()
     const said: string[] = []
     const before = console.warn
     console.warn = (...parts: unknown[]) => said.push(parts.join(' '))

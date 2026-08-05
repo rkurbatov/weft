@@ -19,7 +19,8 @@ import {
   union,
 } from '#weft/rel/node.ts'
 import { relate } from '#weft/rel/live.ts'
-import { CROWDED_KEY, onCrowdedJoin } from '#weft/rel/runners/join.ts'
+import { CROWDED_KEY } from '#weft/rel/runners/join.ts'
+import { onNotice } from '#weft/core/data/notice.ts'
 import { held as owned, until } from '../../kit/index.ts'
 
 describe('the relational layer', () => {
@@ -360,9 +361,13 @@ describe('the relational layer', () => {
   })
 
   test('fold carriers are named at the same door: an inverse runs, the rest recount', async () => {
-    const { onPlan } = await import('#weft')
     const heard: Array<{ name: string; carrier: string }> = []
-    until(onPlan((name, plan) => heard.push({ name, carrier: plan.carrier })))
+    until(
+      onNotice(what => {
+        if (what.kind === 'fold-plan')
+          heard.push({ name: what.where, carrier: String(what.detail?.['carrier']) })
+      }),
+    )
     const orders = owned(table<Row>({ key: r => r['id'] as Key }))
     living(
       agg(source('orders', ['id']), {
@@ -546,9 +551,13 @@ describe('the relational layer', () => {
   })
 
   test('a scan pays its tail, and the carrier is named at the same door', async () => {
-    const { onScanPlan } = await import('#weft')
     const heard: string[] = []
-    until(onScanPlan((name, plan) => heard.push(`${name}:${plan.carrier}`)))
+    until(
+      onNotice(what => {
+        if (what.kind === 'scan-plan')
+          heard.push(`${what.where}:${String(what.detail?.['carrier'])}`)
+      }),
+    )
 
     const rows = table<Row>({ key: r => r['id'] as Key })
     for (let i = 0; i < 400; i++) rows.put({ id: i, rank: i, height: 50 })
@@ -627,7 +636,12 @@ describe('the relational layer', () => {
 
   test('a join on something too common says so, once', () => {
     const heard: Array<{ node: string; rows: number }> = []
-    until(onCrowdedJoin(what => heard.push({ node: what.node, rows: what.rows })))
+    until(
+      onNotice(what => {
+        if (what.kind === 'crowded-join')
+          heard.push({ node: what.where, rows: Number(what.detail?.['rows']) })
+      }),
+    )
 
     const orders = feed('orders')
     const shops = feed('shops')
@@ -655,7 +669,11 @@ describe('the relational layer', () => {
 
   test('an ordinary join says nothing', () => {
     const heard: unknown[] = []
-    until(onCrowdedJoin(what => heard.push(what)))
+    until(
+      onNotice(what => {
+        if (what.kind === 'crowded-join') heard.push(what)
+      }),
+    )
 
     const orders = feed('orders')
     const clients = feed('clients')

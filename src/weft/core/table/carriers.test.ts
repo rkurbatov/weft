@@ -14,7 +14,8 @@ import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
 import { carrierFor, runningCarrier, treeCarrier } from './carriers/index.ts'
 import type { FoldCarrier, FoldWork, Rows } from './carriers/index.ts'
-import { onPlan, planFold, TREE_SPAN, TREE_WORTH_IT } from './plan.ts'
+import { planFold, TREE_SPAN, TREE_WORTH_IT } from './plan.ts'
+import { onNotice } from '../data/notice.ts'
 import type { Plan } from './plan.ts'
 import { subscribe, watch } from '../graph/graph.ts'
 import { table } from './table.ts'
@@ -80,7 +81,11 @@ describe('the planner, without a graph in sight', () => {
 
   test('every decision is announced: a choice nobody can see is magic', () => {
     const heard: Plan[] = []
-    until(onPlan((_name, plan) => heard.push(plan)))
+    until(
+      onNotice(what => {
+        if (what.kind === 'fold-plan') heard.push(what.detail as unknown as Plan)
+      }),
+    )
     planFold('takings', { size: 10, hasSub: true, hasJoin: true })
     assert.equal(heard.length, 1)
     assert.equal(heard[0]?.carrier, 'running')
@@ -197,7 +202,12 @@ describe('a tree of blocks, for an operation with no inverse', () => {
 describe('a fold re-planned as its collection grows', () => {
   test('the carrier is swapped, the swap is announced, the answer never lies', () => {
     const heard: Array<{ name: string; carrier: string }> = []
-    until(onPlan((name, plan) => heard.push({ name, carrier: plan.carrier })))
+    until(
+      onNotice(what => {
+        if (what.kind === 'fold-plan')
+          heard.push({ name: what.where, carrier: String(what.detail?.['carrier']) })
+      }),
+    )
 
     // A maximum has no inverse: below the threshold it is a recount, above it
     // a tree — and a table usually starts empty and fills up afterwards.
@@ -227,7 +237,11 @@ describe('a fold re-planned as its collection grows', () => {
 
   test('a carrier named by hand is never taken away', () => {
     const heard: string[] = []
-    until(onPlan((_name, plan) => heard.push(plan.carrier)))
+    until(
+      onNotice(what => {
+        if (what.kind === 'fold-plan') heard.push(String(what.detail?.['carrier']))
+      }),
+    )
     const t = held(table<Row>({ key: r => r.id, name: 'insisted' }))
     const total = t.fold(
       { carrier: 'recount', zero: 0, add: (acc, r) => acc + r.score, join: (a, b) => a + b },
@@ -259,7 +273,12 @@ const filled = (): ReturnType<typeof table<Scored>> =>
 describe('a fold through the table, where the thresholds decide', () => {
   test('a fold names its carrier by rule, and the choice is visible', () => {
     const heard: Array<{ name: string; carrier: string }> = []
-    until(onPlan((name, plan) => heard.push({ name, carrier: plan.carrier })))
+    until(
+      onNotice(what => {
+        if (what.kind === 'fold-plan')
+          heard.push({ name: what.where, carrier: String(what.detail?.['carrier']) })
+      }),
+    )
 
     const t = filled()
     for (let i = 0; i < TREE_WORTH_IT + 10; i++) t.put(scored(i, 'a', i))

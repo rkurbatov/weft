@@ -8,6 +8,8 @@
 // Hence its own place at the bottom, where everything may reach for it and it
 // reaches for nothing.
 
+import { notice } from './notice.ts'
+
 /**
  * How large a collection may be before it is left alone.
  *
@@ -17,41 +19,25 @@
  * per-row stability over a collection this big should hold a table, where a
  * change is a change of one row, not a map in a cell.
  *
- * Announced rather than silent: `onWholesale` hears about it, the same way the
- * planner's decisions are heard.
+ * Announced rather than silent: it goes out on the notice channel, the same
+ * one the planner's decisions go out on.
  */
 export const PRESERVE_LIMIT = 4096
 
 /** For a caller that knows its own collection: pass a limit of its own. */
 
-const wholesale = new Set<(size: number) => void>()
-
-/** Told when a collection was too large to keep piece by piece. */
-export function onWholesale(listener: (size: number) => void): () => void {
-  wholesale.add(listener)
-  return () => wholesale.delete(listener)
-}
-
-let warned = false
-
 const tooBig = (size: number, limit: number): boolean => {
   if (size <= limit) return false
-  if (wholesale.size > 0) {
-    for (const listener of wholesale) listener(size)
-    return true
-  }
-  // Nobody is listening, and a decision nobody hears is the same as no
-  // decision. Said once per run, not per call: a screen redrawing sixty times
-  // a second must not be told sixty times a second.
-  if (!warned) {
-    warned = true
-    console.warn(
-      `weft: a collection of ${size} is past the ${limit} that identity is kept for, ` +
-        `so it is handed on whole and memoised screens over it will redraw. ` +
-        `Hold rows in a table rather than a map in a cell, raise the limit for this call, ` +
-        `or listen with onWholesale to decide for yourself.`,
-    )
-  }
+  notice({
+    kind: 'wholesale',
+    where: 'preserve',
+    level: 'warn',
+    message:
+      `a collection of ${size} is past the ${limit} that identity is kept for, so it is ` +
+      `handed on whole and memoised screens over it will redraw. Hold rows in a table ` +
+      `rather than a map in a cell, or raise the limit for this call.`,
+    detail: { size, limit },
+  })
   return true
 }
 

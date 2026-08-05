@@ -7,6 +7,8 @@
 
 import { createElement as h, useEffect, useMemo, useReducer, useState } from 'react'
 import type { ReactNode } from 'react'
+import { onNotice } from '#weft'
+import type { Notice } from '#weft'
 import { journal, trace } from '#weft'
 import type { Trace, WaveSummary, Watchable } from '#weft'
 
@@ -44,6 +46,15 @@ function TraceView({ look, depth = 0 }: { look: Trace; depth?: number }): ReactN
   )
 }
 
+const noticeRow = (what: Notice, i: number): ReactNode =>
+  h(
+    'div',
+    { key: `${what.kind}-${what.where}-${i}`, className: what.level === 'warn' ? 'warn' : 'dim' },
+    h('b', null, what.kind),
+    ' ',
+    what.message,
+  )
+
 export function WavesPanel({
   limit = 30,
   inspect = [],
@@ -57,6 +68,17 @@ export function WavesPanel({
   const [filter, setFilter] = useState('')
   const [opened, setOpened] = useState<number | null>(null)
   const [probed, setProbed] = useState<string | null>(null)
+  // What the library noticed on its own: which carrier a fold got, a collection
+  // too large to keep piece by piece, a join with a crowd under one key. The
+  // channel had no listener until this panel; now it has one.
+  const [noticed, setNoticed] = useState<readonly Notice[]>([])
+  useEffect(
+    () =>
+      onNotice(what => {
+        setNoticed(seen => [what, ...seen].slice(0, 40))
+      }),
+    [],
+  )
 
   useEffect(() => {
     if (live) book.start()
@@ -165,5 +187,12 @@ export function WavesPanel({
           ),
       ),
     ),
+    noticed.length > 0 &&
+      h(
+        'section',
+        { className: 'notices' },
+        h('header', null, h('b', null, 'noticed'), ` ${noticed.length}`),
+        ...noticed.map(noticeRow),
+      ),
   )
 }

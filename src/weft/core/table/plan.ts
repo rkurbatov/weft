@@ -1,3 +1,4 @@
+import { notice } from '../data/notice.ts'
 // The empirics live here and nowhere else: given what is known about a fold —
 // how big the collection is, what the operation can do — pick the carrier that
 // keeps it. The rest of the library asks this module and does not reason.
@@ -31,14 +32,6 @@ export const TREE_WORTH_IT = 256
  *  optimum sat nearer 512 than 32. */
 export const TREE_SPAN = 512
 
-const listeners = new Set<(name: string, plan: Plan) => void>()
-
-/** The instruments' door: every decision is announced here. */
-export function onPlan(listener: (name: string, plan: Plan) => void): () => void {
-  listeners.add(listener)
-  return () => listeners.delete(listener)
-}
-
 /** A scan's carrier: a prefix line of plain numbers, or an honest recount of
  *  the tail from the edit. The same door, the same announcement. */
 export type ScanCarrier = 'offsets' | 'tail'
@@ -69,16 +62,15 @@ export interface ScanPlan {
  *  ran three orders behind an asked one on the very first edit. */
 export const STORED_CARRY_LIMIT = 4096
 
-const scanListeners = new Set<(name: string, plan: ScanPlan) => void>()
-
-export function onScanPlan(listener: (name: string, plan: ScanPlan) => void): () => void {
-  scanListeners.add(listener)
-  return () => scanListeners.delete(listener)
-}
-
 export function planScan(name: string, traits: ScanTraits): ScanPlan {
   const plan = decideScan(traits)
-  for (const listener of scanListeners) listener(name, plan)
+  notice({
+    kind: 'scan-plan',
+    where: name,
+    level: 'note',
+    message: `the scan "${name}" is carried by ${plan.carrier}, its carry ${plan.form}: ${plan.reason}`,
+    detail: { carrier: plan.carrier, form: plan.form, reason: plan.reason, ...traits },
+  })
   return plan
 }
 
@@ -122,7 +114,13 @@ function decideScan(traits: ScanTraits): ScanPlan {
 
 export function planFold(name: string, traits: FoldTraits): Plan {
   const plan = decide(traits)
-  for (const listener of listeners) listener(name, plan)
+  notice({
+    kind: 'fold-plan',
+    where: name,
+    level: 'note',
+    message: `the fold "${name}" is kept by ${plan.carrier}: ${plan.reason}`,
+    detail: { carrier: plan.carrier, reason: plan.reason, ...traits },
+  })
   return plan
 }
 

@@ -8,6 +8,7 @@ import type { Change, Key } from '../../core/table/table.ts'
 import type { Row } from '../expr.ts'
 import { keyOfRow, mergedRow, onKeyOf, passesResidual, recount } from '../node.ts'
 import type { JoinNode } from '../node.ts'
+import { notice } from '../../core/data/notice.ts'
 import { diffInto } from './runner.ts'
 import type { Make, Runner } from './runner.ts'
 
@@ -23,16 +24,6 @@ type OnIndex = Map<string | number, Map<Key, Row>>
  * decisions go.
  */
 export const CROWDED_KEY = 10_000
-
-const crowded = new Set<(what: { node: string; key: string | number; rows: number }) => void>()
-
-/** Told when one key of a join has gathered an unreasonable crowd. */
-export function onCrowdedJoin(
-  listener: (what: { node: string; key: string | number; rows: number }) => void,
-): () => void {
-  crowded.add(listener)
-  return () => crowded.delete(listener)
-}
 
 const put = (
   index: OnIndex,
@@ -68,16 +59,16 @@ export function joinRunner(node: JoinNode, make: Make): Runner {
   const crowd = (at: string | number, rows: number): void => {
     if (warned) return
     warned = true
-    const what = { node: named, key: at, rows }
-    if (crowded.size > 0) {
-      for (const listener of crowded) listener(what)
-      return
-    }
-    console.warn(
-      `weft rel: the join "${named}" has ${rows} rows under the key ${String(at)} — ` +
-        `one row arriving on the other side will make ${rows} rows here. ` +
-        `Join on something more particular, or filter first.`,
-    )
+    notice({
+      kind: 'crowded-join',
+      where: named,
+      level: 'warn',
+      message:
+        `the join "${named}" has ${rows} rows under the key ${String(at)} — one row arriving ` +
+        `on the other side will make ${rows} rows here. Join on something more particular, ` +
+        `or filter first.`,
+      detail: { key: at, rows },
+    })
   }
   // The indexes the derivative needs: each side's rows, grouped by equi-key.
   const leftByOn: OnIndex = new Map()

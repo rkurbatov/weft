@@ -36,7 +36,8 @@ export type { Family, FamilyOptions } from './core/graph/family.ts'
 // Of the planner, only what an application has a reason to touch: hearing the
 // decisions, and naming a carrier by hand in a passport. Deciding is the
 // library's own business, and its traits and plans are not offered.
-export { onPlan, onScanPlan } from './core/table/plan.ts'
+export { onNotice } from './core/data/notice.ts'
+export type { Notice } from './core/data/notice.ts'
 export type { Carrier, Plan, ScanPlan } from './core/table/plan.ts'
 export { blocks } from './core/table/blocks.ts'
 export type { Blocks, BlockOptions } from './core/table/blocks.ts'
@@ -59,7 +60,7 @@ export { journal } from './core/graph/journal.ts'
 export type { Journal } from './core/graph/journal.ts'
 
 export { projected } from './core/keep/project.ts'
-export { onWholesale, preserve } from './core/data/preserve.ts'
+export { preserve } from './core/data/preserve.ts'
 export type { ProjectionSpec } from './core/keep/project.ts'
 export { laneDrop, lanePlace, laneAppend, laneFind } from './core/data/arrange.ts'
 export type { Lanes } from './core/data/arrange.ts'
