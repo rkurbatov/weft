@@ -13,13 +13,42 @@ import type { Make, Runner } from './runner.ts'
 
 type OnIndex = Map<string | number, Map<Key, Row>>
 
-const put = (index: OnIndex, at: string | number, key: Key, row: Row): void => {
+/**
+ * How many rows may gather under one key before the join says something.
+ *
+ * A join on a low-cardinality field — a status, a flag, a tenant — is not a
+ * mistake in itself, but it is rarely what was meant: one row arriving on the
+ * other side then makes as many rows as there are here. Nothing is refused;
+ * this is a word of warning, once per key, through the same door the planner's
+ * decisions go.
+ */
+export const CROWDED_KEY = 10_000
+
+const crowded = new Set<(what: { node: string; key: string | number; rows: number }) => void>()
+
+/** Told when one key of a join has gathered an unreasonable crowd. */
+export function onCrowdedJoin(
+  listener: (what: { node: string; key: string | number; rows: number }) => void,
+): () => void {
+  crowded.add(listener)
+  return () => crowded.delete(listener)
+}
+
+const put = (
+  index: OnIndex,
+  at: string | number,
+  key: Key,
+  row: Row,
+  warn?: (at: string | number, rows: number) => void,
+): void => {
   let held = index.get(at)
   if (held === undefined) {
     held = new Map()
     index.set(at, held)
   }
+  const was = held.size
   held.set(key, row)
+  if (warn !== undefined && was < CROWDED_KEY && held.size >= CROWDED_KEY) warn(at, held.size)
 }
 
 const cut = (index: OnIndex, at: string | number, key: Key): void => {
@@ -32,6 +61,24 @@ const cut = (index: OnIndex, at: string | number, key: Key): void => {
 export function joinRunner(node: JoinNode, make: Make): Runner {
   const left = make(node.left)
   const right = make(node.right)
+  const named = `${node.as} on ${node.on.map(pair => `${pair.left}=${pair.right}`).join(', ')}`
+  let warned = false
+  // Said once per join, at the moment a key first crosses the line — not per
+  // row, and not again for every key after.
+  const crowd = (at: string | number, rows: number): void => {
+    if (warned) return
+    warned = true
+    const what = { node: named, key: at, rows }
+    if (crowded.size > 0) {
+      for (const listener of crowded) listener(what)
+      return
+    }
+    console.warn(
+      `weft rel: the join "${named}" has ${rows} rows under the key ${String(at)} — ` +
+        `one row arriving on the other side will make ${rows} rows here. ` +
+        `Join on something more particular, or filter first.`,
+    )
+  }
   // The indexes the derivative needs: each side's rows, grouped by equi-key.
   const leftByOn: OnIndex = new Map()
   const rightByOn: OnIndex = new Map()
@@ -65,7 +112,7 @@ export function joinRunner(node: JoinNode, make: Make): Runner {
     if (change.next !== undefined) {
       const now = onKeyOf(node.on, 'left', change.next)
       // Not indexed at all when it has no key: an absence is not a bucket.
-      if (now !== undefined) put(leftByOn, now, change.key, change.next)
+      if (now !== undefined) put(leftByOn, now, change.key, change.next, crowd)
     }
     const after = change.next === undefined ? new Map<Key, Row>() : outsOf(change.next)
     diffInto(out, before, after)
@@ -90,7 +137,7 @@ export function joinRunner(node: JoinNode, make: Make): Runner {
     }
     if (change.next !== undefined) {
       const now = onKeyOf(node.on, 'right', change.next)
-      if (now !== undefined) put(rightByOn, now, change.key, change.next)
+      if (now !== undefined) put(rightByOn, now, change.key, change.next, crowd)
     }
     for (const [key, row] of touched) {
       diffInto(out, before.get(key) as Map<Key, Row>, outsOf(row))
@@ -118,11 +165,11 @@ export function joinRunner(node: JoinNode, make: Make): Runner {
       rightByOn.clear()
       for (const row of left.rebuild(sources).values()) {
         const at = onKeyOf(node.on, 'left', row)
-        if (at !== undefined) put(leftByOn, at, leftKeyOf(row), row)
+        if (at !== undefined) put(leftByOn, at, leftKeyOf(row), row, crowd)
       }
       for (const row of right.rebuild(sources).values()) {
         const at = onKeyOf(node.on, 'right', row)
-        if (at !== undefined) put(rightByOn, at, rightKeyOf(row), row)
+        if (at !== undefined) put(rightByOn, at, rightKeyOf(row), row, crowd)
       }
       return recount(node, sources)
     },

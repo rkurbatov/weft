@@ -199,3 +199,72 @@ describe('the border of a failure', () => {
     g.dispose()
   })
 })
+
+test('two watchers writing each other are stopped by name, and quickly', () => {
+  const g = graph('app')
+  const a = g.input(0)
+  const b = g.input(0)
+
+  // Each writes what the other reads: a settling that would never end.
+  assert.throws(
+    () => {
+      g.watch(() => {
+        b.set(a.get() + 1)
+      })
+      g.watch(() => {
+        a.set(b.get() + 1)
+      })
+    },
+    (error: Error) => {
+      // Named: the engine, how many wakings, and what is wrong.
+      assert.match(error.message, /app/)
+      assert.match(error.message, /woken 101 times/)
+      assert.match(error.message, /writes what it reads/)
+      return true
+    },
+  )
+
+  g.dispose()
+})
+
+test('a watcher writing what it reads itself settles instead of spinning', () => {
+  const g = graph('app')
+  const seats = g.input(0)
+  let runs = 0
+
+  g.watch(() => {
+    runs++
+    seats.set(seats.get() + 1)
+  })
+
+  seats.set(100)
+  // Its own write does not wake it again — the run that made it was already
+  // the answer to that value. No spin, and nothing to name.
+  assert.equal(seats.peek(), 101)
+  assert.ok(runs < 5, `ran ${runs} times`)
+
+  g.dispose()
+})
+
+test('an honest chain of wakings is not mistaken for a loop', () => {
+  const g = graph('app')
+  const first = g.input(0)
+  const second = g.input(0)
+  let woke = 0
+
+  // One watcher writing another's input, which wakes a second watcher: a
+  // settling of several rounds, and perfectly ordinary.
+  g.watch(() => {
+    second.set(first.get() * 2)
+  })
+  g.watch(() => {
+    second.get()
+    woke++
+  })
+
+  for (let i = 1; i <= 50; i++) first.set(i)
+  assert.equal(second.peek(), 100)
+  assert.ok(woke > 1)
+
+  g.dispose()
+})

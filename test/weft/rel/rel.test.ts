@@ -19,6 +19,7 @@ import {
   union,
 } from '#weft/rel/node.ts'
 import { relate } from '#weft/rel/live.ts'
+import { CROWDED_KEY, onCrowdedJoin } from '#weft/rel/runners/join.ts'
 import { held as owned, until } from '../../kit/index.ts'
 
 describe('the relational layer', () => {
@@ -622,5 +623,52 @@ describe('the relational layer', () => {
         [null, null],
       )
     })
+  })
+
+  test('a join on something too common says so, once', () => {
+    const heard: Array<{ node: string; rows: number }> = []
+    until(onCrowdedJoin(what => heard.push({ node: what.node, rows: what.rows })))
+
+    const orders = feed('orders')
+    const shops = feed('shops')
+    const live = living(
+      join(source('orders', ['id']), source('shops', ['id']), {
+        as: 's',
+        on: [{ left: 'status', right: 'status' }],
+      }),
+      { orders, shops },
+    )
+    until(subscribe(live.all, () => {}))
+
+    // Every order has the same status: one shop arriving would make as many
+    // rows as there are orders.
+    const many = Array.from(
+      { length: CROWDED_KEY + 5 },
+      (_, i) => ({ id: i, status: 'open' }) as unknown as Row,
+    )
+    orders.put(...many)
+
+    assert.equal(heard.length, 1, 'said once, not per row')
+    assert.match(heard[0]?.node ?? '', /status=status/)
+    assert.ok((heard[0]?.rows ?? 0) >= CROWDED_KEY)
+  })
+
+  test('an ordinary join says nothing', () => {
+    const heard: unknown[] = []
+    until(onCrowdedJoin(what => heard.push(what)))
+
+    const orders = feed('orders')
+    const clients = feed('clients')
+    const live = living(
+      join(source('orders', ['id']), source('clients', ['id']), {
+        as: 'c',
+        on: [{ left: 'client', right: 'id' }],
+      }),
+      { orders, clients },
+    )
+    until(subscribe(live.all, () => {}))
+
+    orders.put(...Array.from({ length: 500 }, (_, i) => ({ id: i, client: i }) as unknown as Row))
+    assert.deepEqual(heard, [])
   })
 })

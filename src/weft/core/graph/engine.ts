@@ -93,12 +93,21 @@ export interface EngineOptions {
   onError?: (error: unknown) => void
 }
 
+/**
+ * How many times one watcher may wake within a single settling before it is
+ * called a loop. Generous: a watcher legitimately woken again by another's
+ * write is ordinary, a hundred of them is not.
+ */
+const ROUNDS_BEFORE_SUSPICION = 100
+
 export class Core {
   readonly name: string
   private readonly onError: ((error: unknown) => void) | undefined
   private batchDepth = 0
   private workDepth = 0
   private readonly pending = new Set<Consumer>()
+  /** Whether a settling is already running: writes from watchers join it. */
+  private settling = false
   private readonly notices: Array<() => void> = []
   /**
    * Watchers, and only watchers: they are the leaves that hold demand, and
@@ -174,7 +183,7 @@ export class Core {
       this.leaveRegion(before)
     }
     let dead = false
-    // Whoever holds this region: the engine itself, or the surrounding region.
+    // Whoever holds this region: the engine itself, or the region around it.
     const holder = before === null ? this.household : before.teardowns
     const kill = (): void => {
       if (dead) return
@@ -307,15 +316,40 @@ export class Core {
 
   flush(): void {
     if (this.batchDepth > 0) return
+    // A write from inside a watcher's body used to start a settling of its
+    // own, on top of the one already running: a loop then blew the call stack
+    // before anything could be counted or named. A write during a settling
+    // only queues; the settling already under way takes it.
+    if (this.settling) return
+    this.settling = true
     this.enter()
     const failures: unknown[] = []
     try {
       // Watchers may write, queueing more watchers; drain until quiet.
-      let guard = 0
+      //
+      // A loop — a watcher writing what it reads — used to spin a thousand
+      // rounds of the whole graph before saying anything, which on a heavy
+      // graph is seconds of a frozen tab and a message naming nobody. Counting
+      // per node instead finds the culprit in the round where it misbehaves,
+      // and names it.
+      let woken: Map<Consumer, number> | undefined
       while (this.pending.size > 0) {
-        if (++guard > 1000) throw new Error(`weft: propagation did not settle in "${this.name}"`)
         const round = Array.from(this.pending)
         this.pending.clear()
+        if (round.length > 0) {
+          woken ??= new Map()
+          for (const w of round) {
+            const times = (woken.get(w) ?? 0) + 1
+            woken.set(w, times)
+            if (times > ROUNDS_BEFORE_SUSPICION) {
+              throw new Error(
+                `weft: "${w.name}" in engine "${this.name}" has woken ${times} times in one ` +
+                  `settling — something in this round writes what it reads, directly or ` +
+                  `through another watcher`,
+              )
+            }
+          }
+        }
         // One watcher failing is not a reason for its neighbours to sleep
         // through the change: the round is carried to its end, and what fell
         // is collected on the way.
@@ -328,6 +362,7 @@ export class Core {
         }
       }
     } finally {
+      this.settling = false
       this.leave()
       this.report(failures)
     }
