@@ -153,6 +153,13 @@ export function source<T>(
       cancel()
       return
     }
+    // A pause earned by refusals outlives the loss of demand: what is owed is
+    // owed to the server, not to the watcher who happened to be looking.
+    const owed = notBefore - now()
+    if (owed > 0) {
+      schedule(owed)
+      return
+    }
     if (stale()) {
       if (calm === undefined) void begin()
       else schedule(calm) // the look waits out the quiet; leaving cancels it
@@ -179,13 +186,25 @@ export function source<T>(
     return age >= shelfLife
   }
 
+  /**
+   * The earliest the world may be asked again after a refusal.
+   *
+   * Kept as a moment, not as a pending timer: a timer dies with the demand,
+   * and then a tab switched away and back would ask immediately, however many
+   * refusals came before. Flapping between tabs is not a reason to drop the
+   * pause a failing server has earned.
+   */
+  let notBefore = 0
+
   function backoff(): number | undefined {
     if (retry === undefined) return undefined
-    const wait = retry * 2 ** Math.max(0, attempt - 1)
-    const capped = retryCap === undefined ? wait : Math.min(wait, retryCap)
+    const full = retry * 2 ** Math.max(0, attempt - 1)
+    const capped = retryCap === undefined ? full : Math.min(full, retryCap)
     // Full jitter: uniform in (0, capped]. 1 - jitter() keeps the wait
     // strictly positive whatever the injected randomness returns.
-    return capped * (1 - jitter())
+    const wait = capped * (1 - jitter())
+    notBefore = now() + wait
+    return wait
   }
 
   function begin(force = false): Promise<void> {
@@ -232,6 +251,7 @@ export function source<T>(
           if (mine !== generation) return
           if (guard !== null) timers.clear(guard)
           attempt = 0
+          notBefore = 0
           state.set(arrived(value, now()))
           reschedule()
         },

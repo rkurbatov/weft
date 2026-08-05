@@ -343,4 +343,35 @@ describe('sources', () => {
     // First at 1000+100 (after the quiet); then every 200, with no extra quiet.
     assert.deepEqual(times, [1100, 1300, 1500])
   })
+
+  test('a pause earned by refusals is not shaken off by looking away and back', async () => {
+    const clock = world()
+    let asked = 0
+    const feed = source(
+      () => {
+        asked++
+        return Promise.reject(new Error('the server is down'))
+      },
+      { name: 'feed', retry: 1000, timers: clock.timers, now: clock.now, jitter: () => 0 },
+    )
+
+    const first = until(subscribe(feed.state, () => {}))
+    await settle()
+    assert.equal(asked, 1)
+
+    // Two refusals in: the next ask is owed a second of quiet.
+    await clock.advance(1000)
+    assert.equal(asked, 2)
+
+    // The tab goes away and comes straight back — the old bug asked at once.
+    first()
+    await settle()
+    until(subscribe(feed.state, () => {}))
+    await settle()
+    assert.equal(asked, 2, 'the pause is owed to the server, not to the watcher')
+
+    // And when it is served out, the ask goes as planned.
+    await clock.advance(2000)
+    assert.equal(asked, 3)
+  })
 })
