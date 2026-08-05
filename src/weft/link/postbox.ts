@@ -24,9 +24,28 @@ function isEnvelope(message: unknown): message is Envelope {
   return typeof message === 'object' && message !== null && (message as Envelope).weft === true
 }
 
-/** A greeting: how an arrival announces itself, optionally saying whose it is. */
+/**
+ * The version of what is said over the wire.
+ *
+ * Two tabs of one origin can be running different builds — one opened before
+ * a deploy, one after — and they meet on the same bus. Without a version they
+ * would talk past each other and fall apart somewhere far from the cause.
+ * Raised whenever the shape of a message changes, never otherwise.
+ */
+export const PROTOCOL = 1
+
+/** A greeting: how an arrival announces itself, its version, and whose it is. */
 export function greeting(claim: string | undefined): unknown {
-  return claim === undefined ? { hello: true } : { hello: true, claim }
+  return claim === undefined
+    ? { hello: true, protocol: PROTOCOL }
+    : { hello: true, protocol: PROTOCOL, claim }
+}
+
+/** The version an arrival speaks. Absent means a build from before versions. */
+export function protocolOf(body: unknown): number | undefined {
+  if (typeof body !== 'object' || body === null) return undefined
+  const version = (body as { protocol?: unknown }).protocol
+  return typeof version === 'number' ? version : undefined
 }
 
 export function isGreeting(body: unknown): boolean {

@@ -190,4 +190,41 @@ describe('the tab protocol over a line of callbacks', () => {
     stop()
     watcher.close()
   })
+
+  test('a tab from another build is refused by version, not left to fall apart', async () => {
+    const line = localBroadcast()
+    const seats = input(1, { name: 'seats' })
+    const hub = busHub('station', line, { lease: false })
+    until(hub.accept(channel => serve({ cells: { seats } }, channel, { schedule: atOnce })))
+
+    // A tab of an older build: it greets without a version, as builds before
+    // versions did.
+    const old = postbox(line, 'old-tab')
+    const answers: unknown[] = []
+    until(old.listen((_from, body) => answers.push(body)))
+    old.send('graph', { hello: true })
+    await settle(2)
+
+    assert.equal(answers.length, 1)
+    assert.match(String((answers[0] as { why: string }).why), /protocol 1.*none/)
+  })
+
+  test('a tab of this build is served as before', async () => {
+    const line = localBroadcast()
+    const seats = input(4, { name: 'seats' })
+    const hub = busHub('station', line, { lease: false })
+    until(hub.accept(channel => serve({ cells: { seats } }, channel, { schedule: atOnce })))
+
+    const watcher = link(busChannel('station', line, { keepAlive: false }))
+    const seen: number[] = []
+    const stop = subscribe(watcher.cell<number>('seats'), remote => {
+      const held = heldOf(remote)
+      if (held !== undefined) seen.push(held.value)
+    })
+    await settle(2)
+    assert.deepEqual(seen, [4])
+
+    stop()
+    watcher.close()
+  })
 })

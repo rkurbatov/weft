@@ -11,7 +11,17 @@
 import { wallClock } from '../core/graph/time.ts'
 import type { Timers } from '../core/graph/time.ts'
 import type { Channel } from './channel.ts'
-import { claimOf, EVERYONE, GRAPH, greeting, isGreeting, newName, postbox } from './postbox.ts'
+import {
+  claimOf,
+  EVERYONE,
+  GRAPH,
+  greeting,
+  isGreeting,
+  newName,
+  postbox,
+  PROTOCOL,
+  protocolOf,
+} from './postbox.ts'
 import { openBroadcast, overBus } from './transport.ts'
 import type { Broadcast, BusLike } from './transport.ts'
 
@@ -107,6 +117,19 @@ export function busHub(name: string, bus?: Broadcast | BusLike, options: HubOpti
       }
 
       const stopListening = mail.listen((them, body) => {
+        if (!serving.has(them) && isGreeting(body)) {
+          const theirs = protocolOf(body)
+          if (theirs !== PROTOCOL) {
+            // A tab from another build. Say which versions met, so the answer
+            // is "reload the page", not a hunt through the protocol.
+            mail.send(them, {
+              kind: 'refused',
+              why: `this station speaks protocol ${PROTOCOL}, the tab speaks ${theirs ?? 'none'}`,
+            })
+            return
+          }
+        }
+
         if (!serving.has(them) && admit !== undefined && !admit(claimOf(body))) {
           // Somebody else's tab. Say so and serve nothing: a replica handed to
           // the wrong session is a leak, and silence would look like a fault.
