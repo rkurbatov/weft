@@ -23,6 +23,14 @@ export interface ServeOptions {
   schedule?: Schedule
   /** Told when a value cannot be sent — usually because it is not cloneable. */
   onUnsendable?: (cell: string, error: unknown) => void
+  /**
+   * Told when the channel itself is gone: nothing at all could be sent. What
+   * had piled up stays where it is, and this side stops trying — a watcher
+   * that comes back asks for everything anew. Without this the other side sits
+   * with a stale picture it has no way of knowing is stale, which is worse
+   * than an error.
+   */
+  onBroken?: (error: unknown) => void
 }
 
 export function serve(surface: Surface, channel: Channel, options: ServeOptions = {}): () => void {
@@ -34,27 +42,65 @@ export function serve(surface: Surface, channel: Channel, options: ServeOptions 
   // Which cell each watch is on, so a complaint can name it.
   const named = new Map<number, string>()
   let flushing = false
+  let broken = false
 
   function flush(): void {
     flushing = false
-    if (pending.size === 0) return
+    if (pending.size === 0 || broken) return
     const changed = [...pending].map(([id, value]) => ({ id, value }))
-    pending.clear()
     try {
       channel.send({ kind: 'values', changed })
-    } catch {
-      // One value that will not clone must not cost the others theirs: send them
-      // one at a time and complain only about those that really fail.
-      for (const one of changed) sendAlone(one)
+      // Cleared only now, and only what was actually sent: a value written
+      // again while this was in flight stays pending on its own account.
+      for (const one of changed) settled(one)
+      return
+    } catch (error) {
+      // Either one value will not clone, or the channel is gone. Sending them
+      // one at a time tells the two apart.
+      let sent = 0
+      for (const one of changed) if (sendAlone(one)) sent++
+      // Nothing got through. That is either a batch where every value refuses
+      // to clone, or a channel that is gone — and the two want opposite
+      // answers. An empty message tells them apart: it clones trivially, so
+      // only a dead channel refuses it.
+      if (sent === 0 && changed.length > 0 && !alive()) fell(error)
     }
   }
 
-  function sendAlone(one: { id: number; value: unknown }): void {
+  /** Sent: drop it, unless it has been written again in the meantime. */
+  function settled(one: { id: number; value: unknown }): void {
+    if (pending.get(one.id) === one.value) pending.delete(one.id)
+  }
+
+  function sendAlone(one: { id: number; value: unknown }): boolean {
     try {
       channel.send({ kind: 'values', changed: [one] })
+      settled(one)
+      return true
     } catch (error) {
       complain(one.id, error)
+      // A value nobody can clone would block the queue forever; it is named
+      // and dropped, and only it.
+      settled(one)
+      return false
     }
+  }
+
+  /** Is there still a channel at all? Asked only after everything failed. */
+  function alive(): boolean {
+    try {
+      channel.send({ kind: 'values', changed: [] })
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  /** The channel is gone. Keep what piled up, stop trying, say so once. */
+  function fell(error: unknown): void {
+    if (broken) return
+    broken = true
+    options.onBroken?.(error)
   }
 
   function complain(id: number, error: unknown): void {

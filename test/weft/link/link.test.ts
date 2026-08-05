@@ -415,4 +415,41 @@ describe('the wire', () => {
     assert.equal(heldOf(face.peek())?.value, 1) // and values flow to it again
     again()
   })
+
+  test('a channel that dies is announced, and what piled up is not thrown away', async () => {
+    const count = input(1, { name: 'count' })
+    const wire = pairInMemory()
+    let dead = false
+    const breakable = {
+      send(message: unknown): void {
+        if (dead) throw new Error('the port is closed')
+        wire.graph.send(message)
+      },
+      listen: (handler: (message: unknown) => void) => wire.graph.listen(handler),
+    }
+
+    const broken: unknown[] = []
+    after(
+      serve({ cells: { count } }, breakable, {
+        schedule: atOnce,
+        onBroken: error => broken.push(error),
+      }),
+    )
+    const seen = link(wire.watcher)
+    after(subscribe(seen.cell<number>('count'), () => {}))
+    await settle()
+
+    dead = true
+    count.set(2)
+    await settle()
+
+    assert.equal(broken.length, 1, 'the death is announced once, by name')
+    assert.match(String(broken[0]), /port is closed/)
+
+    // And it is announced once, not on every write after.
+    count.set(3)
+    count.set(4)
+    await settle()
+    assert.equal(broken.length, 1)
+  })
 })
