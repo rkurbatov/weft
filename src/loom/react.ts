@@ -3,7 +3,7 @@
 // what re-renders the component, structural equality gates the rest.
 
 import { useCallback, useRef, useSyncExternalStore } from 'react'
-import { cell, subscribe } from '#weft'
+import { cell, subscribe, untracked } from '#weft'
 import type { Cell } from '#weft'
 import { alike } from '#weft'
 
@@ -17,6 +17,10 @@ export function useLive<T>(formula: () => T): T {
   // cell kept in state would freeze the first frame forever. Whoever asks next
   // gets a fresh one.
   const made = useRef<Cell<T> | null>(null)
+  // Born on subscription, never in a render. React may render a component and
+  // throw the render away — a suspended tree, an abandoned transition — and
+  // then it never subscribes, so nothing would ever take the cell down. By
+  // then it has read its sources, and they hold it forever.
   const screen = useCallback((): Cell<T> => {
     made.current ??= cell(() => body.current(), { name: 'screen', equal: (a, b) => alike(a, b) })
     return made.current
@@ -26,11 +30,13 @@ export function useLive<T>(formula: () => T): T {
   // fresh object — hand back the old one whenever nothing really changed.
   const last = useRef<{ value: T } | null>(null)
   const snapshot = useCallback((): T => {
-    const value = screen().peek()
+    // Without a cell yet, the value is worked out on the spot and nothing is
+    // left behind. With one, its held value — that is the whole difference.
+    const value = made.current === null ? untracked(() => body.current()) : made.current.peek()
     if (last.current !== null && alike(last.current.value, value)) return last.current.value
     last.current = { value }
     return value
-  }, [screen])
+  }, [])
   // The subscribe function must be stable: React re-subscribes whenever it
   // changes, and a blink of dropped demand is enough for a mirror to honestly
   // forget. One identity — one subscription for the component's whole life.

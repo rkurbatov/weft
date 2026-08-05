@@ -15,6 +15,7 @@ import type { ReactNode } from 'react'
 import { input } from '#weft'
 import { source } from '#weft'
 import { useCell, useInputBinding, useKeepRow, useSourceValue } from '#weft-react'
+import { useLive } from '#loom/react'
 import { wait } from '../kit/index.ts'
 
 const { createRoot } = await import('react-dom/client')
@@ -187,5 +188,36 @@ describe('the React seam, rendered', () => {
     act(() => redraw())
     assert.equal(el.scrollTop, 160)
     view.unmount()
+  })
+
+  test('a render that never commits leaves nothing behind in the graph', async () => {
+    // A tree that suspends: React renders the child, throws the render away,
+    // waits for the promise, then renders it again. The first, abandoned
+    // render must not leave a screen cell watching the input forever.
+    const seats = input(3, { name: 'seats' })
+    let settle = (): void => {}
+    const arrival = new Promise<void>(resolve => {
+      settle = resolve
+    })
+    let arrived = false
+
+    function Child(): ReactNode {
+      const shown = useLive(() => seats.get())
+      if (!arrived) throw arrival
+      return h('span', null, String(shown))
+    }
+
+    const held = mount(h(Suspense, { fallback: h('span', null, 'waiting') }, h(Child, null)))
+    assert.equal(seats.observers.size, 0, 'nothing watches while the render is thrown away')
+
+    arrived = true
+    settle()
+    await act(async () => {
+      await arrival
+    })
+    assert.equal(seats.observers.size, 1, 'the committed render watches, once')
+
+    held.unmount()
+    assert.equal(seats.observers.size, 0, 'and lets go on the way out')
   })
 })
