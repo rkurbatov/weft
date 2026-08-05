@@ -20,25 +20,11 @@ import type { Watchable } from '../core/graph/graph.ts'
 import { table, feedOf, follow } from '../core/table/table.ts'
 import type { Table, Change, Patch, Key } from '../core/table/table.ts'
 
-import {
-  checkNode,
-  canonNode,
-  expandRows,
-  keyOfRow,
-  paramsOfNode,
-  passesFilter,
-  pureRow,
-  recount,
-  substituteNode,
-  whyRow,
-} from './node.ts'
+import { canonNode, checkNode, keyOfRow, paramsOfNode, substituteNode, whyRow } from './node.ts'
 import type { RelNode } from './node.ts'
 import type { Row } from './expr.ts'
-import { aggRunner } from './runners/agg.ts'
-import { joinRunner } from './runners/join.ts'
-import { scanRunner } from './runners/scan.ts'
-import { diffInto } from './runners/runner.ts'
-import type { Ordering, Runner, Sources } from './runners/runner.ts'
+import { runnerFor } from './runners/index.ts'
+import type { Ordering, Runner, Sources } from './runners/index.ts'
 
 export type { Ordering, Runner }
 
@@ -60,137 +46,6 @@ export interface RelateOptions {
    *  replace gates equal rows. A rebuild per change is the naive floor;
    *  a plan that re-judges in place may replace it without touching this. */
   params?: Record<string, Watchable<unknown>>
-}
-
-function runnerFor(node: RelNode): Runner {
-  switch (node.prim) {
-    case 'source':
-      return {
-        feed: (from, changes) => (node.source === from ? [...changes] : []),
-        rebuild: sources => recount(node, sources),
-      }
-    case 'filter': {
-      const input = runnerFor(node.input)
-      return {
-        feed(from, changes) {
-          const out: Change<Row>[] = []
-          for (const under of input.feed(from, changes)) {
-            const prev =
-              under.prev !== undefined && passesFilter(node, under.prev) ? under.prev : undefined
-            const next =
-              under.next !== undefined && passesFilter(node, under.next) ? under.next : undefined
-            if (prev === undefined && next === undefined) continue
-            out.push({
-              key: under.key,
-              ...(prev === undefined ? {} : { prev }),
-              ...(next === undefined ? {} : { next }),
-            })
-          }
-          return out
-        },
-        rebuild: sources => recount(node, sources),
-      }
-    }
-    case 'pure': {
-      const input = runnerFor(node.input)
-      return {
-        feed(from, changes) {
-          const out: Change<Row>[] = []
-          for (const under of input.feed(from, changes)) {
-            out.push({
-              key: under.key,
-              ...(under.prev === undefined ? {} : { prev: pureRow(node, under.prev) }),
-              ...(under.next === undefined ? {} : { next: pureRow(node, under.next) }),
-            })
-          }
-          return out
-        },
-        rebuild: sources => recount(node, sources),
-      }
-    }
-    case 'join':
-      return joinRunner(node, runnerFor)
-    case 'agg':
-      return aggRunner(node, runnerFor)
-    case 'scan':
-      return scanRunner(node, runnerFor)
-    case 'union': {
-      const left = runnerFor(node.left)
-      const right = runnerFor(node.right)
-      // Which side holds a key: 1 left, 2 right. Both at once is the error
-      // the corpus promises — outside a cycle, sides must be disjoint.
-      const side = new Map<Key, number>()
-      const land = (changes: Change<Row>[], bit: number): Change<Row>[] => {
-        for (const change of changes) {
-          if (change.prev !== undefined && change.next === undefined) {
-            const held = (side.get(change.key) ?? 0) & ~bit
-            if (held === 0) side.delete(change.key)
-            else side.set(change.key, held)
-          } else if (change.prev === undefined && change.next !== undefined) {
-            const held = (side.get(change.key) ?? 0) | bit
-            if (held === 3) {
-              throw new Error(
-                `weft rel: union key collision on ${String(change.key)} — sides must be disjoint`,
-              )
-            }
-            side.set(change.key, held)
-          }
-        }
-        return changes
-      }
-      return {
-        feed(from, changes) {
-          return [...land(left.feed(from, changes), 1), ...land(right.feed(from, changes), 2)]
-        },
-        rebuild(sources) {
-          side.clear()
-          const out = left.rebuild(sources)
-          for (const key of out.keys()) side.set(key, 1)
-          for (const [key, row] of right.rebuild(sources)) {
-            if (side.has(key)) {
-              throw new Error(
-                `weft rel: union key collision on ${String(key)} — sides must be disjoint`,
-              )
-            }
-            side.set(key, 2)
-            out.set(key, row)
-          }
-          return out
-        },
-      }
-    }
-    case 'expand': {
-      const input = runnerFor(node.input)
-      // Stateless: a parent row alone says what it unfolds into, so a change
-      // is the diff of its two unfoldings, by expanded key.
-      const opened = (row: Row | undefined): Map<Key, Row> => {
-        const out = new Map<Key, Row>()
-        if (row === undefined) return out
-        for (const one of expandRows(node, row)) {
-          const key = keyOfRow(node, one)
-          if (out.has(key)) {
-            throw new Error(
-              `weft rel: expand key collision on ${String(key)} — nested rows must differ`,
-            )
-          }
-          out.set(key, one)
-        }
-        return out
-      }
-      return {
-        feed(from, changes) {
-          const out = new Map<Key, Change<Row>>()
-          for (const change of input.feed(from, changes)) {
-            diffInto(out, opened(change.prev), opened(change.next))
-          }
-          return [...out.values()].filter(c => c.prev !== undefined || c.next !== undefined)
-        },
-        rebuild(sources) {
-          return recount(node, sources)
-        },
-      }
-    }
-  }
 }
 
 /** Every source leaf under a node, by name. */
