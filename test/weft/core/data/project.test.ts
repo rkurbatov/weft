@@ -3,15 +3,15 @@
 
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
-import { stored } from '#graph/graph/graph.ts'
+import { port } from '#graph/graph/graph.ts'
 import { projected } from '#offline/project.ts'
 import { PRESERVE_LIMIT, preserve } from '#graph/data/preserve.ts'
 import { forgetNotices, onNotice } from '#graph/data/notice.ts'
 import { laneDrop, laneFind, lanePlace } from '#graph/data/arrange.ts'
 import type { Lanes } from '#graph/data/arrange.ts'
-import type { Entry } from '#offline/outbox.ts'
+import type { Note } from '#offline/outbox.ts'
 
-const entry = (name: string, args: unknown, state: Entry['state'] = 'waiting'): Entry => ({
+const entry = (name: string, args: unknown, state: Note['state'] = 'waiting'): Note => ({
   id: `${name}-${JSON.stringify(args)}`,
   name,
   args,
@@ -32,8 +32,8 @@ test('preserve: an unchanged piece keeps being the very same object', () => {
 })
 
 test('the projection lays the book over the base in order, skips the stuck, keeps identity', () => {
-  const base = stored<{ lanes: Lanes }>({ lanes: { todo: ['a', 'b'], doing: [] } })
-  const book = stored<readonly Entry[]>([])
+  const base = port<{ lanes: Lanes }>({ lanes: { todo: ['a', 'b'], doing: [] } })
+  const book = port<readonly Note[]>([])
   const visible = projected(base, book, {
     apply: {
       move: (s: { lanes: Lanes }, op: { id: string; into: string; at: number }) => ({

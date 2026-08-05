@@ -1,11 +1,11 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { stored, derived, watch, subscribe, untracked } from '#graph/graph/graph.ts'
+import { port, derived, watch, subscribe, untracked } from '#graph/graph/graph.ts'
 import { family } from '#graph/graph/family.ts'
 
 function tracked() {
   const log: string[] = []
-  const source = stored(0, { onDemand: () => log.push('start'), onIdle: () => log.push('stop') })
+  const source = port(0, { onDemand: () => log.push('start'), onIdle: () => log.push('stop') })
   return { source, log }
 }
 
@@ -46,7 +46,7 @@ test('demand travels through a chain of formulas', () => {
 })
 
 test('a dependency dropped by a branch releases its source', () => {
-  const useIt = stored(true)
+  const useIt = port(true)
   const { source, log } = tracked()
   const pick = derived(() => (useIt.get() ? source.get() : -1))
   const stop = subscribe(pick, () => {})
@@ -60,7 +60,7 @@ test('a dependency dropped by a branch releases its source', () => {
 })
 
 test('a surviving dependency is not restarted on recompute', () => {
-  const other = stored(0)
+  const other = port(0)
   const { source, log } = tracked()
   const both = derived(() => source.get() + other.get())
   const stop = subscribe(both, () => {})
@@ -71,7 +71,7 @@ test('a surviving dependency is not restarted on recompute', () => {
 })
 
 test('the hook may write its own cell: it runs outside the formula', () => {
-  const store = stored(0, {
+  const store = port(0, {
     onDemand: () => {
       store.set(42)
     },

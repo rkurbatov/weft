@@ -10,7 +10,7 @@ import type { Key } from '#graph/data/key.ts'
 import type { Row } from './expr.ts'
 import type { RelNode } from './shape.ts'
 import { keyPaths } from './keys.ts'
-import { recount } from './recount.ts'
+import { oracle } from './oracle.ts'
 import { groupOf } from './work.ts'
 import { recomposeKey } from './inner.ts'
 
@@ -35,7 +35,7 @@ export function whyRow(
       return [...leftWhy, ...whyRow(node.right, recomposeKey(node.right, rightValues), sources)]
     }
     case 'union':
-      return recount(node.left, sources).has(key)
+      return oracle(node.left, sources).has(key)
         ? whyRow(node.left, key, sources)
         : whyRow(node.right, key, sources)
     case 'expand': {
@@ -51,7 +51,7 @@ export function whyRow(
       const wanted =
         node.by.length === 1 ? JSON.stringify([key]) : node.by.length === 0 ? '[]' : (key as string)
       const out: Array<{ source: string; key: Key }> = []
-      for (const [underKey, row] of recount(node.input, sources)) {
+      for (const [underKey, row] of oracle(node.input, sources)) {
         if (JSON.stringify(groupOf(node, row)) !== wanted) continue
         out.push(...whyRow(node.input, underKey, sources))
       }

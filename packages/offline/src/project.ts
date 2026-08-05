@@ -7,7 +7,7 @@
 
 import { derived } from '#graph/graph/graph.ts'
 import type { Derived, Watchable } from '#graph/graph/graph.ts'
-import type { Entry } from './outbox.ts'
+import type { Note } from './outbox.ts'
 import { preserve } from '#graph/data/preserve.ts'
 
 export interface ProjectionSpec<S> {
@@ -24,7 +24,7 @@ export interface ProjectionSpec<S> {
  */
 export function projected<S>(
   base: Watchable<S>,
-  book: Watchable<readonly Entry[]>,
+  book: Watchable<readonly Note[]>,
   spec: ProjectionSpec<S>,
 ): Derived<S> {
   let previous: S | undefined

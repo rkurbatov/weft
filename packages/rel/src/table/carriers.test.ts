@@ -65,14 +65,14 @@ describe('the planner, without a graph in sight', () => {
     assert.equal(plan.carrier, 'tree')
   })
 
-  test('no inverse over a small one: a recount is cheaper than the upkeep', () => {
+  test('no inverse over a small one: a oracle is cheaper than the upkeep', () => {
     const plan = planFold('t', { size: TREE_WORTH_IT - 1, hasSub: false, hasJoin: true })
-    assert.equal(plan.carrier, 'recount')
+    assert.equal(plan.carrier, 'oracle')
   })
 
   test('without a join no tree is lawful, however big the collection', () => {
     const plan = planFold('t', { size: 1_000_000, hasSub: false, hasJoin: false })
-    assert.equal(plan.carrier, 'recount')
+    assert.equal(plan.carrier, 'oracle')
     assert.throws(
       () => planFold('t', { size: 1_000_000, hasSub: false, hasJoin: false, forced: 'tree' }),
       /needs a join/,
@@ -125,7 +125,7 @@ function carriesAFold(name: string, make: () => FoldCarrier<Row, number>): void 
       assert.equal(carrier.answer(), 13)
     })
 
-    test('agrees with a recount after a hundred random steps', () => {
+    test('agrees with a oracle after a hundred random steps', () => {
       let seed = 7
       const random = (): number => {
         seed = (seed * 1664525 + 1013904223) >>> 0
@@ -169,12 +169,12 @@ const walking: FoldWork<Row, number> = {
   add: (acc, r) => acc + r.score,
   join: (a, b) => a + b,
 }
-carriesAFold('an honest recount', () => runningCarrier(walking))
+carriesAFold('an honest oracle', () => runningCarrier(walking))
 
 describe('the factory maps a decision to a carrier, and nothing else does', () => {
   test('each name gives the carrier that keeps that cost', () => {
     const rows = over([row(1, 10), row(2, 30)])
-    for (const kind of ['running', 'recount', 'tree'] as const) {
+    for (const kind of ['running', 'oracle', 'tree'] as const) {
       const carrier = carrierFor<Row, number>(kind, summing)
       carrier.rebuild(rows)
       assert.equal(carrier.answer(), 40, kind)
@@ -209,7 +209,7 @@ describe('a fold re-planned as its collection grows', () => {
       }),
     )
 
-    // A maximum has no inverse: below the threshold it is a recount, above it
+    // A maximum has no inverse: below the threshold it is a oracle, above it
     // a tree — and a table usually starts empty and fills up afterwards.
     const t = held(table<Row>({ key: r => r.id, name: 'takings' }))
     const top = t.fold(
@@ -222,7 +222,7 @@ describe('a fold re-planned as its collection grows', () => {
       }),
     )
 
-    assert.equal(heard.at(-1)?.carrier, 'recount', 'an empty table needs nothing clever')
+    assert.equal(heard.at(-1)?.carrier, 'oracle', 'an empty table needs nothing clever')
 
     for (let i = 0; i < TREE_WORTH_IT + 10; i++) t.put(row(i, i))
     assert.equal(top.peek(), TREE_WORTH_IT + 9)
@@ -244,7 +244,7 @@ describe('a fold re-planned as its collection grows', () => {
     )
     const t = held(table<Row>({ key: r => r.id, name: 'insisted' }))
     const total = t.fold(
-      { carrier: 'recount', zero: 0, add: (acc, r) => acc + r.score, join: (a, b) => a + b },
+      { carrier: 'oracle', zero: 0, add: (acc, r) => acc + r.score, join: (a, b) => a + b },
       'total',
     )
     until(
@@ -254,7 +254,7 @@ describe('a fold re-planned as its collection grows', () => {
     )
     for (let i = 0; i < TREE_WORTH_IT + 10; i++) t.put(row(i, 1))
     assert.equal(total.peek(), TREE_WORTH_IT + 10)
-    assert.deepEqual(new Set(heard), new Set(['recount']), 'the passport stands')
+    assert.deepEqual(new Set(heard), new Set(['oracle']), 'the passport stands')
   })
 })
 
@@ -300,7 +300,7 @@ describe('a fold through the table, where the thresholds decide', () => {
         zero: 0,
         add: (a: number, r: Scored) => Math.max(a, r.score),
         join: Math.max,
-        carrier: 'recount' as const,
+        carrier: 'oracle' as const,
       },
       'peak.slow',
     )
@@ -308,10 +308,10 @@ describe('a fold through the table, where the thresholds decide', () => {
     assert.deepEqual(heard, [
       { name: 'total', carrier: 'running' },
       { name: 'peak', carrier: 'tree' },
-      { name: 'peak.slow', carrier: 'recount' },
+      { name: 'peak.slow', carrier: 'oracle' },
     ])
   })
-  test('the tree carrier answers like the recount, and an edit pays one block', () => {
+  test('the tree carrier answers like the oracle, and an edit pays one block', () => {
     const t = filled()
     const N = TREE_SPAN * 4
     for (let i = 0; i < N; i++) t.put(scored(i, 'a', i))
@@ -326,7 +326,7 @@ describe('a fold through the table, where the thresholds decide', () => {
       join: Math.max,
     }
     const fast = t.fold({ ...spec, carrier: 'tree' as const }, 'peak.tree')
-    const slow = t.fold({ ...spec, carrier: 'recount' as const }, 'peak.recount')
+    const slow = t.fold({ ...spec, carrier: 'oracle' as const }, 'peak.recount')
     until(subscribe(fast, () => {}))
     until(subscribe(slow, () => {}))
     assert.equal(fast.peek(), slow.peek())
@@ -335,9 +335,9 @@ describe('a fold through the table, where the thresholds decide', () => {
     t.put(scored(3, 'a', 999_999))
     assert.equal(fast.peek(), 999_999)
     assert.equal(fast.peek(), slow.peek())
-    // The tree recounted its one dirty block; the recount walked everything.
+    // The tree recounted its one dirty block; the oracle walked everything.
     assert.ok(added <= TREE_SPAN + N + 4, `added ${added}`)
-    assert.ok(added >= N, 'the recount alone walks the collection')
+    assert.ok(added >= N, 'the oracle alone walks the collection')
 
     t.drop(3) // a hole, not a shift: the same block recounts, answers still agree
     assert.equal(fast.peek(), slow.peek())

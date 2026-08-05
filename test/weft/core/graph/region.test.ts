@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
-import { derived, stored, subscribe } from '#graph/graph/graph.ts'
+import { derived, port, subscribe } from '#graph/graph/graph.ts'
 import { outbox } from '#offline/outbox.ts'
 import { region } from '#graph/graph/region.ts'
 import { memoryStore } from '#offline/store.ts'
@@ -9,7 +9,7 @@ import { held, wakings, world } from '../../../kit/index.ts'
 
 describe('a region owns what is born inside it', () => {
   test('lets go of its watchers and cells in one move', () => {
-    const outside = stored(1)
+    const outside = port(1)
     const woke = wakings()
     const box = held(
       region('mod', () => {

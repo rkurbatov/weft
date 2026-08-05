@@ -12,7 +12,7 @@ GlobalRegistrator.register()
 
 import { Component, StrictMode, Suspense, act, createElement as h, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { stored } from '#weft'
+import { port } from '#weft'
 import { source } from '#weft'
 import { useCell, useInputBinding, useKeepRow, useSourceValue } from '#react'
 import { useLive } from '#loom/react'
@@ -53,7 +53,7 @@ describe('the React seam, rendered', () => {
 
   test('useCell: the value renders, gating reaches the tree, demand leaves with the screen', () => {
     const life: string[] = []
-    const field = stored(1, {
+    const field = port(1, {
       name: 'n',
       onDemand: () => life.push('on'),
       onIdle: () => life.push('off'),
@@ -80,7 +80,7 @@ describe('the React seam, rendered', () => {
   })
 
   test('useInputBinding: keystrokes land in the input, the input lands in the field', () => {
-    const title = stored('', { name: 'title' })
+    const title = port('', { name: 'title' })
     function Field(): ReactNode {
       return h('input', { ...useInputBinding(title) })
     }
@@ -226,7 +226,7 @@ describe('the React seam, rendered', () => {
     // A tree that suspends: React renders the child, throws the render away,
     // waits for the promise, then renders it again. The first, abandoned
     // render must not leave a screen cell watching the input forever.
-    const seats = stored(3, { name: 'seats' })
+    const seats = port(3, { name: 'seats' })
     let settle = (): void => {}
     const arrival = new Promise<void>(resolve => {
       settle = resolve

@@ -1,7 +1,7 @@
 // What a carrier of a fold is.
 //
 // A fold has one answer and several ways to keep it: a running accumulator, an
-// honest recount, a tree of block partials. They differ in who pays for one
+// honest oracle, a tree of block partials. They differ in who pays for one
 // edit and in nothing else — the answer is the same, and that is what makes
 // swapping one for another lawful.
 //

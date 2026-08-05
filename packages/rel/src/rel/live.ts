@@ -6,7 +6,7 @@
 // table, so views, folds and subscribers work on it unchanged, and demand
 // flows through it: the first watcher downstream starts the following, the
 // last one leaving stops it. A follower that fell too far behind resyncs
-// from the oracle's recount — the naive answer is the floor, here quite
+// from the oracle's oracle — the naive answer is the floor, here quite
 // literally the fallback.
 //
 // A join is bilinear, and the order of application is the whole trick: a

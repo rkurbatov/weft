@@ -1,14 +1,14 @@
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { MessageChannel } from 'node:worker_threads'
-import { derived, stored, subscribe } from '#graph/graph/graph.ts'
+import { derived, port, subscribe } from '#graph/graph/graph.ts'
 import type { Timers } from '#graph/graph/time.ts'
 import { atOnce } from '#ipc/channel.ts'
 import { busHub, busChannel, heartbeat } from '#ipc/bus.ts'
 import { sharedWorkerChannel, sharedWorkerHub } from '#ipc/shared.ts'
 import type { SharedScope } from '#ipc/shared.ts'
-import type { Port } from '#ipc/ports.ts'
-import { pairInMemory } from '#ipc/ports.ts'
+import type { Wire } from '#ipc/wires.ts'
+import { wirePair } from '#ipc/wires.ts'
 import { leadOrFollow, webLocks } from '#ipc/lead.ts'
 import type { Lock } from '#ipc/lead.ts'
 import { link } from '#ipc/link.ts'
@@ -19,7 +19,7 @@ describe('tabs and leadership', () => {
   // A bus message takes a turn each way, and a hello-then-watch takes several.
 
   function scene() {
-    const count = stored(1)
+    const count = port(1)
     return {
       count,
       surface: {
@@ -102,7 +102,7 @@ describe('tabs and leadership', () => {
 
   test('a watcher asks again when the graph announces itself', async () => {
     const { surface, count } = scene()
-    const wire = pairInMemory()
+    const wire = wirePair()
     let stopServing = serve(surface, wire.graph, { schedule: atOnce })
     const seen = link(wire.watcher)
 
@@ -316,11 +316,11 @@ describe('tabs and leadership', () => {
   test('the hub lets go of a tab that fell silent, and keeps serving the live one', async () => {
     const clock = fakeTimers()
     const awake: string[] = []
-    const talking = stored(1, {
+    const talking = port(1, {
       onDemand: () => awake.push('start'),
       onIdle: () => awake.push('stop'),
     })
-    const silent = stored(10)
+    const silent = port(10)
     const surface = { cells: { talking, silent } }
     const buses = busPair('weft-test-lease')
     const stopHub = busHub('weft-test-lease', buses.make(), {
@@ -369,17 +369,17 @@ describe('tabs and leadership', () => {
   test('the shared-worker hub lets go of a tab that fell silent', async () => {
     const clock = fakeTimers()
     const awake: string[] = []
-    const talking = stored(1, {
+    const talking = port(1, {
       onDemand: () => awake.push('start'),
       onIdle: () => awake.push('stop'),
     })
-    const lonely = stored(10, {
+    const lonely = port(10, {
       onDemand: () => awake.push('lonely starts'),
       onIdle: () => awake.push('lonely stops'),
     })
     const surface = { cells: { talking, lonely } }
 
-    const listeners = new Set<(event: { ports: readonly Port[] }) => void>()
+    const listeners = new Set<(event: { ports: readonly Wire[] }) => void>()
     const scope: SharedScope = {
       addEventListener: (_kind, handler) => listeners.add(handler),
       removeEventListener: (_kind, handler) => listeners.delete(handler),
@@ -391,15 +391,15 @@ describe('tabs and leadership', () => {
     const live = new MessageChannel()
     const gone = new MessageChannel()
     for (const pair of [live, gone]) {
-      for (const arrival of listeners) arrival({ ports: [pair.port1 as unknown as Port] })
+      for (const arrival of listeners) arrival({ ports: [pair.port1 as unknown as Wire] })
     }
     const alive = link(
-      sharedWorkerChannel(live.port2 as unknown as Port, {
+      sharedWorkerChannel(live.port2 as unknown as Wire, {
         keepAlive: 5_000,
         timers: clock.timers,
       }),
     )
-    const dead = link(sharedWorkerChannel(gone.port2 as unknown as Port, { keepAlive: false }))
+    const dead = link(sharedWorkerChannel(gone.port2 as unknown as Wire, { keepAlive: false }))
 
     const aliveMirror = alive.derived<number>('talking')
     const deadMirror = dead.derived<number>('lonely')

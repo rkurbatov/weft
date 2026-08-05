@@ -5,15 +5,16 @@
 // sender that creates state must hand the key to the world, and the world
 // must recognize a repeat by it.
 
-import { derived, stored } from '#weft'
+import { derived, port } from '#weft'
 import type { Watchable } from '#weft'
 import { bestStore } from '#weft'
 import type { Store } from '#weft'
 import { outbox } from '#weft'
-import type { Entry, Handler } from '#weft'
+import type { Handler, Note } from '#weft'
 
-/** The dialect's word for what the book holds: a note of intent. */
-export type Note = Entry
+// The queue's own word is already the language's: a note. Passed through, not
+// renamed — the dialect and the engine call it the same thing.
+export type { Note }
 import type { Fault } from '#weft'
 import type { Timers } from '#weft'
 
@@ -98,7 +99,7 @@ export type Will<D extends WillDict> = WillBase<D> & Speak<D>
 export function will<D extends WillDict>(dict: D, passport: WillPassport = {}): Will<D> {
   const name = passport.name ?? 'will'
   const shelf = bestStore(`weft.${name}`)
-  const refused = stored<Refusal | null>(null, { name: `${name}.refused` })
+  const refused = port<Refusal | null>(null, { name: `${name}.refused` })
 
   const handlers: Record<string, Handler> = {}
   for (const [kind, spec] of Object.entries(dict)) {

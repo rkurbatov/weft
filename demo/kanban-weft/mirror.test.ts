@@ -8,7 +8,7 @@ import { region } from '#weft'
 import { subscribe } from '#weft'
 import type { Watchable } from '#weft'
 import { atOnce } from '#weft'
-import { pairInMemory } from '#weft'
+import { wirePair } from '#weft'
 import { kanbanServer } from '../kanban-common/server.ts'
 import { kanban } from './state.ts'
 import { kanbanMirror, serveKanban } from './mirror.ts'
@@ -25,7 +25,7 @@ const make = (server: KanbanServer, pollMs: number, tabs = 1) => {
   const box = held(region('station', () => kanban(server, pollMs)))
   const stops: Array<() => void> = []
   const mirrors = Array.from({ length: tabs }, () => {
-    const pair = pairInMemory()
+    const pair = wirePair()
     stops.push(serveKanban(box.value, pair.graph, { schedule: atOnce }))
     const tab = kanbanMirror(pair.watcher)
     const warm: ReadonlyArray<Watchable<unknown>> = [
@@ -88,7 +88,7 @@ test("instruments cross the wire: the tab sees the station's waves", async () =>
   const { adopt } = await import('#loom')
   const server = kanbanServer({ latency: 3, grumpiness: 0 })
   const box = held(region('station', () => kanban(server, 60_000)))
-  const pair = pairInMemory()
+  const pair = wirePair()
   const stop = serveKanban(box.value, pair.graph, { schedule: atOnce, instruments: true })
   const tab = adopt(pair.watcher)
   const waves = tab.view<readonly { id: number }[]>('loom.waves')

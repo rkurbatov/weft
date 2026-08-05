@@ -210,7 +210,7 @@ export function scanRunner(node: ScanNode, make: Make): Runner {
         }
         return out
       }
-      // Stored: everything from the earliest touch on carries a new answer.
+      // Port: everything from the earliest touch on carries a new answer.
       for (let at = earliest; at < placed.length; at++) {
         out.push({ key: (placed[at] as { key: Key }).key, next: marked(at) })
       }

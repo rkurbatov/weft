@@ -20,7 +20,7 @@ import { Loader2, Plus, X } from 'lucide-react'
 import { Badge } from './ui/badge.tsx'
 import { Button } from './ui/button.tsx'
 import { Card, CardContent } from './ui/card.tsx'
-import { Stored } from './ui/input.tsx'
+import { Port } from './ui/input.tsx'
 import { cn } from './ui/cn.ts'
 import type { Card as CardData } from './types.ts'
 
@@ -133,7 +133,7 @@ function AddCard({
   }
   return (
     <span className="flex gap-1">
-      <Stored
+      <Port
         autoFocus
         value={title}
         disabled={busy}

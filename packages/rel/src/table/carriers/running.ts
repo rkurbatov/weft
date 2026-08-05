@@ -10,7 +10,7 @@ import type { FoldCarrier, FoldWork, Rows } from './carrier.ts'
 export function runningCarrier<R, A>(work: FoldWork<R, A>): FoldCarrier<R, A> {
   let acc = work.zero
 
-  const recount = (rows: Rows<R>): void => {
+  const oracle = (rows: Rows<R>): void => {
     acc = work.zero
     rows.each(row => {
       acc = work.add(acc, row)
@@ -20,14 +20,14 @@ export function runningCarrier<R, A>(work: FoldWork<R, A>): FoldCarrier<R, A> {
   return {
     answer: () => acc,
     rebuild(rows) {
-      recount(rows)
+      oracle(rows)
     },
     feed(changes, rows) {
       const sub = work.sub
       if (sub === undefined) {
         // No inverse: the collection is walked again. Honest, and the reason
         // the planner keeps this carrier for small collections only.
-        recount(rows)
+        oracle(rows)
         return
       }
       for (const change of changes) {

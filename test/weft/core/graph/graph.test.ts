@@ -1,11 +1,11 @@
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
-import { stored, derived, watch, subscribe, batch, untracked } from '#graph/graph/graph.ts'
+import { port, derived, watch, subscribe, batch, untracked } from '#graph/graph/graph.ts'
 
 describe('the cell graph', () => {
   test('formula reads its inputs without declaring them', () => {
-    const a = stored(2)
-    const b = stored(3)
+    const a = port(2)
+    const b = port(3)
     const sum = derived(() => a.get() + b.get())
     assert.equal(sum.peek(), 5)
     a.set(10)
@@ -14,7 +14,7 @@ describe('the cell graph', () => {
 
   test('lazy: a formula nobody reads is never run', () => {
     let runs = 0
-    const a = stored(1)
+    const a = port(1)
     derived(() => {
       runs++
       return a.get()
@@ -24,7 +24,7 @@ describe('the cell graph', () => {
   })
 
   test('equal result stops propagation', () => {
-    const a = stored(1)
+    const a = port(1)
     const parity = derived(() => a.get() % 2)
     let seen = 0
     const stop = subscribe(parity, () => seen++)
@@ -36,7 +36,7 @@ describe('the cell graph', () => {
   })
 
   test('diamond: one write, one downstream run', () => {
-    const a = stored(1)
+    const a = port(1)
     const left = derived(() => a.get() * 2)
     const right = derived(() => a.get() * 3)
     let runs = 0
@@ -54,7 +54,7 @@ describe('the cell graph', () => {
   })
 
   test('no glitches: downstream never sees a half-updated picture', () => {
-    const a = stored(1)
+    const a = port(1)
     const double = derived(() => a.get() * 2)
     const seen: string[] = []
     const stop = watch(() => {
@@ -67,9 +67,9 @@ describe('the cell graph', () => {
   })
 
   test('dependencies are dynamic: the untaken branch is not a dependency', () => {
-    const useLeft = stored(true)
-    const left = stored('L')
-    const right = stored('R')
+    const useLeft = port(true)
+    const left = port('L')
+    const right = port('R')
     let runs = 0
     const pick = derived(() => {
       runs++
@@ -87,8 +87,8 @@ describe('the cell graph', () => {
   })
 
   test('batch: writers settle before watchers run', () => {
-    const a = stored(1)
-    const b = stored(1)
+    const a = port(1)
+    const b = port(1)
     const sum = derived(() => a.get() + b.get())
     const seen: number[] = []
     const stop = subscribe(sum, v => seen.push(v))
@@ -101,8 +101,8 @@ describe('the cell graph', () => {
   })
 
   test('watcher writing a cell settles in the same round', () => {
-    const source = stored(1)
-    const mirror = stored(0)
+    const source = port(1)
+    const mirror = port(0)
     const stop = watch(() => {
       const v = source.get()
       untracked(() => mirror.set(v * 10))
@@ -114,7 +114,7 @@ describe('the cell graph', () => {
   })
 
   test('dispose stops the watcher', () => {
-    const a = stored(1)
+    const a = port(1)
     let seen = 0
     const stop = subscribe(a, () => seen++)
     a.set(2)
@@ -125,14 +125,14 @@ describe('the cell graph', () => {
   })
 
   test('cycle is reported, not hung', () => {
-    const a = stored(1)
+    const a = port(1)
     const self: { c?: ReturnType<typeof derived<number>> } = {}
     self.c = derived(() => a.get() + (self.c ? self.c.get() : 0))
     assert.throws(() => self.c!.peek(), /cycle/)
   })
 
   test('custom equality gates by content', () => {
-    const raw = stored({ id: 1, title: 'a' })
+    const raw = port({ id: 1, title: 'a' })
     const view = derived(() => ({ ...raw.get() }), {
       equal: (x, y) => x.id === y.id && x.title === y.title,
     })

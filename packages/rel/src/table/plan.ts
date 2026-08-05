@@ -7,7 +7,7 @@ import { notice } from '#graph/data/notice.ts'
 // measures, or re-plans as a collection grows, replaces this file without
 // touching a fold's code or anyone's application.
 
-export type Carrier = 'running' | 'tree' | 'recount'
+export type Carrier = 'running' | 'tree' | 'oracle'
 
 export interface FoldTraits {
   /** Rows in the collection when the fold is built. */
@@ -26,17 +26,17 @@ export interface Plan {
   reason: string
 }
 
-/** Under this many rows a recount is cheaper than any structure's upkeep. */
+/** Under this many rows a oracle is cheaper than any structure's upkeep. */
 export const TREE_WORTH_IT = 256
 /** Rows per block when a tree carries the fold. Measured on the sheet: the
  *  optimum sat nearer 512 than 32. */
 export const TREE_SPAN = 512
 
-/** A scan's carrier: a prefix line of plain numbers, or an honest recount of
+/** A scan's carrier: a prefix line of plain numbers, or an honest oracle of
  *  the tail from the edit. The same door, the same announcement. */
 export type ScanCarrier = 'offsets' | 'tail'
 /** Where the carry lives: written into every row, or answered when asked.
- *  Stored is what a ledger's balance column wants — a short list where the
+ *  Port is what a ledger's balance column wants — a short list where the
  *  running total is shown. Asked is what a virtualised list wants: an edit
  *  near the top must not rewrite the tail. */
 export type ScanForm = 'stored' | 'asked'
@@ -95,7 +95,7 @@ function decideScan(traits: ScanTraits): ScanPlan {
     return {
       carrier: 'tail',
       form,
-      reason: `the carry is not a number: only a tail recount is lawful; ${why}`,
+      reason: `the carry is not a number: only a tail oracle is lawful; ${why}`,
     }
   }
   if (traits.size >= TREE_WORTH_IT) {
@@ -137,13 +137,13 @@ function decide(traits: FoldTraits): Plan {
   if (traits.hasJoin && traits.size >= TREE_WORTH_IT) {
     return {
       carrier: 'tree',
-      reason: `no inverse and ${traits.size} rows: recount one block, not the collection`,
+      reason: `no inverse and ${traits.size} rows: oracle one block, not the collection`,
     }
   }
   return {
-    carrier: 'recount',
+    carrier: 'oracle',
     reason: traits.hasJoin
-      ? `no inverse and only ${traits.size} rows: a recount is cheaper than a tree's upkeep`
-      : 'no inverse and no join: nothing but a recount is lawful',
+      ? `no inverse and only ${traits.size} rows: a oracle is cheaper than a tree's upkeep`
+      : 'no inverse and no join: nothing but a oracle is lawful',
   }
 }

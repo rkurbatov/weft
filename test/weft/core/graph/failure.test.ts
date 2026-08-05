@@ -9,12 +9,12 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
 import { attachProbe, graph, subscribe } from '#weft'
-import type { WaveSummary } from '#weft'
+import type { TickSummary } from '#weft'
 
 describe('the border of a failure', () => {
   test('a failing formula is a state, not a wound: it runs once and heals itself', () => {
     const g = graph('app')
-    const divisor = g.stored(2)
+    const divisor = g.port(2)
     let runs = 0
     const half = g.derived(() => {
       runs++
@@ -43,7 +43,7 @@ describe('the border of a failure', () => {
 
   test('a broken cell is heard by whoever reads it', () => {
     const g = graph('app')
-    const divisor = g.stored(2)
+    const divisor = g.port(2)
     const half = g.derived(() => {
       if (divisor.get() === 0) throw new Error('divide by zero')
       return 10 / divisor.get()
@@ -70,7 +70,7 @@ describe('the border of a failure', () => {
   test('one watcher falling does not put its neighbours to sleep', () => {
     const caught: unknown[] = []
     const g = graph('app', { onError: error => caught.push(error) })
-    const seats = g.stored(1)
+    const seats = g.port(1)
     const woke: string[] = []
 
     g.watch(() => {
@@ -104,7 +104,7 @@ describe('the border of a failure', () => {
   test('every failure of a wave is reported, not just the first', () => {
     const caught: unknown[] = []
     const g = graph('app', { onError: error => caught.push(error) })
-    const seats = g.stored(1)
+    const seats = g.port(1)
 
     for (const name of ['a', 'b', 'c'])
       g.watch(() => {
@@ -124,7 +124,7 @@ describe('the border of a failure', () => {
 
   test('without a handler the failure is thrown — after the round, not instead of it', () => {
     const g = graph('app')
-    const seats = g.stored(1)
+    const seats = g.port(1)
     const woke: string[] = []
 
     g.watch(() => {
@@ -145,8 +145,8 @@ describe('the border of a failure', () => {
   test('a failure inside a batch does not undo the writes made beside it', () => {
     const caught: unknown[] = []
     const g = graph('app', { onError: error => caught.push(error) })
-    const left = g.stored(1)
-    const right = g.stored(1)
+    const left = g.port(1)
+    const right = g.port(1)
     const seen: Array<[number, number]> = []
 
     g.watch(() => {
@@ -171,11 +171,11 @@ describe('the border of a failure', () => {
   })
 
   test('a failure is named in the wave, so the journal can point at it', () => {
-    const waves: WaveSummary[] = []
+    const waves: TickSummary[] = []
     const g = graph('app')
-    attachProbe({ wave: (summary: WaveSummary) => waves.push(summary) }, g)
+    attachProbe({ tick: (summary: TickSummary) => waves.push(summary) }, g)
 
-    const divisor = g.stored(2)
+    const divisor = g.port(2)
     const half = g.derived(
       () => {
         if (divisor.get() === 0) throw new Error('divide by zero')
@@ -202,8 +202,8 @@ describe('the border of a failure', () => {
 
 test('two watchers writing each other are stopped by name, and quickly', () => {
   const g = graph('app')
-  const a = g.stored(0)
-  const b = g.stored(0)
+  const a = g.port(0)
+  const b = g.port(0)
 
   // Each writes what the other reads: a settling that would never end.
   assert.throws(
@@ -229,7 +229,7 @@ test('two watchers writing each other are stopped by name, and quickly', () => {
 
 test('a watcher writing what it reads itself settles instead of spinning', () => {
   const g = graph('app')
-  const seats = g.stored(0)
+  const seats = g.port(0)
   let runs = 0
 
   g.watch(() => {
@@ -248,8 +248,8 @@ test('a watcher writing what it reads itself settles instead of spinning', () =>
 
 test('an honest chain of wakings is not mistaken for a loop', () => {
   const g = graph('app')
-  const first = g.stored(0)
-  const second = g.stored(0)
+  const first = g.port(0)
+  const second = g.port(0)
   let woke = 0
 
   // One watcher writing another's input, which wakes a second watcher: a

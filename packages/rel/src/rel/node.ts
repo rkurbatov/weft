@@ -13,15 +13,48 @@
 // That is what lets a derived row be found, moved and explained by key, and
 // a `pure` that picks away a key field is a build error, not a surprise.
 //
-// The naive recount here is the oracle: the slowest correct answer, the
+// The naive oracle here is the oracle: the slowest correct answer, the
 // floor every faster path is measured against — and the resync path when a
 // follower falls too far behind.
 
-export * from './shape.ts'
-export * from './keys.ts'
-export * from './canon.ts'
-export * from './check.ts'
-export * from './work.ts'
-export * from './recount.ts'
-export * from './params.ts'
-export * from './why.ts'
+// Named one by one on purpose. `export *` hides a collision until the day two
+// modules happen to export the same word — and then it fails somewhere far
+// from the cause, in whoever imported the door.
+
+export { agg, expand, filter, join, pure, scan, source, union } from './shape.ts'
+export type {
+  AggNode,
+  ExpandNode,
+  FilterNode,
+  FoldDecl,
+  JoinNode,
+  PureNode,
+  RelNode,
+  RowFn,
+  ScanNode,
+  SourceNode,
+  UnionNode,
+} from './shape.ts'
+
+export { keyOfRow, keyPaths } from './keys.ts'
+export { canonNode } from './canon.ts'
+export { checkNode } from './check.ts'
+
+export {
+  expandRows,
+  foldGroup,
+  foldOf,
+  foldOne,
+  groupOf,
+  mergedRow,
+  onKeyOf,
+  orderCompare,
+  passesFilter,
+  passesResidual,
+  pureRow,
+  stepOf,
+} from './work.ts'
+
+export { oracle } from './oracle.ts'
+export { paramsOfNode, substituteNode } from './params.ts'
+export { whyRow } from './why.ts'

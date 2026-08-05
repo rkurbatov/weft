@@ -7,15 +7,15 @@
 // Nothing here knows about clocks, handlers or retries: a book can be tested
 // with a disk and nothing else.
 
-import { stored } from '#graph/graph/graph.ts'
-import type { Stored } from '#graph/graph/graph.ts'
+import { port } from '#graph/graph/graph.ts'
+import type { Port } from '#graph/graph/graph.ts'
 import { SAVING } from './keep.ts'
 import type { Saving } from './keep.ts'
 import type { Store } from './store.ts'
 
-export type EntryState = 'waiting' | 'sending' | 'stuck' | 'done'
+export type NoteState = 'waiting' | 'sending' | 'stuck' | 'done'
 
-export interface Entry {
+export interface Note {
   /** The idempotency key. The same one on every attempt, including after a reload. */
   readonly id: string
   readonly name: string
@@ -29,42 +29,42 @@ export interface Entry {
   /** When it was written down. */
   readonly at: number
   readonly attempts: number
-  readonly state: EntryState
+  readonly state: NoteState
   readonly lastError?: string
   /** When the world confirmed it — only on retained 'done' entries. */
   readonly doneAt?: number
 }
 
 export interface Book {
-  readonly entries: Stored<readonly Entry[]>
-  readonly saving: Stored<Saving>
+  readonly entries: Port<readonly Note[]>
+  readonly saving: Port<Saving>
   /** Settles when whatever a previous run left behind has been lifted. */
   readonly ready: Promise<void>
   /** Whether the old book has been lifted: before that, writing would bury it. */
   lifted(): boolean
-  write(next: readonly Entry[]): void
-  replace(id: string, change: (entry: Entry) => Entry): void
+  write(next: readonly Note[]): void
+  replace(id: string, change: (entry: Note) => Note): void
   remove(id: string): void
 }
 
 /** Anything a previous run left that is not a book is not lifted at all. */
-function mend(raw: unknown): Entry[] {
+function mend(raw: unknown): Note[] {
   if (!Array.isArray(raw)) return []
   return raw.filter(
-    (entry: unknown): entry is Entry =>
+    (entry: unknown): entry is Note =>
       typeof entry === 'object' &&
       entry !== null &&
-      typeof (entry as Entry).id === 'string' &&
-      typeof (entry as Entry).name === 'string',
+      typeof (entry as Note).id === 'string' &&
+      typeof (entry as Note).name === 'string',
   )
 }
 
 export function book(key: string, store: Store, onLifted: () => void): Book {
-  const entries = stored<readonly Entry[]>([], { name: `${key}.entries` })
-  const saving = stored<Saving>(SAVING, { name: `${key}.saving` })
+  const entries = port<readonly Note[]>([], { name: `${key}.entries` })
+  const saving = port<Saving>(SAVING, { name: `${key}.saving` })
   let up = false
 
-  let pending: readonly Entry[] | undefined
+  let pending: readonly Note[] | undefined
   let writing = false
 
   function drain(): void {
@@ -87,7 +87,7 @@ export function book(key: string, store: Store, onLifted: () => void): Book {
     )
   }
 
-  function write(next: readonly Entry[]): void {
+  function write(next: readonly Note[]): void {
     entries.set(next)
     // Before the old book is lifted, writing would bury it; the lift merges and
     // writes the whole of it instead.
@@ -106,7 +106,7 @@ export function book(key: string, store: Store, onLifted: () => void): Book {
       // The disk did not answer: nothing to lift, and the book is not landing.
       const reason = error instanceof Error ? `${error.name}: ${error.message}` : String(error)
       saving.set({ ok: false, reason })
-      return [] as Entry[]
+      return [] as Note[]
     })
     .then(lifted => {
       const newborn = entries.peek()

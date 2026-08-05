@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { derived, subscribe } from '#graph/graph/graph.ts'
 import { outbox } from '#offline/outbox.ts'
 import { memoryStore } from '#offline/store.ts'
-import type { Entry, Handler } from '#offline/outbox.ts'
+import type { Note, Handler } from '#offline/outbox.ts'
 import { settle, until, world } from '../../../kit/index.ts'
 
 describe('the outbox', () => {
@@ -76,7 +76,7 @@ describe('the outbox', () => {
     // A previous run wrote it down and died mid-send.
     await store.write('out', [
       { id: 'kept-key', name: 'pay', args: { amount: 5 }, at: 900, attempts: 1, state: 'sending' },
-    ] satisfies Entry[])
+    ] satisfies Note[])
     const seen: Array<{ key: string; attempt: number }> = []
     const book = outbox({
       key: 'out',
@@ -132,7 +132,7 @@ describe('the outbox', () => {
   test('after enough failures it gets stuck and waits for a person', async () => {
     const clock = world()
     const store = memoryStore()
-    const stuck: Entry[] = []
+    const stuck: Note[] = []
     let calls = 0
     const book = outbox({
       key: 'out',
@@ -206,7 +206,7 @@ describe('the outbox', () => {
     const clock = world()
     await store.write('out', [
       { id: 'orphan', name: 'gone', args: {}, at: 900, attempts: 0, state: 'waiting' },
-    ] satisfies Entry[])
+    ] satisfies Note[])
     const book = outbox({ key: 'out', store, now: clock.now, timers: clock.timers, handlers: {} })
     await book.ready
     await settle()
@@ -339,7 +339,7 @@ describe('the outbox', () => {
 
   test('a permanent refusal discards the entry at once, with a trace', async () => {
     const clock = world()
-    const refusals: Entry[] = []
+    const refusals: Note[] = []
     const calls: string[] = []
     const box = outbox({
       key: 'k',

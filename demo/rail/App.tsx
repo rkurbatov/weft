@@ -5,7 +5,7 @@
 import { memo, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useField, useKeepRow, useLive } from '#loom/react'
-import { WavesPanel } from '../common/waves.ts'
+import { TicksPanel } from '../common/ticks.ts'
 import { countCellRender, useCounters } from '../common/stats.ts'
 import { railServer } from './server.ts'
 import { rail } from './state.ts'
@@ -234,7 +234,7 @@ export function App(): ReactNode {
       <Rail />
       {picked !== null && <Details id={picked} />}
       {waves && (
-        <WavesPanel
+        <TicksPanel
           inspect={[app.searchText, app.goals, app.shelves.live.size, app.shelves.all.size]}
         />
       )}

@@ -1,35 +1,35 @@
-// Waves. The graph's natural unit of work is not an action but a wave: one
+// Waves. The graph's natural unit of work is not an action but a tick: one
 // batch of writes into inputs, the recomputes it causes, the places it dies on
 // equality, the watchers it wakes. The tap below records exactly that — every
 // call from the hot path is behind one null check, so an unwatched tap costs
 // nothing but that check.
 //
-// A wave opens on the first write and closes when the outermost work ends.
+// A tick opens on the first write and closes when the outermost work ends.
 // Recomputes pulled by a plain read, with no write behind them, belong to no
-// wave: a wave is a consequence, a read is a question.
+// tick: a tick is a consequence, a read is a question.
 //
 // One tap per engine: debugging one session is not mixed with another's.
 
-export interface WaveWrite {
+export interface TickWrite {
   node: string
   value: unknown
 }
 
-export interface WaveCompute {
+export interface TickCompute {
   node: string
   ms: number
   changed: boolean
 }
 
-export interface WaveSummary {
+export interface TickSummary {
   id: number
   at: number
   ms: number
-  writes: WaveWrite[]
-  computed: WaveCompute[]
-  /** Where the wave died on equality: recomputed, same value, nobody below woke. */
+  writes: TickWrite[]
+  computed: TickCompute[]
+  /** Where the tick died on equality: recomputed, same value, nobody below woke. */
   gated: string[]
-  /** Where it broke: a formula or a watcher body threw during this wave. */
+  /** Where it broke: a formula or a watcher body threw during this tick. */
   failed: string[]
   woke: number
 }
@@ -37,12 +37,12 @@ export interface WaveSummary {
 export interface Probe {
   write?(node: string, value: unknown): void
   compute?(node: string, ms: number, changed: boolean): void
-  /** The red dot: this node recomputed to an equal value and stopped the wave. */
+  /** The red dot: this node recomputed to an equal value and stopped the tick. */
   gate?(node: string): void
   /** A formula or a watcher body threw. The node is named; the error is as thrown. */
   fail?(node: string, error: unknown): void
   wake?(): void
-  wave?(summary: WaveSummary): void
+  tick?(summary: TickSummary): void
 }
 
 const clock = (): number => (typeof performance !== 'undefined' ? performance.now() : Date.now())
@@ -60,11 +60,11 @@ export function quietly(work: () => void): void {
   }
 }
 
-export class WaveTap {
+export class TickTap {
   /** Plain field, not a getter: the hot path reads it on every write. */
   watching = false
   private probe: Probe | null = null
-  private open: WaveSummary | null = null
+  private open: TickSummary | null = null
   private waveId = 0
   private openedAt = 0
 
@@ -126,12 +126,12 @@ export class WaveTap {
     if (this.open !== null) this.open.woke++
   }
 
-  /** The outermost work ended: if a wave is open, it is done. */
+  /** The outermost work ended: if a tick is open, it is done. */
   close(): void {
     if (this.probe === null || this.open === null) return
     const summary = this.open
     this.open = null
     summary.ms = clock() - this.openedAt
-    this.probe.wave?.(summary)
+    this.probe.tick?.(summary)
   }
 }

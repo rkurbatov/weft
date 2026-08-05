@@ -112,14 +112,14 @@ describe('the query builder', () => {
   })
 
   test('a live value in where: typing re-filters, watchers hear only the difference', async () => {
-    const { stored } = await import('#weft')
+    const { port } = await import('#weft')
     const games = table<Row>({ key: r => r['id'] as Key, name: 'games' })
     games.put(
       { id: 1, title: 'north derby', sum: 1 },
       { id: 2, title: 'south open', sum: 2 },
       { id: 3, title: 'northern lights', sum: 3 },
     )
-    const search = stored('', { name: 'search' })
+    const search = port('', { name: 'search' })
     const chain = from<{ id: number; title: string; sum: number }>('games', 'id').where(
       'title',
       'has',
@@ -153,7 +153,7 @@ describe('the query builder', () => {
     // Parity with the substituted oracle at the current value.
     const rows = new Map<Key, Row>()
     for (const r of games.all.peek()) rows.set(r['id'] as Key, r)
-    const { substituteNode, recount: recountDoor } = await import('#rel')
+    const { substituteNode, oracle: recountDoor } = await import('#rel')
     const truth = recountDoor(substituteNode(chain.tree(), new Map([['p1', 'sou']])), {
       games: rows,
     })

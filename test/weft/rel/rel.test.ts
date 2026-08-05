@@ -13,7 +13,7 @@ import {
   filter,
   join,
   pure,
-  recount,
+  oracle,
   scan,
   source,
   union,
@@ -48,7 +48,7 @@ describe('the relational layer', () => {
     assert.equal(canonExpr(math('+', lit(1), field('a', 'b'))), '(1+.a.b)')
   })
 
-  test('oracle parity: the live chain answers like a recount, at every step', () => {
+  test('oracle parity: the live chain answers like a oracle, at every step', () => {
     const sales = feed('sales')
     const tree = pure(filter(source('sales', ['id']), cmp('>', field('qty'), lit(0))), {
       fields: { total: math('*', field('qty'), field('price')) },
@@ -60,7 +60,7 @@ describe('the relational layer', () => {
     const check = (): void => {
       const rows = new Map<Key, Row>()
       for (const r of sales.all.peek()) rows.set(r['id'] as Key, r)
-      const truth = recount(tree, { sales: rows })
+      const truth = oracle(tree, { sales: rows })
       const got = live.all.peek()
       assert.equal(got.length, truth.size)
       for (const row of got) assert.deepEqual(row, truth.get(row['id'] as Key))
@@ -175,7 +175,7 @@ describe('the relational layer', () => {
         for (const r of t.all.peek()) rows.set(r['id'] as Key, r)
         held[name] = rows
       }
-      const truth = recount(tree, held)
+      const truth = oracle(tree, held)
       const got = live.all.peek()
       assert.equal(got.length, truth.size, `tick ${tick}`)
       for (const row of got) {
@@ -315,7 +315,7 @@ describe('the relational layer', () => {
       else orders.put(order(rand(24), rand(5), rand(50)))
       const rows = new Map<Key, Row>()
       for (const r of orders.all.peek()) rows.set(r['id'] as Key, r)
-      const truth = recount(tree, { orders: rows })
+      const truth = oracle(tree, { orders: rows })
       const got = live.all.peek()
       assert.equal(got.length, truth.size, `tick ${tick}`)
       for (const row of got) assert.deepEqual(row, truth.get(row['client'] as Key), `tick ${tick}`)
@@ -360,7 +360,7 @@ describe('the relational layer', () => {
     assert.equal((live.row(0).peek() as Row)['total'], 999 + 9 * 10)
   })
 
-  test('fold carriers are named at the same door: an inverse runs, the rest recount', async () => {
+  test('fold carriers are named at the same door: an inverse runs, the rest oracle', async () => {
     const heard: Array<{ name: string; carrier: string }> = []
     until(
       onNotice(what => {
@@ -380,7 +380,7 @@ describe('the relational layer', () => {
       heard.filter(h => h.name.startsWith('agg.')),
       [
         { name: 'agg.total', carrier: 'running' },
-        { name: 'agg.top', carrier: 'recount' },
+        { name: 'agg.top', carrier: 'oracle' },
       ],
     )
   })
@@ -448,7 +448,7 @@ describe('the relational layer', () => {
         for (const r of t.all.peek()) rows.set(r['id'] as Key, r)
         held[name] = rows
       }
-      const truth = recount(tree, held)
+      const truth = oracle(tree, held)
       const got = live.all.peek()
       assert.equal(got.length, truth.size, `tick ${tick}`)
       for (const row of got) assert.deepEqual(row, truth.get(row['id'] as Key), `tick ${tick}`)
@@ -496,7 +496,7 @@ describe('the relational layer', () => {
       else docs.put(doc(rand(12)))
       const rows = new Map<Key, Row>()
       for (const r of docs.all.peek()) rows.set(r['id'] as Key, r)
-      const truth = recount(tree, { docs: rows })
+      const truth = oracle(tree, { docs: rows })
       const got = live.all.peek()
       assert.equal(got.length, truth.size, `tick ${tick}`)
       for (const row of got) {
@@ -542,7 +542,7 @@ describe('the relational layer', () => {
       else rows.put({ id: rand(20), rank: rand(100), height: 20 + rand(80) })
       const held = new Map<Key, Row>()
       for (const r of rows.all.peek()) held.set(r['id'] as Key, r)
-      const truth = recount(tree, { rows: held })
+      const truth = oracle(tree, { rows: held })
       const got = live.all.peek()
       assert.equal(got.length, truth.size, `tick ${tick}`)
       for (const row of got) assert.deepEqual(row, truth.get(row['id'] as Key), `tick ${tick}`)

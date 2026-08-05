@@ -1,9 +1,9 @@
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { MessageChannel } from 'node:worker_threads'
-import { derived, stored, subscribe } from '#graph/graph/graph.ts'
+import { derived, port, subscribe } from '#graph/graph/graph.ts'
 import { atOnce } from '#ipc/channel.ts'
-import { portChannel, pairInMemory } from '#ipc/ports.ts'
+import { overWire, wirePair } from '#ipc/wires.ts'
 import { link, Unknown } from '#ipc/link.ts'
 import { serve } from '#ipc/serve.ts'
 import { settle, until as after } from '../../kit/index.ts'
@@ -12,12 +12,12 @@ describe('the wire', () => {
   /** A little world on the graph's side, with a source that knows who wants it. */
   function world() {
     const awake: string[] = []
-    const count = stored(1, {
+    const count = port(1, {
       onDemand: () => awake.push('start'),
       onIdle: () => awake.push('stop'),
     })
     const doubled = derived(() => count.get() * 2)
-    const rows = stored<Array<{ id: number; title: string }>>([{ id: 1, title: 'one' }])
+    const rows = port<Array<{ id: number; title: string }>>([{ id: 1, title: 'one' }])
     const byId = (id: number) => derived(() => rows.peek().find(row => row.id === id))
 
     return {
@@ -42,7 +42,7 @@ describe('the wire', () => {
 
   test('a mirrored cell shows what the other side holds, and follows it', async () => {
     const { surface, count } = world()
-    const wire = pairInMemory()
+    const wire = wirePair()
     after(serve(surface, wire.graph, { schedule: atOnce }))
     const seen = link(wire.watcher)
 
@@ -58,7 +58,7 @@ describe('the wire', () => {
 
   test('nothing is known until somebody watches', async () => {
     const { surface } = world()
-    const wire = pairInMemory()
+    const wire = wirePair()
     after(serve(surface, wire.graph, { schedule: atOnce }))
     const seen = link(wire.watcher)
 
@@ -70,7 +70,7 @@ describe('the wire', () => {
 
   test('demand crosses the boundary: the source wakes and sleeps with the watcher', async () => {
     const { surface, awake } = world()
-    const wire = pairInMemory()
+    const wire = wirePair()
     after(serve(surface, wire.graph, { schedule: atOnce }))
     const seen = link(wire.watcher)
 
@@ -85,7 +85,7 @@ describe('the wire', () => {
 
   test('a slow reader gets the latest value, not a queue of stale ones', async () => {
     const { surface, count } = world()
-    const wire = pairInMemory()
+    const wire = wirePair()
     let held: Array<() => void> = []
     after(
       serve(surface, wire.graph, {
@@ -119,7 +119,7 @@ describe('the wire', () => {
 
   test('a family is watched by name and key', async () => {
     const { surface } = world()
-    const wire = pairInMemory()
+    const wire = wirePair()
     after(serve(surface, wire.graph, { schedule: atOnce }))
     const seen = link(wire.watcher)
 
@@ -131,7 +131,7 @@ describe('the wire', () => {
 
   test('a command runs on the other side and its answer comes back', async () => {
     const { surface, count } = world()
-    const wire = pairInMemory()
+    const wire = wirePair()
     after(serve(surface, wire.graph, { schedule: atOnce }))
     const seen = link(wire.watcher)
 
@@ -145,7 +145,7 @@ describe('the wire', () => {
 
   test('asking for a cell the other side does not have says so', async () => {
     const { surface } = world()
-    const wire = pairInMemory()
+    const wire = wirePair()
     after(serve(surface, wire.graph, { schedule: atOnce }))
     const seen = link(wire.watcher)
 
@@ -156,8 +156,8 @@ describe('the wire', () => {
   })
 
   test('a value that cannot cross is reported, not swallowed', async () => {
-    const bad = stored<unknown>(() => 'a function cannot be cloned')
-    const wire = pairInMemory()
+    const bad = port<unknown>(() => 'a function cannot be cloned')
+    const wire = wirePair()
     const complaints: string[] = []
     after(
       serve({ cells: { bad } }, wire.graph, {
@@ -175,8 +175,8 @@ describe('the wire', () => {
   test('the same over a real port, with real cloning', async () => {
     const { surface, count } = world()
     const ports = new MessageChannel()
-    after(serve(surface, portChannel(ports.port1 as never), { schedule: atOnce }))
-    const seen = link(portChannel(ports.port2 as never))
+    after(serve(surface, overWire(ports.port1 as never), { schedule: atOnce }))
+    const seen = link(overWire(ports.port2 as never))
 
     const mirror = seen.derived<number>('doubled')
     after(subscribe(mirror, () => {}))
@@ -195,7 +195,7 @@ describe('the wire', () => {
   })
 
   test('unknown messages are ignored rather than fatal', () => {
-    const wire = pairInMemory()
+    const wire = wirePair()
     after(serve({}, wire.graph, { schedule: atOnce }))
     wire.watcher.send({ kind: 'nonsense' })
     wire.watcher.send(undefined)
@@ -203,8 +203,8 @@ describe('the wire', () => {
   })
 
   test('a mirrored value keeps its shape through the wire', async () => {
-    const rows = stored([{ id: 1, tags: ['a', 'b'], at: new Date(0) }])
-    const wire = pairInMemory()
+    const rows = port([{ id: 1, tags: ['a', 'b'], at: new Date(0) }])
+    const wire = wirePair()
     after(serve({ cells: { rows } }, wire.graph, { schedule: atOnce }))
     const seen = link(wire.watcher)
 
@@ -218,7 +218,7 @@ describe('the wire', () => {
 
   test('mirrors are shared: two watchers of one name ask once', async () => {
     const { surface } = world()
-    const wire = pairInMemory()
+    const wire = wirePair()
     const asked: unknown[] = []
     wire.graph.listen(message => asked.push(message))
     after(serve(surface, wire.graph, { schedule: atOnce }))
@@ -239,7 +239,7 @@ describe('the wire', () => {
 
   test('a mirror forgets what it knew when the last watcher goes', async () => {
     const { surface } = world()
-    const wire = pairInMemory()
+    const wire = wirePair()
     after(serve(surface, wire.graph, { schedule: atOnce }))
     const seen = link(wire.watcher)
 
@@ -254,7 +254,7 @@ describe('the wire', () => {
   })
 
   test('closing the link leaves waiting calls unknown, not refused', async () => {
-    const wire = pairInMemory()
+    const wire = wirePair()
     const seen = link(wire.watcher)
     const slow = seen.command<[], void>('add')()
     seen.close()
@@ -263,7 +263,7 @@ describe('the wire', () => {
   })
 
   test('a graph restart leaves waiting calls unknown, not refused', async () => {
-    const wire = pairInMemory()
+    const wire = wirePair()
     const never = serve({ commands: { forever: () => new Promise(() => {}) } }, wire.graph, {
       schedule: atOnce,
     })
@@ -282,9 +282,9 @@ describe('the wire', () => {
   })
 
   test('one value that cannot cross does not cost the others theirs', async () => {
-    const good = stored(1)
-    const bad = stored<unknown>(() => 'a function cannot be cloned')
-    const wire = pairInMemory()
+    const good = port(1)
+    const bad = port<unknown>(() => 'a function cannot be cloned')
+    const wire = wirePair()
     const complaints: string[] = []
     after(
       serve({ cells: { good, bad } }, wire.graph, {
@@ -311,7 +311,7 @@ describe('the wire', () => {
 
   test('closing the link lets the graph go: unwatch for every mirror still watched', async () => {
     const { surface, awake } = world()
-    const wire = pairInMemory()
+    const wire = wirePair()
     after(serve(surface, wire.graph, { schedule: atOnce }))
     const seen = link(wire.watcher)
 
@@ -357,7 +357,7 @@ describe('the wire', () => {
       }
     })()
 
-    const wire = pairInMemory()
+    const wire = wirePair()
     const never = serve({ commands: { forever: () => new Promise(() => {}) } }, wire.graph, {
       schedule: atOnce,
     })
@@ -396,8 +396,8 @@ describe('the wire', () => {
   test('an idle mirror lingers, then is let go; a fresh look brings it back', async () => {
     const { heldOf } = await import('#async/remote.ts')
     const rest = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms))
-    const pair = pairInMemory()
-    const feed = stored(1, { name: 'n' })
+    const pair = wirePair()
+    const feed = port(1, { name: 'n' })
     after(serve({ cells: { n: feed } }, pair.graph, { schedule: atOnce }))
     const wire = link(pair.watcher, { linger: 40 })
 
@@ -417,8 +417,8 @@ describe('the wire', () => {
   })
 
   test('a channel that dies is announced, and what piled up is not thrown away', async () => {
-    const count = stored(1, { name: 'count' })
-    const wire = pairInMemory()
+    const count = port(1, { name: 'count' })
+    const wire = wirePair()
     let dead = false
     const breakable = {
       send(message: unknown): void {

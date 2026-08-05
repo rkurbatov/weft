@@ -11,7 +11,7 @@ GlobalRegistrator.register()
 
 import { StrictMode, act, createElement as h } from 'react'
 import type { ReactNode } from 'react'
-import { stored } from '#weft'
+import { port } from '#weft'
 
 const { createRoot } = await import('react-dom/client')
 type Root = ReturnType<typeof createRoot>
@@ -35,8 +35,8 @@ function mount(node: ReactNode): { el: HTMLElement; unmount: () => void } {
 
 test('useLive under StrictMode: values keep flowing after the double mount, Maps included', async () => {
   const { useLive } = await import('#loom/react')
-  const rows = stored<ReadonlyMap<string, number>>(new Map([['a', 1]]), { name: 'rows' })
-  const label = stored('cold', { name: 'label' })
+  const rows = port<ReadonlyMap<string, number>>(new Map([['a', 1]]), { name: 'rows' })
+  const label = port('cold', { name: 'label' })
 
   function Live(): ReactNode {
     const live = useLive(() => ({

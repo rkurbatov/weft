@@ -10,7 +10,7 @@ import {
   useSyncExternalStore,
 } from 'react'
 import { subscribe, untracked } from '#weft'
-import type { Stored, Key, Watchable } from '#weft'
+import type { Port, Key, Watchable } from '#weft'
 import type { Command, CommandState } from '#weft'
 import { arrivalOf, fresh } from '#weft'
 import type { Fault, Source } from '#weft'
@@ -79,7 +79,7 @@ export interface InputBinding {
 
 /** The two-way seam for a text field: the input's value in, keystrokes out.
  *  Spread it onto an <input>, <textarea> or <select> and be done. */
-export function useInputBinding(field: Stored<string>): InputBinding {
+export function useInputBinding(field: Port<string>): InputBinding {
   const value = useCell(field)
   const ref = useRef(field)
   ref.current = field

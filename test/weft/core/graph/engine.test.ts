@@ -13,7 +13,7 @@
 
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
-import { graph, stored, subscribe } from '#weft'
+import { graph, port, subscribe } from '#weft'
 import type * as Weft from '#weft'
 
 describe('engines', () => {
@@ -21,8 +21,8 @@ describe('engines', () => {
     const a = graph('session-a')
     const b = graph('session-b')
 
-    const seatsA = a.stored(1)
-    const seatsB = b.stored(1)
+    const seatsA = a.port(1)
+    const seatsB = b.port(1)
     const doubleA = a.derived(() => seatsA.get() * 2)
     const doubleB = b.derived(() => seatsB.get() * 2)
 
@@ -63,8 +63,8 @@ describe('engines', () => {
     const a = graph('session-a')
     const b = graph('session-b')
 
-    const userA = a.stored('ann', { name: 'user' })
-    const userB = b.stored('bob', { name: 'user' })
+    const userA = a.port('ann', { name: 'user' })
+    const userB = b.port('bob', { name: 'user' })
 
     // Names exist for people reading a trace, not as keys. Two engines may hold
     // the same application built twice, so the same name is expected, and the
@@ -83,13 +83,13 @@ describe('engines', () => {
     const a = graph('session-a')
     const b = graph('session-b')
 
-    const seatsA = a.stored(1)
-    const seatsB = b.stored(1)
+    const seatsA = a.port(1)
+    const seatsB = b.port(1)
     let wokeA = 0
     let wokeB = 0
     let idleA = 0
 
-    const held = a.stored(0, { onIdle: () => idleA++ })
+    const held = a.port(0, { onIdle: () => idleA++ })
     a.watch(() => {
       held.get()
       seatsA.get()
@@ -119,7 +119,7 @@ describe('engines', () => {
     let woke = 0
 
     const region = a.region('kanban', () => {
-      const cards = a.stored(0)
+      const cards = a.port(0)
       a.watch(() => {
         cards.get()
         woke++
@@ -130,7 +130,7 @@ describe('engines', () => {
     // The region prefixes names within its engine, and lets its own piece go
     // without touching the rest of the engine.
     assert.equal(region.value.name, 'kanban.input')
-    const outside = a.stored(0)
+    const outside = a.port(0)
     let outsideWoke = 0
     a.watch(() => {
       outside.get()
@@ -145,7 +145,7 @@ describe('engines', () => {
 
     // And the engine takes down the regions it holds.
     const second = graph('session-b')
-    const region2 = second.region('kanban', () => second.stored(0))
+    const region2 = second.region('kanban', () => second.port(0))
     second.dispose()
     assert.equal(region2.disposed, true)
 
@@ -156,7 +156,7 @@ describe('engines', () => {
     const common = graph('common')
     const ann = graph('session-ann')
     const asked: string[] = []
-    const rates = common.stored(
+    const rates = common.port(
       { eur: 2 },
       { onDemand: () => asked.push('on'), onIdle: () => asked.push('off') },
     )
@@ -180,7 +180,7 @@ describe('engines', () => {
     const a = graph('session-a')
     const b = graph('session-b')
 
-    const seatsB = b.stored(1)
+    const seatsB = b.port(1)
     const crossing = a.derived(() => seatsB.get() * 2)
 
     assert.throws(
@@ -197,7 +197,7 @@ describe('engines', () => {
   test('the bare functions stay, and go quiet when a second engine exists', () => {
     // Ordinary single-graph applications never learn that engines exist: the
     // module-level functions build in the root engine, exactly as before.
-    const seats = stored(1)
+    const seats = port(1)
     let woke = 0
     const stop = subscribe(seats, () => woke++)
     seats.set(2)
@@ -208,11 +208,11 @@ describe('engines', () => {
     // saying where is ambiguous — and ambiguity here means one user's cell in
     // another user's graph. Loud, not silent.
     const other = graph('session-b')
-    assert.throws(() => stored(0), /engine/)
+    assert.throws(() => port(0), /engine/)
     other.dispose()
 
     // With the second engine gone the ambiguity is gone with it.
-    assert.doesNotThrow(() => stored(0))
+    assert.doesNotThrow(() => port(0))
   })
 
   test('two applications share an isolate with no root engine between them', async () => {
@@ -228,8 +228,8 @@ describe('engines', () => {
     const mine = graph('checkout')
     const theirs = other.graph('host-page')
 
-    const price = mine.stored(10)
-    const stock = theirs.stored(3)
+    const price = mine.port(10)
+    const stock = theirs.port(3)
 
     let woke = 0
     mine.watch(() => {
@@ -250,7 +250,7 @@ describe('engines', () => {
   test('one tab, two sessions in a row, nothing left ticking', () => {
     let idle = 0
     const first = graph('session-ann')
-    const seats = first.stored(1, { onIdle: () => idle++ })
+    const seats = first.port(1, { onIdle: () => idle++ })
     first.watch(() => seats.get())
 
     // Logging out and back in as someone else: the whole household goes, and the
@@ -259,7 +259,7 @@ describe('engines', () => {
     assert.equal(idle, 1)
 
     const second = graph('session-bob')
-    const seatsAgain = second.stored(1)
+    const seatsAgain = second.port(1)
     let woke = 0
     second.watch(() => {
       seatsAgain.get()
@@ -277,7 +277,7 @@ describe('engines', () => {
     // The shared engine publishes; sessions adopt — read, never write, declared
     // at build time and visible in a trace.
     const common = graph('common')
-    const rates = common.stored({ eur: 2 })
+    const rates = common.port({ eur: 2 })
 
     const ann = graph('session-ann')
     const bob = graph('session-bob')
@@ -300,7 +300,7 @@ describe('engines', () => {
     assert.equal('set' in ratesForAnn, false)
 
     // And the border still stands for everything not adopted.
-    const secret = common.stored('x')
+    const secret = common.port('x')
     assert.throws(() => ann.derived(() => secret.get()).get(), /session-ann.*common/s)
 
     ann.dispose()

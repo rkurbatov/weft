@@ -6,8 +6,8 @@
 // still good. Rows added on top move every index, but nothing is thrown away —
 // the tree simply grows.
 
-import { blocks, stored } from '#weft'
-import type { Stored } from '#weft'
+import { blocks, port } from '#weft'
+import type { Port } from '#weft'
 
 export interface List {
   offsetOf(index: number): number
@@ -20,7 +20,7 @@ export interface List {
 }
 
 export function weftList(heights: number[]): List {
-  let rows: Stored<number>[] = heights.map((h, i) => stored(h, { name: `h${i}` }))
+  let rows: Port<number>[] = heights.map((h, i) => port(h, { name: `h${i}` }))
 
   const tree = blocks<number>({
     name: 'height',
@@ -55,7 +55,7 @@ export function weftList(heights: number[]): List {
     prepend(fresh) {
       // Rows keep their cells; the new ones take the low indices, so the tree
       // above them is rebuilt where it must be and kept where it need not.
-      rows = [...fresh.map((h, i) => stored(h, { name: `p${i}` })), ...rows]
+      rows = [...fresh.map((h, i) => port(h, { name: `p${i}` })), ...rows]
     },
 
     size: () => rows.length,

@@ -14,7 +14,7 @@
 // ask which engine is meant. Reading across engines is refused by name: a
 // stitch between two people's data is not something to discover later.
 
-import { WaveTap } from './waves.ts'
+import { TickTap } from './ticks.ts'
 
 /** Node states. CHECK means "an ancestor may have changed" — resolved by walking up. */
 export const CLEAN = 0
@@ -48,7 +48,7 @@ export interface Source extends Marked {
   readonly name: string
   readonly observers: Set<Consumer>
   readonly demand: number
-  /** Bring own value up to date. Stored cells are always current. */
+  /** Bring own value up to date. Port cells are always current. */
   stabilize(): void
   /** Called by the graph when the number of demanding paths changes. */
   demandChanged(delta: number): void
@@ -397,7 +397,7 @@ export class Core {
   }
 
   /** The probe of this engine: waves of one session are not mixed with another's. */
-  readonly tap = new WaveTap()
+  readonly tap = new TickTap()
 
   // ── End of life ────────────────────────────────────────────────────────────
 

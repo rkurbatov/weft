@@ -2,8 +2,8 @@
 // writer is the wire, and watching it is what asks the other side for it:
 // demand crosses the boundary by itself, so nothing has to be released by hand.
 
-import { stored, untracked } from '#graph/graph/graph.ts'
-import type { Stored, Watchable } from '#graph/graph/graph.ts'
+import { port, untracked } from '#graph/graph/graph.ts'
+import type { Port, Watchable } from '#graph/graph/graph.ts'
 import { EMPTY, arrived, heldOf, refused } from '#async/remote.ts'
 import { preserve } from '#graph/data/preserve.ts'
 import type { Remote } from '#async/remote.ts'
@@ -62,9 +62,9 @@ export function link(channel: Channel, options: LinkOptions = {}): Link {
   const within = options.within ?? 10_000
   const linger = options.linger ?? 15_000
   const timers = options.timers ?? wallClock
-  const mirrors = new Map<string, { id: number; cell: Stored<Remote<unknown>> }>()
+  const mirrors = new Map<string, { id: number; cell: Port<Remote<unknown>> }>()
   const lingering = new Set<unknown>()
-  const byId = new Map<number, Stored<Remote<unknown>>>()
+  const byId = new Map<number, Port<Remote<unknown>>>()
   const waiting = new Map<
     number,
     { resolve: (value: never) => void; reject: (error: unknown) => void; held?: unknown }
@@ -150,14 +150,14 @@ export function link(channel: Channel, options: LinkOptions = {}): Link {
     }
   }
 
-  function mirrorOf(name: string, key: unknown): Stored<Remote<unknown>> {
+  function mirrorOf(name: string, key: unknown): Port<Remote<unknown>> {
     const at = key === undefined ? name : `${name}\u0000${JSON.stringify(key)}`
     const known = mirrors.get(at)
     if (known !== undefined) return known.cell
 
     const id = next++
     let letGo: unknown
-    const cell = stored<Remote<unknown>>(EMPTY, {
+    const cell = port<Remote<unknown>>(EMPTY, {
       name: at,
       // Watching here is asking there; nobody watching is nobody asking.
       onDemand: () => {

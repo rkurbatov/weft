@@ -6,7 +6,7 @@
 
 import type { Change, Key } from '../../table/table.ts'
 import type { Row } from '../expr.ts'
-import { keyOfRow, mergedRow, onKeyOf, passesResidual, recount } from '../node.ts'
+import { keyOfRow, mergedRow, onKeyOf, passesResidual, oracle } from '../node.ts'
 import type { JoinNode } from '../node.ts'
 import { notice } from '#graph/data/notice.ts'
 import { diffInto } from './runner.ts'
@@ -162,7 +162,7 @@ export function joinRunner(node: JoinNode, make: Make): Runner {
         const at = onKeyOf(node.on, 'right', row)
         if (at !== undefined) put(rightByOn, at, rightKeyOf(row), row, crowd)
       }
-      return recount(node, sources)
+      return oracle(node, sources)
     },
   }
 }

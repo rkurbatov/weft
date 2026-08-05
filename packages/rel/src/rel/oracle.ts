@@ -21,7 +21,7 @@ import {
   stepOf,
 } from './work.ts'
 
-export function recount(
+export function oracle(
   node: RelNode,
   sources: Record<string, ReadonlyMap<Key, Row>>,
 ): Map<Key, Row> {
@@ -33,18 +33,18 @@ export function recount(
     }
     case 'filter': {
       const out = new Map<Key, Row>()
-      for (const [key, row] of recount(node.input, sources)) {
+      for (const [key, row] of oracle(node.input, sources)) {
         if (passesFilter(node, row)) out.set(key, row)
       }
       return out
     }
     case 'pure': {
       const out = new Map<Key, Row>()
-      for (const [key, row] of recount(node.input, sources)) out.set(key, pureRow(node, row))
+      for (const [key, row] of oracle(node.input, sources)) out.set(key, pureRow(node, row))
       return out
     }
     case 'agg': {
-      const under = recount(node.input, sources)
+      const under = oracle(node.input, sources)
       const groups = new Map<Key, { values: unknown[]; rows: Map<Key, Row> }>()
       for (const [key, row] of under) {
         const values = groupOf(node, row)
@@ -69,7 +69,7 @@ export function recount(
       return out
     }
     case 'scan': {
-      const under = [...recount(node.input, sources)]
+      const under = [...oracle(node.input, sources)]
       // Ties are broken by key, so two implementations agree on the order.
       under.sort(
         ([ka, a], [kb, b]) => orderCompare(node.order, a, b) || (String(ka) < String(kb) ? -1 : 1),
@@ -91,8 +91,8 @@ export function recount(
       return out
     }
     case 'union': {
-      const out = recount(node.left, sources)
-      for (const [key, row] of recount(node.right, sources)) {
+      const out = oracle(node.left, sources)
+      for (const [key, row] of oracle(node.right, sources)) {
         if (out.has(key)) {
           throw new Error(
             `weft rel: union key collision on ${String(key)} — sides must be disjoint`,
@@ -104,7 +104,7 @@ export function recount(
     }
     case 'expand': {
       const out = new Map<Key, Row>()
-      for (const row of recount(node.input, sources).values()) {
+      for (const row of oracle(node.input, sources).values()) {
         for (const opened of expandRows(node, row)) {
           const key = keyOfRow(node, opened)
           if (out.has(key)) {
@@ -118,8 +118,8 @@ export function recount(
       return out
     }
     case 'join': {
-      const left = recount(node.left, sources)
-      const right = recount(node.right, sources)
+      const left = oracle(node.left, sources)
+      const right = oracle(node.right, sources)
       const rightByOn = new Map<string | number, Row[]>()
       for (const row of right.values()) {
         const at = onKeyOf(node.on, 'right', row)

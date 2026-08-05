@@ -4,7 +4,7 @@
 
 import type { Channel } from './channel.ts'
 
-export interface Pair {
+export interface WirePair {
   graph: Channel
   watcher: Channel
 }
@@ -14,7 +14,7 @@ export interface Pair {
  * boundary would clone them, so a value that could not survive the crossing
  * fails here too rather than in the browser.
  */
-export function pairInMemory(clone: boolean = true): Pair {
+export function wirePair(clone: boolean = true): WirePair {
   const listeners: { graph: Set<(m: unknown) => void>; watcher: Set<(m: unknown) => void> } = {
     graph: new Set(),
     watcher: new Set(),
@@ -39,14 +39,14 @@ export function pairInMemory(clone: boolean = true): Pair {
 }
 
 /** Anything that posts and receives messages: a Worker, a MessagePort, `self`. */
-export interface Port {
+export interface Wire {
   postMessage(message: unknown): void
   addEventListener(kind: 'message', handler: (event: { data: unknown }) => void): void
   removeEventListener(kind: 'message', handler: (event: { data: unknown }) => void): void
   start?(): void
 }
 
-export function portChannel(port: Port): Channel {
+export function overWire(port: Wire): Channel {
   port.start?.()
   return {
     send: message => port.postMessage(message),

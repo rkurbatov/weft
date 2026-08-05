@@ -6,7 +6,7 @@
 // claiming to be two — named, not resolved.
 
 import { diffInto } from './runner.ts'
-import { expandRows, keyOfRow, recount } from '../node.ts'
+import { expandRows, keyOfRow, oracle } from '../node.ts'
 import type { ExpandNode } from '../node.ts'
 import type { Change, Key } from '../../table/table.ts'
 import type { Row } from '../expr.ts'
@@ -38,6 +38,6 @@ export function expandRunner(node: ExpandNode, make: Make): Runner {
       }
       return [...out.values()].filter(c => c.prev !== undefined || c.next !== undefined)
     },
-    rebuild: sources => recount(node, sources),
+    rebuild: sources => oracle(node, sources),
   }
 }

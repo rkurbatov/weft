@@ -56,9 +56,9 @@ scene('sum, running (an inverse exists)', t =>
 scene('max, tree (no inverse, partials join)', t =>
   t.fold({ zero: 0, add: (a, r) => Math.max(a, r.score), join: Math.max }, 'max.tree'),
 )
-scene('max, recount (the same fold, forced slow)', t =>
+scene('max, oracle (the same fold, forced slow)', t =>
   t.fold(
-    { zero: 0, add: (a, r) => Math.max(a, r.score), join: Math.max, carrier: 'recount' },
+    { zero: 0, add: (a, r) => Math.max(a, r.score), join: Math.max, carrier: 'oracle' },
     'max.recount',
   ),
 )

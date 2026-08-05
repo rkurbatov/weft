@@ -4,8 +4,8 @@
 // text means, and what the screen shows. Nothing here says who reads whom —
 // reading is what records it.
 
-import { batch, blocks, family, stored, untracked } from '#weft'
-import type { Blocks, Derived, Stored } from '#weft'
+import { batch, blocks, family, port, untracked } from '#weft'
+import type { Blocks, Derived, Port } from '#weft'
 import { refName } from '../common/address.ts'
 import { fail, foldJoin, foldOne, foldZero, plan, run, same, show } from '../common/formula.ts'
 import type { FoldName, Value } from '../common/formula.ts'
@@ -30,12 +30,12 @@ export interface Sheet {
 }
 
 export function createSheet(initial: Contents, options: SheetOptions = {}): Sheet {
-  const texts = new Map<string, Stored<string>>()
+  const texts = new Map<string, Port<string>>()
   let recomputed = 0
 
-  /** The text of a cell: stored, written only by the editor. */
-  function text(at: string): Stored<string> {
-    const box = texts.get(at) ?? stored('', { name: at })
+  /** The text of a cell: port, written only by the editor. */
+  function text(at: string): Port<string> {
+    const box = texts.get(at) ?? port('', { name: at })
     texts.set(at, box)
     return box
   }

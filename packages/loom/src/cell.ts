@@ -16,23 +16,20 @@
 // there they must never be confused. Here they are one word, and it is the
 // word the language uses.
 
-import { derived, stored } from '#weft'
-import type { Derived, DerivedOptions, Stored, StoredOptions } from '#weft'
+import { derived, port } from '#weft'
+import type { Derived, DerivedOptions, Port, PortOptions } from '#weft'
 
-export type Cell<T> = Stored<T> | Derived<T>
+export type Cell<T> = Port<T> | Derived<T>
 
 /** A cell holding a value: written to, and the only kind that can be. */
 export function cell<T>(
   initial: T extends (...args: never[]) => unknown ? never : T,
-  options?: StoredOptions<T>,
-): Stored<T>
+  options?: PortOptions<T>,
+): Port<T>
 /** A cell worked out from others: never written to, recomputed when they move. */
 export function cell<T>(formula: () => T, options?: DerivedOptions<T>): Derived<T>
-export function cell<T>(
-  arg: T | (() => T),
-  options?: StoredOptions<T> | DerivedOptions<T>,
-): Cell<T> {
+export function cell<T>(arg: T | (() => T), options?: PortOptions<T> | DerivedOptions<T>): Cell<T> {
   return typeof arg === 'function'
     ? derived(arg as () => T, options as DerivedOptions<T>)
-    : stored(arg as T, options as StoredOptions<T>)
+    : port(arg as T, options as PortOptions<T>)
 }

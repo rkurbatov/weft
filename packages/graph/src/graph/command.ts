@@ -1,8 +1,8 @@
 // Commands: the only way anything reaches the world. A command is started,
 // awaited, and observed — its state is a cell like any other.
 
-import { derived, stored } from './graph.ts'
-import type { Stored, Readable } from './graph.ts'
+import { derived, port } from './graph.ts'
+import type { Port, Readable } from './graph.ts'
 import { wallClock } from './time.ts'
 import type { Timers } from './time.ts'
 
@@ -76,7 +76,7 @@ export function command<A extends unknown[], T>(
   const whileRunning = options.whileRunning ?? 'drop'
   const now = options.now ?? Date.now
 
-  const state: Stored<CommandState<T>> = stored<CommandState<T>>(
+  const state: Port<CommandState<T>> = port<CommandState<T>>(
     { kind: 'idle' },
     { name: `${name}.state` },
   )

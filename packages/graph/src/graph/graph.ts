@@ -1,4 +1,4 @@
-// Derived graph: stored cells (one writer each), derived cells (formulas),
+// Derived graph: port cells (one writer each), derived cells (formulas),
 // watchers. Dependencies are discovered by reading, never declared.
 //
 // Demand is counted alongside the links: a source knows whether any live
@@ -17,7 +17,7 @@ import type {
   Source,
   State,
 } from './engine.ts'
-import type { Probe } from './waves.ts'
+import type { Probe } from './ticks.ts'
 
 export type Equal<T> = (a: T, b: T) => boolean
 
@@ -26,15 +26,15 @@ export interface DerivedOptions<T> {
   name?: string
 }
 
-export interface StoredOptions<T> extends DerivedOptions<T> {
+export interface PortOptions<T> extends DerivedOptions<T> {
   /** First live watcher arrived. Runs outside any formula. */
   onDemand?: () => void
   /** Last live watcher left. Runs outside any formula. */
   onIdle?: () => void
 }
 
-/** Stored cell: the only thing that can be written, by its single writer. */
-export class Stored<T> implements Source {
+/** Port cell: the only thing that can be written, by its single writer. */
+export class Port<T> implements Source {
   // Mark and shape live on the prototype, not on every node: a table can hold
   // a cell per row, and three extra slots per node are three too many.
   get [NODE](): NodeKind {
@@ -49,7 +49,7 @@ export class Stored<T> implements Source {
   private readonly onDemand: (() => void) | undefined
   private readonly onIdle: (() => void) | undefined
 
-  constructor(initial: T, options: StoredOptions<T> = {}, core: Core = coreForBuild()) {
+  constructor(initial: T, options: PortOptions<T> = {}, core: Core = coreForBuild()) {
     this.engine = core
     this.current = initial
     this.equal = options.equal ?? Object.is
@@ -326,7 +326,7 @@ export class Watcher implements Consumer {
   }
 }
 
-export type Readable<T> = Stored<T> | Derived<T>
+export type Readable<T> = Port<T> | Derived<T>
 
 /**
  * Anything that can be read and watched. Stated structurally so that a mirror,
@@ -344,8 +344,8 @@ export function engineOf(value: unknown): Core | undefined {
 
 // ── Building in an engine ────────────────────────────────────────────────────
 
-function makeStored<T>(core: Core, initial: T, options?: StoredOptions<T>): Stored<T> {
-  return new Stored(initial, options, core)
+function makeStored<T>(core: Core, initial: T, options?: PortOptions<T>): Port<T> {
+  return new Port(initial, options, core)
 }
 
 function makeDerived<T>(core: Core, formula: () => T, options?: DerivedOptions<T>): Derived<T> {
@@ -360,7 +360,7 @@ function makeWatcher(core: Core, body: () => void, options?: WatchOptions): () =
   return () => w.dispose()
 }
 
-export function stored<T>(initial: T, options?: StoredOptions<T>): Stored<T> {
+export function port<T>(initial: T, options?: PortOptions<T>): Port<T> {
   return makeStored(coreForBuild(), initial, options)
 }
 
@@ -410,8 +410,8 @@ export function subscribe<T>(
 export interface Trace {
   name: string
   kind: 'input' | 'cell'
-  /** 'stored' for inputs; for cells, the truth about how current `value` is. */
-  state: 'stored' | 'clean' | 'check' | 'dirty' | 'failed'
+  /** 'port' for inputs; for cells, the truth about how current `value` is. */
+  state: 'port' | 'clean' | 'check' | 'dirty' | 'failed'
   value: unknown
   reads?: Trace[]
   readBy: string[]
@@ -432,11 +432,11 @@ function watcherName(consumer: Consumer): string {
 export function trace(node: Watchable<unknown>, depth = 2): Trace {
   const kind = markOf(node)
   if (kind === 'input') {
-    const held = node as unknown as Stored<unknown>
+    const held = node as unknown as Port<unknown>
     return {
       name: held.name,
       kind: 'input',
-      state: 'stored',
+      state: 'port',
       value: held.peek(),
       readBy: [...held.observers].map(watcherName),
     }
@@ -487,7 +487,7 @@ export interface Engine {
   /** The propagation core. Library plumbing reaches for it; applications do not. */
   readonly core: Core
   readonly disposed: boolean
-  stored<T>(initial: T, options?: StoredOptions<T>): Stored<T>
+  port<T>(initial: T, options?: PortOptions<T>): Port<T>
   derived<T>(formula: () => T, options?: DerivedOptions<T>): Derived<T>
   watch(body: () => void, options?: WatchOptions): () => void
   batch<T>(fn: () => T): T
@@ -514,7 +514,7 @@ export function graph(name = 'engine', how?: EngineOptions): Engine {
     get disposed() {
       return core.disposed
     },
-    stored: (initial, options) => makeStored(core, initial, options),
+    port: (initial, options) => makeStored(core, initial, options),
     derived: (formula, options) => makeDerived(core, formula, options),
     watch: (body, options) => makeWatcher(core, body, options),
     batch: fn => core.batch(fn),

@@ -1,4 +1,4 @@
-// The waves instrument under the render lane: a wave shows up, the filter
+// The waves instrument under the render lane: a tick shows up, the filter
 // narrows, following a name shows its live trace.
 
 import { test } from 'node:test'
@@ -10,8 +10,8 @@ GlobalRegistrator.register()
 
 import { act, createElement as h } from 'react'
 import type { ReactNode } from 'react'
-import { derived, stored, subscribe } from '#weft'
-import { WavesPanel } from './waves.ts'
+import { derived, port, subscribe } from '#weft'
+import { TicksPanel } from './ticks.ts'
 
 const { createRoot } = await import('react-dom/client')
 
@@ -38,20 +38,20 @@ function type(box: HTMLInputElement, text: string): void {
   box.dispatchEvent(new Event('input', { bubbles: true }))
 }
 
-test('a wave shows up, the filter narrows, following a name opens its trace', () => {
-  const price = stored(1, { name: 'price' })
+test('a tick shows up, the filter narrows, following a name opens its trace', () => {
+  const price = port(1, { name: 'price' })
   const doubled = derived(() => price.get() * 2, { name: 'doubled' })
   const stop = subscribe(doubled, () => {})
 
-  const shown = mount(h(WavesPanel, { inspect: [doubled] }))
+  const shown = mount(h(TicksPanel, { inspect: [doubled] }))
   assert.match(shown.el.textContent ?? '', /quiet/)
 
   act(() => price.set(3))
   assert.match(shown.el.textContent ?? '', /price/)
 
-  const row = shown.el.querySelector('.wave') as HTMLElement | null
+  const row = shown.el.querySelector('.tick') as HTMLElement | null
   assert.ok(row !== null)
-  act(() => row.click()) // open the wave: its recomputes and costs
+  act(() => row.click()) // open the tick: its recomputes and costs
   assert.match(shown.el.textContent ?? '', /doubled changed/)
 
   const box = shown.el.querySelector('input')
@@ -61,7 +61,7 @@ test('a wave shows up, the filter narrows, following a name opens its trace', ()
   act(() => type(box, 'pri'))
   assert.match(shown.el.textContent ?? '', /price/)
 
-  // Following a node: the newest matching wave is "why it changed last",
+  // Following a node: the newest matching tick is "why it changed last",
   // and an inspected node shows its live trace.
   const name = [...shown.el.querySelectorAll('button')].find(b => b.textContent === 'doubled')
   assert.ok(name !== undefined)

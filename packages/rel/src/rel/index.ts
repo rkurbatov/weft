@@ -3,7 +3,7 @@
 // and the layer's names (source, join) collide with nothing.
 //
 // What it opens: the typed builder as the working surface; trees as data —
-// constructors, the checks, the canon and the naive recount, because a tree
+// constructors, the checks, the canon and the naive oracle, because a tree
 // is a value the corpus freezes and another implementation runs; and the
 // expression language the attributes are written in.
 
@@ -24,7 +24,7 @@ export {
   scan,
   checkNode,
   canonNode,
-  recount,
+  oracle,
   keyOfRow,
   keyPaths,
   whyRow,

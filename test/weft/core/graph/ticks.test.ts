@@ -4,18 +4,18 @@
 
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
-import { batch, derived, stored, subscribe, trace } from '#graph/graph/graph.ts'
+import { batch, derived, port, subscribe, trace } from '#graph/graph/graph.ts'
 import { attachProbe } from '#graph/graph/graph.ts'
-import type { WaveSummary } from '#graph/graph/waves.ts'
+import type { TickSummary } from '#graph/graph/ticks.ts'
 import { journal } from '#graph/graph/journal.ts'
-import type { Stored } from '#weft'
+import type { Port } from '#weft'
 
 describe('waves and the journal', () => {
   test('the red dot: a wave dies on equality and the summary names the place', () => {
-    const seen: WaveSummary[] = []
-    attachProbe({ wave: (summary: WaveSummary) => seen.push(summary) })
+    const seen: TickSummary[] = []
+    attachProbe({ tick: (summary: TickSummary) => seen.push(summary) })
     try {
-      const raw = stored(1, { name: 'raw' })
+      const raw = port(1, { name: 'raw' })
       const doubled = derived(() => raw.get() * 2, { name: 'doubled' })
       const tens = derived(() => Math.floor(doubled.get() / 10), { name: 'tens' })
       let woke = 0
@@ -44,11 +44,11 @@ describe('waves and the journal', () => {
   })
 
   test('a batch is one wave with all its writes', () => {
-    const seen: WaveSummary[] = []
-    attachProbe({ wave: (summary: WaveSummary) => seen.push(summary) })
+    const seen: TickSummary[] = []
+    attachProbe({ tick: (summary: TickSummary) => seen.push(summary) })
     try {
-      const a = stored(1, { name: 'a' })
-      const b = stored(1, { name: 'b' })
+      const a = port(1, { name: 'a' })
+      const b = port(1, { name: 'b' })
       const sum = derived(() => a.get() + b.get(), { name: 'sum' })
       const stop = subscribe(sum, () => {})
       seen.length = 0
@@ -68,20 +68,20 @@ describe('waves and the journal', () => {
 
   test('the journal is the full history: a fresh graph replayed lands in the same place', () => {
     interface Board {
-      price: Stored<number>
-      count: Stored<number>
+      price: Port<number>
+      count: Port<number>
       total: ReturnType<typeof derived<number>>
-      registry: Map<string, Stored<number>>
+      registry: Map<string, Port<number>>
     }
     const build = (): Board => {
-      const price = stored(0, { name: 'price' })
-      const count = stored(0, { name: 'count' })
+      const price = port(0, { name: 'price' })
+      const count = port(0, { name: 'count' })
       const total = derived(() => price.get() * count.get(), { name: 'total' })
       return {
         price,
         count,
         total,
-        registry: new Map<string, Stored<number>>([
+        registry: new Map<string, Port<number>>([
           ['price', price],
           ['count', count],
         ]),
@@ -104,11 +104,11 @@ describe('waves and the journal', () => {
       book.stop()
       looking()
     }
-    assert.equal(book.waves().length, 3)
+    assert.equal(book.ticks().length, 3)
     assert.equal(lived.total.peek(), 77)
 
     const reborn = build()
-    book.replay(node => reborn.registry.get(node) as Stored<unknown> | undefined)
+    book.replay(node => reborn.registry.get(node) as Port<unknown> | undefined)
     assert.equal(reborn.total.peek(), 77) // inputs are the whole entropy
 
     const why = book.why('total')
@@ -117,10 +117,10 @@ describe('waves and the journal', () => {
   })
 
   test('a detached probe reports nothing and changes nothing', () => {
-    const seen: WaveSummary[] = []
-    attachProbe({ wave: (summary: WaveSummary) => seen.push(summary) })
+    const seen: TickSummary[] = []
+    attachProbe({ tick: (summary: TickSummary) => seen.push(summary) })
     attachProbe(null)
-    const raw = stored(1, { name: 'raw' })
+    const raw = port(1, { name: 'raw' })
     const twice = derived(() => raw.get() * 2, { name: 'twice' })
     const stop = subscribe(twice, () => {})
     raw.set(21)
@@ -130,7 +130,7 @@ describe('waves and the journal', () => {
   })
 
   test('trace looks without touching: value, reads, readers, honest staleness', () => {
-    const raw = stored(2, { name: 'raw' })
+    const raw = port(2, { name: 'raw' })
     const twice = derived(() => raw.get() * 2, { name: 'twice' })
     const stop = subscribe(twice, () => {})
 

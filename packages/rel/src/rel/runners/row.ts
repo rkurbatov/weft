@@ -5,7 +5,7 @@
 // the two is an ordinary edit. A projection rewrites both sides and passes the
 // change along. Neither needs an index, which is why they sit together.
 
-import { passesFilter, pureRow, recount } from '../node.ts'
+import { passesFilter, pureRow, oracle } from '../node.ts'
 import type { FilterNode, PureNode } from '../node.ts'
 import type { Change } from '../../table/table.ts'
 import type { Row } from '../expr.ts'
@@ -30,7 +30,7 @@ export function filterRunner(node: FilterNode, make: Make): Runner {
       }
       return out
     },
-    rebuild: sources => recount(node, sources),
+    rebuild: sources => oracle(node, sources),
   }
 }
 
@@ -48,6 +48,6 @@ export function pureRunner(node: PureNode, make: Make): Runner {
       }
       return out
     },
-    rebuild: sources => recount(node, sources),
+    rebuild: sources => oracle(node, sources),
   }
 }

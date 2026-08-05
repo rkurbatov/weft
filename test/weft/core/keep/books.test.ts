@@ -7,12 +7,12 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
 import { book } from '#offline/book.ts'
-import type { Entry } from '#offline/book.ts'
+import type { Note } from '#offline/book.ts'
 import { schedule } from '#offline/schedule.ts'
 import { memoryStore } from '#offline/store.ts'
 import { settle, slowStore, world } from '../../../kit/index.ts'
 
-const entry = (id: string, name = 'move'): Entry => ({
+const entry = (id: string, name = 'move'): Note => ({
   id,
   name,
   args: { at: id },
@@ -37,7 +37,7 @@ describe('the book', () => {
       ['old', 'new'],
     )
     assert.deepEqual(
-      ((await disk.read('outbox')) as Entry[]).map(e => e.id),
+      ((await disk.read('outbox')) as Note[]).map(e => e.id),
       ['old', 'new'],
     )
   })
@@ -78,7 +78,7 @@ describe('the book', () => {
     assert.ok(disk.asked().length <= 2, `asked: ${disk.asked().join(', ')}`)
     await disk.releaseAll()
     assert.deepEqual(
-      (disk.cells.get('outbox') as Entry[]).map(e => e.id),
+      (disk.cells.get('outbox') as Note[]).map(e => e.id),
       ['b'],
     )
   })
@@ -113,7 +113,7 @@ describe('the book', () => {
     pages.remove('a')
     await settle()
     assert.deepEqual(
-      ((await disk.read('outbox')) as Entry[]).map(e => e.id),
+      ((await disk.read('outbox')) as Note[]).map(e => e.id),
       ['b', 'c'],
     )
   })

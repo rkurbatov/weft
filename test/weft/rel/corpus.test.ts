@@ -1,7 +1,7 @@
 // The cross-implementation corpus: one scenario file, two engines. Each file
 // is pure data — a tree, a sequence of source patches, and the expected rows
 // after every step, frozen by the oracle. This runner holds the TypeScript
-// side to them twice over: the live delta path and the naive recount must
+// side to them twice over: the live delta path and the naive oracle must
 // both land on the frozen answer, at every step. The Go implementation reads
 // the same files; a disagreement is closed by fixing an engine or by adding
 // a line to the corpus — never by loosening a check.
@@ -12,7 +12,7 @@ import { join as joinPath } from 'node:path'
 import { describe, test } from 'node:test'
 import { subscribe, table } from '#weft'
 import type { Key, SourceTable } from '#weft'
-import { keyOfRow, recount } from '#rel/rel/node.ts'
+import { keyOfRow, oracle } from '#rel/rel/node.ts'
 import type { RelNode, SourceNode } from '#rel/rel/node.ts'
 import { relate } from '#rel/rel/live.ts'
 import type { Row } from '#rel/rel/expr.ts'
@@ -56,7 +56,7 @@ describe('the cross-corpus scenarios', () => {
     if (!file.endsWith('.json')) continue
     const scenario = JSON.parse(readFileSync(joinPath(here, file), 'utf8')) as Scenario
 
-    test(`corpus ${scenario.name}: the live path and the recount both land on the frozen answer`, () => {
+    test(`corpus ${scenario.name}: the live path and the oracle both land on the frozen answer`, () => {
       const decls = sourceDecls(scenario.tree)
       const tables: Record<string, SourceTable<Row>> = {}
       const held: Record<string, Map<Key, Row>> = {}
@@ -92,10 +92,10 @@ describe('the cross-corpus scenarios', () => {
           )
         }
 
-        const counted = recount(scenario.tree, held)
-        assert.equal(counted.size, want.size, `${scenario.name} step ${at}: recount size`)
+        const counted = oracle(scenario.tree, held)
+        assert.equal(counted.size, want.size, `${scenario.name} step ${at}: oracle size`)
         for (const [key, row] of counted) {
-          assert.deepEqual(row, want.get(key), `${scenario.name} step ${at}: recount row`)
+          assert.deepEqual(row, want.get(key), `${scenario.name} step ${at}: oracle row`)
         }
       }
       stop()

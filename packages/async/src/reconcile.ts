@@ -3,7 +3,7 @@
 // the row on show. The rule is to watch the value itself rather than the events
 // that might have changed it — then there is no list of triggers to go stale.
 
-import { derived, stored, untracked, watch } from '#graph/graph/graph.ts'
+import { derived, port, untracked, watch } from '#graph/graph/graph.ts'
 import type { Readable } from '#graph/graph/graph.ts'
 import { wallClock } from '#graph/graph/time.ts'
 import type { Timers } from '#graph/graph/time.ts'
@@ -51,9 +51,9 @@ export function reconcile<T>(
   const demanding = options.demand ?? false
   const atOnce = options.atOnce ?? true
 
-  const working = stored(false, { name: `${name}.working` })
-  const settled = stored<T | undefined>(undefined, { name: `${name}.settled` })
-  const failure = stored<unknown>(undefined, { name: `${name}.failed` })
+  const working = port(false, { name: `${name}.working` })
+  const settled = port<T | undefined>(undefined, { name: `${name}.settled` })
+  const failure = port<unknown>(undefined, { name: `${name}.failed` })
 
   const keyOf = (value: T): unknown => (by === undefined ? value : by(value))
 

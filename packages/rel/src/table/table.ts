@@ -5,7 +5,7 @@
 // the cost of an edit is the size of the edit, not the size of the collection.
 // A follower that fell too far behind rebuilds once and goes on incrementally.
 
-import { derived, stored } from '#graph/graph/graph.ts'
+import { derived, port } from '#graph/graph/graph.ts'
 import type { Derived, Equal, Watchable } from '#graph/graph/graph.ts'
 import { family } from '#graph/graph/family.ts'
 import { planFold, TREE_WORTH_IT } from './plan.ts'
@@ -31,7 +31,7 @@ export interface Patch<R> {
 export interface FoldSpec<R, A> {
   /** Who keeps the answer: absent or 'auto' lets the library decide by rule
    *  (see core/plan.ts); set by hand for tests and tuning. */
-  carrier?: 'auto' | 'running' | 'tree' | 'recount'
+  carrier?: 'auto' | 'running' | 'tree' | 'oracle'
   zero: A
   add(acc: A, row: R): A
   /** Two partial answers into one — associative. With it (and no inverse) the
@@ -262,16 +262,16 @@ function keyCompare(a: Key, b: Key): number {
 }
 
 function orderedOver<R>(feed: Feed<R>, compare: (a: R, b: R) => number, name: string): Ordered<R> {
-  interface Entry {
+  interface Note {
     key: Key
     row: R
   }
   // Equal rows are tied by key, so every entry has one place and can be found again.
-  const order = (a: Entry, b: Entry): number => compare(a.row, b.row) || keyCompare(a.key, b.key)
-  let entries: Entry[] = []
+  const order = (a: Note, b: Note): number => compare(a.row, b.row) || keyCompare(a.key, b.key)
+  let entries: Note[] = []
   let v = 0
 
-  const lowerBound = (e: Entry): number => {
+  const lowerBound = (e: Note): number => {
     let lo = 0
     let hi = entries.length
     while (lo < hi) {
@@ -548,7 +548,7 @@ export function table<R>(options: TableOptions<R>): SourceTable<R> {
   const state = new Map<Key, R>()
   const log = changeLog<R>(options.keep ?? KEEP)
   let v = 0
-  const version = stored(0, {
+  const version = port(0, {
     name: `${name}.version`,
     ...(options.onDemand ? { onDemand: options.onDemand } : {}),
     ...(options.onIdle ? { onIdle: options.onIdle } : {}),

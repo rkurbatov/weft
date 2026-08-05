@@ -10,7 +10,7 @@
 
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
-import { heldOf, stored, subscribe } from '#weft'
+import { heldOf, port, subscribe } from '#weft'
 import { busChannel, busHub } from '#ipc/bus.ts'
 import { link } from '#ipc/link.ts'
 import { claimOf, greeting, isGreeting, postbox } from '#ipc/postbox.ts'
@@ -86,7 +86,7 @@ describe('addressing, over any line at all', () => {
 describe('the tab protocol over a line of callbacks', () => {
   test('a watcher is met, served, and hears changes', async () => {
     const line = localBroadcast()
-    const seats = stored(3, { name: 'seats' })
+    const seats = port(3, { name: 'seats' })
 
     const hub = busHub('station', line, { lease: false })
     until(hub.accept(channel => serve({ cells: { seats } }, channel, { schedule: atOnce })))
@@ -112,7 +112,7 @@ describe('the tab protocol over a line of callbacks', () => {
     const time = world()
     const line = localBroadcast()
     const asked: string[] = []
-    const seats = stored(1, {
+    const seats = port(1, {
       name: 'seats',
       onDemand: () => asked.push('on'),
       onIdle: () => asked.push('off'),
@@ -137,7 +137,7 @@ describe('the tab protocol over a line of callbacks', () => {
 
   test('a hub that holds one household refuses another, by name', async () => {
     const line = localBroadcast()
-    const seats = stored(1, { name: 'seats' })
+    const seats = port(1, { name: 'seats' })
     const hub = busHub('station', line, { lease: false, admit: claim => claim === 'ann' })
     until(hub.accept(channel => serve({ cells: { seats } }, channel, { schedule: atOnce })))
 
@@ -173,7 +173,7 @@ describe('the tab protocol over a line of callbacks', () => {
       close: () => listeners.clear(),
     }
 
-    const seats = stored(7, { name: 'seats' })
+    const seats = port(7, { name: 'seats' })
     const hub = busHub('station', mine, { lease: false })
     until(hub.accept(channel => serve({ cells: { seats } }, channel, { schedule: atOnce })))
 
@@ -193,7 +193,7 @@ describe('the tab protocol over a line of callbacks', () => {
 
   test('a tab from another build is refused by version, not left to fall apart', async () => {
     const line = localBroadcast()
-    const seats = stored(1, { name: 'seats' })
+    const seats = port(1, { name: 'seats' })
     const hub = busHub('station', line, { lease: false })
     until(hub.accept(channel => serve({ cells: { seats } }, channel, { schedule: atOnce })))
 
@@ -211,7 +211,7 @@ describe('the tab protocol over a line of callbacks', () => {
 
   test('a tab of this build is served as before', async () => {
     const line = localBroadcast()
-    const seats = stored(4, { name: 'seats' })
+    const seats = port(4, { name: 'seats' })
     const hub = busHub('station', line, { lease: false })
     until(hub.accept(channel => serve({ cells: { seats } }, channel, { schedule: atOnce })))
 

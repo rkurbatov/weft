@@ -1,6 +1,6 @@
 // The hand-written sheet.
 //
-// Reading order: what is stored, then the two indexes that have to be kept in
+// Reading order: what is port, then the two indexes that have to be kept in
 // step, then the four steps of an edit — relink, spread, sort, recompute.
 
 import { refName } from '../common/address.ts'

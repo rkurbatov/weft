@@ -9,8 +9,8 @@
 // holds. And a refusal to write is a declared state, not a silence: `saving`
 // says whether writes are landing, and why not.
 
-import { stored, subscribe } from '#graph/graph/graph.ts'
-import type { Stored, Watchable } from '#graph/graph/graph.ts'
+import { port, subscribe } from '#graph/graph/graph.ts'
+import type { Port, Watchable } from '#graph/graph/graph.ts'
 import { heldOf } from '#async/remote.ts'
 import type { Source } from '#async/source.ts'
 import type { Store } from './store.ts'
@@ -65,7 +65,7 @@ function describe(error: unknown): string {
  */
 function pumpFor(options: { key: string; store: Store; version?: number }) {
   const { key, store, version = 1 } = options
-  const saving = stored<Saving>(SAVING, { name: `${key}.saving` })
+  const saving = port<Saving>(SAVING, { name: `${key}.saving` })
   let pending: Envelope | undefined
   let flying = false
 
@@ -101,7 +101,7 @@ function pumpFor(options: { key: string; store: Store; version?: number }) {
 
 async function readEnvelope<T>(
   options: KeepOptions<T>,
-  saving: Stored<Saving>,
+  saving: Port<Saving>,
 ): Promise<{ value: unknown; at: number } | undefined> {
   const { key, store, version = 1, maxAge, migrate, onDropped } = options
   const now = options.now ?? Date.now
@@ -152,7 +152,7 @@ async function readEnvelope<T>(
  * Keep a stored cell. Watching is cold: persistence records what happens
  * anyway and never asks for work of its own.
  */
-export function keepInput<T>(target: Stored<T>, options: KeepOptions<T>): Kept {
+export function keepInput<T>(target: Port<T>, options: KeepOptions<T>): Kept {
   const now = options.now ?? Date.now
   const writes = pumpFor(options)
   let touched = false

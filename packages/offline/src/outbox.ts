@@ -4,7 +4,7 @@
 
 import { derived } from '#graph/graph/graph.ts'
 import { book as openBook } from './book.ts'
-import type { Entry } from './book.ts'
+import type { Note } from './book.ts'
 import { schedule } from './schedule.ts'
 import { owned } from '#graph/graph/region.ts'
 import type { Readable } from '#graph/graph/graph.ts'
@@ -13,7 +13,7 @@ import type { Store } from './store.ts'
 import type { Timers } from '#graph/graph/time.ts'
 import type { Saving } from './keep.ts'
 
-export type { Entry, EntryState } from './book.ts'
+export type { Note, NoteState } from './book.ts'
 
 export interface Handling {
   /** Put this on the request so a repeat is recognised as the same command. */
@@ -49,14 +49,14 @@ export interface OutboxOptions {
   now?: () => number
   timers?: Timers
   newId?: () => string
-  onStuck?: (entry: Entry) => void
+  onStuck?: (entry: Note) => void
   /** Told when a permanent or rejected fault discards the entry at once: the
    *  world said a no that retrying will not change. Discarding leaves a trace —
    *  the entry arrives with its last error; silence is not an option here. */
-  onRefused?: (entry: Entry) => void
+  onRefused?: (entry: Note) => void
   /** Told when an entry is dropped by hand. Discarding goes through the same
    *  door as success — with a mark and a trace, never a silent erasure. */
-  onDiscarded?: (entry: Entry) => void
+  onDiscarded?: (entry: Note) => void
 }
 
 export interface Outbox {
@@ -66,13 +66,13 @@ export interface Outbox {
   readonly saving: Readable<Saving>
   /** The whole book in the order it was written: owed, stuck, and — with
    *  `retain` — confirmed entries the base has not absorbed yet. */
-  readonly entries: Readable<readonly Entry[]>
+  readonly entries: Readable<readonly Note[]>
   /** What should lay over the base: everything but the stuck. */
-  readonly active: Readable<readonly Entry[]>
+  readonly active: Readable<readonly Note[]>
   /** How many are still owed to the world. */
   readonly owed: Readable<number>
   /** Are any stuck waiting for a person. */
-  readonly stuck: Readable<readonly Entry[]>
+  readonly stuck: Readable<readonly Note[]>
   /** Write a command down and send it. Resolves when it leaves the book; rejects if it gets stuck. */
   /** With opts.key the caller names the note: a repeat under the same key
    *  returns the very note already in the book instead of writing a second —
@@ -149,7 +149,7 @@ export function outbox(options: OutboxOptions): Outbox {
     clocks.set(lane, made)
     return made
   }
-  const laneOf = (entry: Entry): string => entry.lane ?? MAIN
+  const laneOf = (entry: Note): string => entry.lane ?? MAIN
 
   const pages = openBook(key, store, () => {
     if (!held) pumpAll()
@@ -194,7 +194,7 @@ export function outbox(options: OutboxOptions): Outbox {
 
     const handler = handlers[head.name]
     if (handler === undefined) {
-      const stuckEntry: Entry = {
+      const stuckEntry: Note = {
         ...head,
         state: 'stuck',
         lastError: `no handler for "${head.name}"`,
@@ -239,7 +239,7 @@ export function outbox(options: OutboxOptions): Outbox {
         }))
         retryLater(lane, clockOf(lane).backoff(head.attempts + 1))
       } else if (attempt >= maxAttempts) {
-        const stuckEntry: Entry = { ...head, attempts: attempt, state: 'stuck', lastError: message }
+        const stuckEntry: Note = { ...head, attempts: attempt, state: 'stuck', lastError: message }
         pages.replace(head.id, () => stuckEntry)
         onStuck?.(stuckEntry)
         settle(head.id, error)
@@ -264,18 +264,15 @@ export function outbox(options: OutboxOptions): Outbox {
     ready: pages.ready,
     saving,
     entries,
-    active: derived<readonly Entry[]>(
-      () => entries.get().filter(entry => entry.state !== 'stuck'),
-      {
-        name: `${key}.active`,
-        equal: (a, b) => a.length === b.length && a.every((entry, i) => entry === b[i]),
-      },
-    ),
+    active: derived<readonly Note[]>(() => entries.get().filter(entry => entry.state !== 'stuck'), {
+      name: `${key}.active`,
+      equal: (a, b) => a.length === b.length && a.every((entry, i) => entry === b[i]),
+    }),
     owed: derived(
       () => entries.get().filter(entry => entry.state !== 'stuck' && entry.state !== 'done').length,
       { name: `${key}.owed` },
     ),
-    stuck: derived<readonly Entry[]>(() => entries.get().filter(entry => entry.state === 'stuck'), {
+    stuck: derived<readonly Note[]>(() => entries.get().filter(entry => entry.state === 'stuck'), {
       name: `${key}.stuck`,
       equal: (a, b) => a.length === b.length && a.every((entry, i) => entry === b[i]),
     }),
@@ -297,7 +294,7 @@ export function outbox(options: OutboxOptions): Outbox {
         return { id, done }
       }
       const lane = opts?.lane ?? MAIN
-      const entry: Entry = {
+      const entry: Note = {
         id,
         name,
         args,
@@ -331,7 +328,7 @@ export function outbox(options: OutboxOptions): Outbox {
     note(name, args) {
       if (!retain) throw new Error(`weft: outbox "${key}" needs retain for note()`)
       const id = newId()
-      const entry: Entry = {
+      const entry: Note = {
         id,
         name,
         args,

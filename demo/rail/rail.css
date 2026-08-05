@@ -163,7 +163,7 @@
   color: var(--dim);
 }
 
-.waves {
+.ticks {
   position: fixed;
   left: 16px;
   bottom: 16px;
@@ -179,7 +179,7 @@
   font-variant-numeric: tabular-nums;
 }
 
-.waves p {
+.ticks p {
   margin: 4px 0;
 }
 
@@ -191,21 +191,21 @@
   color: #b23b2e;
 }
 
-.waves header {
+.ticks header {
   display: flex;
   gap: 6px;
   align-items: center;
   margin-bottom: 6px;
 }
 
-.waves header input {
+.ticks header input {
   flex: 1;
   border: 1px solid var(--line);
   border-radius: 6px;
   padding: 2px 8px;
 }
 
-.waves header button {
+.ticks header button {
   border: 1px solid var(--line);
   border-radius: 6px;
   background: #fff;
@@ -213,11 +213,11 @@
   cursor: pointer;
 }
 
-.waves .wave {
+.ticks .tick {
   cursor: pointer;
 }
 
-.waves .node {
+.ticks .node {
   border: 0;
   background: none;
   padding: 0 2px;
@@ -226,17 +226,17 @@
   font: inherit;
 }
 
-.waves .node.gate {
+.ticks .node.gate {
   color: #b23b2e;
 }
 
-.waves .detail {
+.ticks .detail {
   margin: 2px 0 6px 14px;
   border-left: 2px solid var(--line);
   padding-left: 8px;
 }
 
-.waves .trace {
+.ticks .trace {
   margin: 4px 0;
   border-bottom: 1px dashed var(--line);
   padding-bottom: 4px;

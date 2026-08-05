@@ -52,7 +52,7 @@ export function aggRunner(node: AggNode, make: Make): Runner {
       size: 0,
       hasSub: runs,
       hasJoin: decl.fold === 'custom' ? decl.join !== undefined : false,
-      forced: runs ? 'running' : 'recount',
+      forced: runs ? 'running' : 'oracle',
     })
     running.set(name, plan.carrier === 'running')
   }

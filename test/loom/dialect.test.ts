@@ -3,9 +3,9 @@
 
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
-import { stored } from '#weft'
+import { port } from '#weft'
 import { laid, cell, notes, sends, truth, will } from '#loom'
-import type { Entry } from '#weft'
+import type { Note } from '#weft'
 import type { Channel as Wire } from '#weft'
 import { wait } from '../kit/index.ts'
 
@@ -58,9 +58,9 @@ describe('the Loom dialect', () => {
   test('laid assembles the void into nothing and keeps identity', () => {
     const base = {
       get: () => ({ items: [{ id: 'a' }, { id: 'b' }], order: ['a', 'b'] }),
-      asked: stored(0),
+      asked: port(0),
     }
-    const book = stored<readonly Entry[]>([])
+    const book = port<readonly Note[]>([])
     const post = { notes: book, absorb: () => {} }
     const seen = laid(base, post, {
       shape: {
@@ -268,8 +268,8 @@ describe('the Loom dialect', () => {
   test('a local change costs the size of the book, not the size of the board', () => {
     const cards = Array.from({ length: 2000 }, (_, i) => ({ id: `c${i}` }))
     const order = cards.map(c => c.id)
-    const base = { get: () => ({ cards, order }), asked: stored(0) }
-    const book = stored<readonly Entry[]>([])
+    const base = { get: () => ({ cards, order }), asked: port(0) }
+    const book = port<readonly Note[]>([])
     const seen = laid(
       base,
       { notes: book, absorb: () => {} },

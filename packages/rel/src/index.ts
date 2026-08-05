@@ -35,7 +35,7 @@ export {
   scan,
   checkNode,
   canonNode,
-  recount,
+  oracle,
   keyOfRow,
   keyPaths,
   whyRow,

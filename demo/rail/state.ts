@@ -7,7 +7,7 @@
 // for the one standing order. Whether the convenient layer wants words of its
 // own for these is an open question in the register.
 import { command, watch } from '#weft'
-import type { Command, Stored, Watchable } from '#weft'
+import type { Command, Port, Watchable } from '#weft'
 import { feed, fold, listsBy, cell, shape, truthBy } from '#loom'
 import type { Feed, ListView, Truth } from '#loom'
 import type { Game, GameDetails, GameOdds, RailServer, Status } from './server.ts'
@@ -17,21 +17,21 @@ export const PAGE = 40
 
 export interface Rail {
   games: Feed<Game>
-  shelf: Stored<Shelf>
+  shelf: Port<Shelf>
   shelves: Record<Shelf, ListView<Game>>
-  /** Goals across everything live right now. A fold, not a recount. */
+  /** Goals across everything live right now. A fold, not a oracle. */
   goals: Watchable<number>
   /** Games the server bore after this rail opened. */
   arrivals: Watchable<number>
   /** The furthest row any screen has looked at. Screens report it; pages follow. */
-  reach: Stored<number>
-  loaded: Stored<number>
+  reach: Port<number>
+  loaded: Port<number>
   nextPage: Command<[], void>
   /** What the person is typing. The question with a calm in its passport. */
-  searchText: Stored<string>
+  searchText: Port<string>
   find: (text: string) => Truth<Game[]>
   /** The opened game, if any; its details come from two services at once. */
-  picked: Stored<number | null>
+  picked: Port<number | null>
   gameInfo: (id: number) => Truth<GameDetails | null>
   gameOdds: (id: number) => Truth<GameOdds | null>
   dispose(): void

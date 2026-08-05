@@ -2,13 +2,13 @@
 // the journal, plus the plain values everything else is built from.
 
 export {
-  stored,
+  port,
   derived,
   watch,
   subscribe,
   batch,
   untracked,
-  Stored,
+  Port,
   Derived,
   Watcher,
   trace,
@@ -18,7 +18,7 @@ export {
 export type {
   Equal,
   DerivedOptions,
-  StoredOptions,
+  PortOptions,
   WatchOptions,
   Readable,
   Watchable,
@@ -37,8 +37,8 @@ export { onNotice } from './data/notice.ts'
 export type { Notice } from './data/notice.ts'
 export { region, owned, regionName } from './graph/region.ts'
 export type { Region } from './graph/region.ts'
-export { quietly } from './graph/waves.ts'
-export type { Probe, WaveSummary, WaveWrite, WaveCompute } from './graph/waves.ts'
+export { quietly } from './graph/ticks.ts'
+export type { Probe, TickSummary, TickWrite, TickCompute } from './graph/ticks.ts'
 export type { EngineOptions } from './graph/engine.ts'
 export { journal } from './graph/journal.ts'
 export type { Journal } from './graph/journal.ts'

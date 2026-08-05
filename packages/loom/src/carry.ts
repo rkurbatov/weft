@@ -5,13 +5,13 @@
 // laying and the truths live in the station only; a tab holds nothing but
 // mirrors.
 
-import { derived, stored } from '#weft'
-import type { Stored, Watchable } from '#weft'
+import { derived, port } from '#weft'
+import type { Port, Watchable } from '#weft'
 import { heldOf } from '#weft'
 import { preserve } from '#weft'
 import { journal } from '#weft'
 import { quietly } from '#weft'
-import type { WaveSummary } from '#weft'
+import type { TickSummary } from '#weft'
 import { serve } from '#weft'
 import type { ServeOptions } from '#weft'
 import { link } from '#weft'
@@ -22,7 +22,7 @@ import { subscribe } from '#weft'
 
 export interface Offering {
   views?: Readonly<Record<string, Watchable<unknown>>>
-  facts?: Readonly<Record<string, Stored<never>>>
+  facts?: Readonly<Record<string, Port<never>>>
   acts?: Readonly<Record<string, (...args: never[]) => unknown>>
 }
 
@@ -38,8 +38,8 @@ export function offer(handles: Offering, channel: Channel, options: OfferOptions
 
   if (options.instruments !== undefined && options.instruments !== false) {
     const keep = options.instruments === true ? 64 : (options.instruments.keep ?? 64)
-    const tail = stored<readonly WaveSummary[]>([], { name: 'loom.waves' })
-    const book = journal(keep, () => quietly(() => tail.set([...book.waves()])))
+    const tail = port<readonly TickSummary[]>([], { name: 'loom.waves' })
+    const book = journal(keep, () => quietly(() => tail.set([...book.ticks()])))
     book.start()
     stopInstruments = () => book.stop()
     cells['loom.waves'] = tail
@@ -124,7 +124,7 @@ export function adopt(channel: Channel, options: LinkOptions = {}): Adopted {
 
 import { busHub, busChannel } from '#weft'
 import { leadOrFollow, webLocks } from '#weft'
-import { pairInMemory } from '#weft'
+import { wirePair } from '#weft'
 
 export interface Carried {
   /** This side's channel to whoever carries the station. */
@@ -158,9 +158,9 @@ export function carry(spec: CarrySpec, options: CarryOptions = {}): Carried {
 
   if (!tabsCanTalk) {
     const built = spec.station()
-    const pair = pairInMemory()
+    const pair = wirePair()
     const stopServe = built.serve(pair.graph)
-    const role = stored<'inline' | 'leading' | 'following'>('inline', { name: `${spec.name}.role` })
+    const role = port<'inline' | 'leading' | 'following'>('inline', { name: `${spec.name}.role` })
     return {
       channel: pair.watcher,
       role,
@@ -173,7 +173,7 @@ export function carry(spec: CarrySpec, options: CarryOptions = {}): Carried {
     }
   }
 
-  const role = stored<'inline' | 'leading' | 'following'>('following', {
+  const role = port<'inline' | 'leading' | 'following'>('following', {
     name: `${spec.name}.role`,
   })
   const stopLead = leadOrFollow({

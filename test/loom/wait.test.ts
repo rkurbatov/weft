@@ -2,13 +2,13 @@
 
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
-import { stored } from '#weft'
+import { port } from '#weft'
 import { Timeout, when, whenever } from '#loom'
 import { settle, until, world } from '../kit/index.ts'
 
 describe('waiting for the state to say so', () => {
   test('a condition already true is not waiting at all', async () => {
-    const seats = stored(5)
+    const seats = port(5)
     const value = await when(
       () => seats.get(),
       n => n > 3,
@@ -17,7 +17,7 @@ describe('waiting for the state to say so', () => {
   })
 
   test('settles on the write that makes it true, and not before', async () => {
-    const seats = stored(0)
+    const seats = port(0)
     let settled = false
     const waiting = when(
       () => seats.get(),
@@ -37,7 +37,7 @@ describe('waiting for the state to say so', () => {
 
   test('gives up on time, because a condition that never comes is silence', async () => {
     const clock = world()
-    const seats = stored(0)
+    const seats = port(0)
     const waiting = when(
       () => seats.get(),
       n => n > 0,
@@ -53,7 +53,7 @@ describe('waiting for the state to say so', () => {
   })
 
   test('an abort gives up too, with the reason it was given', async () => {
-    const seats = stored(0)
+    const seats = port(0)
     const control = new AbortController()
     const waiting = when(
       () => seats.get(),
@@ -68,7 +68,7 @@ describe('waiting for the state to say so', () => {
 
   test('waiting asks for the work, and lets it go when it is done', async () => {
     const asked: string[] = []
-    const feed = stored(0, {
+    const feed = port(0, {
       onDemand: () => asked.push('on'),
       onIdle: () => asked.push('off'),
     })
@@ -89,7 +89,7 @@ describe('waiting for the state to say so', () => {
 
   test('a cold wait is for what somebody else is keeping alive', async () => {
     const asked: string[] = []
-    const feed = stored(0, {
+    const feed = port(0, {
       onDemand: () => asked.push('on'),
       onIdle: () => asked.push('off'),
     })
@@ -108,7 +108,7 @@ describe('waiting for the state to say so', () => {
 
 describe('a standing handler', () => {
   test('runs on what the state holds now, and on every change after', async () => {
-    const owed = stored(0)
+    const owed = port(0)
     const seen: number[] = []
     until(
       whenever(
@@ -129,7 +129,7 @@ describe('a standing handler', () => {
   })
 
   test('starts silent when asked to', async () => {
-    const owed = stored(7)
+    const owed = port(7)
     const seen: number[] = []
     until(
       whenever(
@@ -149,7 +149,7 @@ describe('a standing handler', () => {
   })
 
   test('drops what arrives while it is busy — the default, and the safe one', async () => {
-    const owed = stored(0)
+    const owed = port(0)
     const started: number[] = []
     let release = (): void => {}
     const standing = until(
@@ -181,7 +181,7 @@ describe('a standing handler', () => {
   })
 
   test('queued: the last value wins, because a handler catches up to the present', async () => {
-    const owed = stored(0)
+    const owed = port(0)
     const started: number[] = []
     let release = (): void => {}
     until(
@@ -212,7 +212,7 @@ describe('a standing handler', () => {
   })
 
   test('restart: what is running is told to stop, so an async body can quit early', async () => {
-    const owed = stored(0)
+    const owed = port(0)
     const started: number[] = []
     const quit: number[] = []
     until(
@@ -237,7 +237,7 @@ describe('a standing handler', () => {
   })
 
   test('stopping is final, and tells the running body so', async () => {
-    const owed = stored(0)
+    const owed = port(0)
     const seen: number[] = []
     let aborted = false
     const standing = whenever(

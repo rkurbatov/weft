@@ -5,8 +5,8 @@
 // fires. So the hub holds each tab by a lease, renewed by anything the tab
 // says; the tab's channel keeps a heartbeat while somebody listens on it.
 
-import { portChannel } from './ports.ts'
-import type { Port } from './ports.ts'
+import { overWire } from './wires.ts'
+import type { Wire } from './wires.ts'
 import type { Channel } from './channel.ts'
 import { heartbeat, KEEP_ALIVE, LEASE } from './bus.ts'
 import { greeting, isGreeting } from './postbox.ts'
@@ -18,8 +18,8 @@ const GREETING = greeting(undefined)
 
 /** What a shared worker's global scope offers: a connection per tab. */
 export interface SharedScope {
-  addEventListener(kind: 'connect', handler: (event: { ports: readonly Port[] }) => void): void
-  removeEventListener(kind: 'connect', handler: (event: { ports: readonly Port[] }) => void): void
+  addEventListener(kind: 'connect', handler: (event: { ports: readonly Wire[] }) => void): void
+  removeEventListener(kind: 'connect', handler: (event: { ports: readonly Wire[] }) => void): void
 }
 
 /** Inside a shared worker: a hub whose arrivals are the tabs connecting. */
@@ -28,9 +28,9 @@ export function sharedWorkerHub(scope: SharedScope, options: HubOptions = {}): H
   const timers = options.timers ?? wallClock
   return {
     accept(onWatcher) {
-      const serving = new Map<Port, { stop: () => void; held?: unknown }>()
+      const serving = new Map<Wire, { stop: () => void; held?: unknown }>()
 
-      const drop = (port: Port): void => {
+      const drop = (port: Wire): void => {
         const entry = serving.get(port)
         if (entry === undefined) return
         if (entry.held !== undefined) timers.clear(entry.held)
@@ -38,7 +38,7 @@ export function sharedWorkerHub(scope: SharedScope, options: HubOptions = {}): H
         serving.delete(port)
       }
 
-      const renew = (port: Port): void => {
+      const renew = (port: Wire): void => {
         if (lease === false) return
         const entry = serving.get(port)
         if (entry === undefined) return
@@ -46,10 +46,10 @@ export function sharedWorkerHub(scope: SharedScope, options: HubOptions = {}): H
         entry.held = timers.set(() => drop(port), lease)
       }
 
-      const onConnect = (event: { ports: readonly Port[] }): void => {
+      const onConnect = (event: { ports: readonly Wire[] }): void => {
         const port = event.ports[0]
         if (port === undefined) return
-        const raw = portChannel(port)
+        const raw = overWire(port)
         const channel: Channel = {
           send: raw.send,
           // The heartbeat is transport talk: it renews the lease and goes no further.
@@ -75,10 +75,10 @@ export function sharedWorkerHub(scope: SharedScope, options: HubOptions = {}): H
 }
 
 /** In a tab: the channel to a shared worker. Pass `new SharedWorker(url).port`. */
-export function sharedWorkerChannel(port: Port, options: KeepAliveOptions = {}): Channel {
+export function sharedWorkerChannel(port: Wire, options: KeepAliveOptions = {}): Channel {
   const keepAlive = options.keepAlive ?? KEEP_ALIVE
   const timers = options.timers ?? wallClock
-  const raw = portChannel(port)
+  const raw = overWire(port)
   return {
     send: raw.send,
     listen: handler => {

@@ -1,11 +1,11 @@
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
-import { stored, derived, subscribe } from '#graph/graph/graph.ts'
+import { port, derived, subscribe } from '#graph/graph/graph.ts'
 import { family } from '#graph/graph/family.ts'
 
 describe('families of cells', () => {
   test('same key gives the same cell, different keys different cells', () => {
-    const table = stored(new Map([['a', 1]]))
+    const table = port(new Map([['a', 1]]))
     const item = family((id: string) => table.get().get(id) ?? 0)
     assert.equal(item('a'), item('a'))
     assert.notEqual(item('a'), item('b'))
@@ -27,7 +27,7 @@ describe('families of cells', () => {
   })
 
   test('a member reacts to its own row only', () => {
-    const rows = stored(
+    const rows = port(
       new Map([
         ['a', 1],
         ['b', 1],
@@ -57,7 +57,7 @@ describe('families of cells', () => {
   })
 
   test('watched members do not wake on unrelated writes', () => {
-    const rows = stored(
+    const rows = port(
       new Map([
         ['a', 1],
         ['b', 1],
@@ -103,7 +103,7 @@ describe('families of cells', () => {
   })
 
   test('a rebuilt member computes again and is correct', () => {
-    const source = stored(1)
+    const source = port(1)
     let builds = 0
     const item = family((id: string) => {
       builds++
@@ -118,7 +118,7 @@ describe('families of cells', () => {
   })
 
   test('evicted member stops hearing its sources', () => {
-    const source = stored(1)
+    const source = port(1)
     let runs = 0
     const item = family((_id: string) => {
       runs++
@@ -145,7 +145,7 @@ describe('families of cells', () => {
   })
 
   test('a formula over a member depends on it', () => {
-    const rows = stored(new Map([['a', 2]]))
+    const rows = port(new Map([['a', 2]]))
     const item = family((id: string) => rows.get().get(id) ?? 0)
     const doubled = derived(() => item('a').get() * 10)
     let seen = 0

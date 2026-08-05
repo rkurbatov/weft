@@ -17,7 +17,7 @@ describe('the measured line', () => {
     },
   })
 
-  test('oracle: every answer equals a recount, through measures, inserts and removals', () => {
+  test('oracle: every answer equals a oracle, through measures, inserts and removals', () => {
     const sizes = [48, 96, 48, 320, 48, 48, 96]
     const line = offsets(sizes)
 

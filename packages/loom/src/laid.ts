@@ -16,7 +16,7 @@ import type { Watchable } from '#weft'
 import { laneDrop, lanePlace } from '#weft'
 import type { Lanes } from '#weft'
 import { preserve } from '#weft'
-import type { Entry } from '#weft'
+import type { Note } from '#weft'
 
 export interface Lane {
   readonly id: string
@@ -44,7 +44,7 @@ export interface LaidShape<S, R> {
 }
 
 interface WillSide {
-  notes: Watchable<readonly Entry[]>
+  notes: Watchable<readonly Note[]>
   absorb(before: number): void
 }
 

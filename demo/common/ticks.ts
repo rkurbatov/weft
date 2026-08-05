@@ -1,6 +1,6 @@
-// The waves instrument. Not a tail anymore: filter by node, open a wave to
+// The ticks instrument. Not a tail anymore: filter by node, open a tick to
 // its writes and costs, click any name to follow it — the newest matching
-// wave is the answer to "why did this change last" — and, for nodes handed
+// tick is the answer to "why did this change last" — and, for nodes handed
 // in through `inspect`, a live trace: what it reads, who reads it, how
 // current its value is. Plain createElement so the same file runs under the
 // render test lane, where JSX does not.
@@ -10,7 +10,7 @@ import type { ReactNode } from 'react'
 import { onNotice } from '#weft'
 import type { Notice } from '#weft'
 import { journal, trace } from '#weft'
-import type { Trace, WaveSummary, Watchable } from '#weft'
+import type { Trace, TickSummary, Watchable } from '#weft'
 
 export type Inspectable = Watchable<unknown> & { readonly name?: string }
 
@@ -23,13 +23,13 @@ const short = (value: unknown): string => {
   }
 }
 
-function touched(wave: WaveSummary, needle: string): boolean {
+function touched(tick: TickSummary, needle: string): boolean {
   if (needle === '') return true
   const has = (name: string): boolean => name.includes(needle)
   return (
-    wave.writes.some(w => has(w.node)) ||
-    wave.computed.some(c => has(c.node)) ||
-    wave.gated.some(has)
+    tick.writes.some(w => has(w.node)) ||
+    tick.computed.some(c => has(c.node)) ||
+    tick.gated.some(has)
   )
 }
 
@@ -55,7 +55,7 @@ const noticeRow = (what: Notice, i: number): ReactNode =>
     what.message,
   )
 
-export function WavesPanel({
+export function TicksPanel({
   limit = 30,
   inspect = [],
 }: {
@@ -112,8 +112,8 @@ export function WavesPanel({
     )
 
   const tail = book
-    .waves()
-    .filter(wave => touched(wave, filter))
+    .ticks()
+    .filter(tick => touched(tick, filter))
     .slice(-limit)
     .toReversed()
 
@@ -121,11 +121,11 @@ export function WavesPanel({
 
   return h(
     'aside',
-    { className: 'waves' },
+    { className: 'ticks' },
     h(
       'header',
       null,
-      h('b', null, 'waves'),
+      h('b', null, 'ticks'),
       h('input', {
         placeholder: 'filter by node',
         value: filter,
@@ -145,38 +145,38 @@ export function WavesPanel({
     ),
     probedNode !== undefined && h(TraceView, { look: trace(probedNode) }),
     tail.length === 0 && h('p', { className: 'dim' }, 'quiet — interact with the page'),
-    ...tail.map(wave =>
+    ...tail.map(tick =>
       h(
         'div',
         {
-          key: wave.id,
-          className: 'wave',
-          onClick: () => setOpened(was => (was === wave.id ? null : wave.id)),
+          key: tick.id,
+          className: 'tick',
+          onClick: () => setOpened(was => (was === tick.id ? null : tick.id)),
         },
         h(
           'p',
           null,
-          h('b', null, `#${wave.id}`),
+          h('b', null, `#${tick.id}`),
           ' ',
-          ...wave.writes.map(w => nodeRef(w.node, 'node')),
-          ` → ${wave.computed.length}`,
-          wave.gated.length > 0 &&
+          ...tick.writes.map(w => nodeRef(w.node, 'node')),
+          ` → ${tick.computed.length}`,
+          tick.gated.length > 0 &&
             h(
               'span',
               { className: 'gate' },
               ' ● ',
-              ...wave.gated.map(g => nodeRef(g, 'node gate')),
+              ...tick.gated.map(g => nodeRef(g, 'node gate')),
             ),
-          ` · woke ${wave.woke} · ${wave.ms.toFixed(1)}ms`,
+          ` · woke ${tick.woke} · ${tick.ms.toFixed(1)}ms`,
         ),
-        opened === wave.id &&
+        opened === tick.id &&
           h(
             'div',
             { className: 'detail' },
-            ...wave.writes.map(w =>
+            ...tick.writes.map(w =>
               h('p', { key: `w-${w.node}` }, nodeRef(w.node, 'node'), ` ← ${short(w.value)}`),
             ),
-            ...wave.computed.map((c, i) =>
+            ...tick.computed.map((c, i) =>
               h(
                 'p',
                 { key: `c-${c.node}-${i}` },

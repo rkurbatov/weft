@@ -2,23 +2,23 @@
 
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
-import { blocks, derived, stored, watch } from '#weft'
-import type { Stored } from '#weft'
+import { blocks, derived, port, watch } from '#weft'
+import type { Port } from '#weft'
 
 describe('block trees', () => {
   /** A line of numbers as cells, plus a count of how many were read. */
   function numbers(size: number): {
-    at: (i: number) => Stored<number>
+    at: (i: number) => Port<number>
     read: (line: string, i: number) => number
     reads: () => number
     resetReads: () => void
   } {
-    const cells = new Map<number, Stored<number>>()
+    const cells = new Map<number, Port<number>>()
     let reads = 0
-    const at = (i: number): Stored<number> => {
+    const at = (i: number): Port<number> => {
       let box = cells.get(i)
       if (box === undefined) {
-        box = stored(i < size ? i + 1 : 0, { name: `n${i}` })
+        box = port(i < size ? i + 1 : 0, { name: `n${i}` })
         cells.set(i, box)
       }
       return box

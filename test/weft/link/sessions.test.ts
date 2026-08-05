@@ -8,7 +8,7 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
 import { BroadcastChannel } from 'node:worker_threads'
-import { busChannel, busHub, heldOf, stored, memoryStore, serve, subscribe, within } from '#weft'
+import { busChannel, busHub, heldOf, port, memoryStore, serve, subscribe, within } from '#weft'
 import { link } from '#ipc/link.ts'
 
 describe('sessions apart', () => {
@@ -89,7 +89,7 @@ describe('sessions apart', () => {
       buses.push(line)
       return line as unknown as Parameters<typeof busHub>[1]
     }
-    const seats = stored(3, { name: 'seats' })
+    const seats = port(3, { name: 'seats' })
     const hub = busHub('station', bus(), { admit: claim => claim === 'ann', lease: false })
     const stopServing = hub.accept(channel =>
       serve({ cells: { seats } }, channel, { schedule: fn => fn() }),

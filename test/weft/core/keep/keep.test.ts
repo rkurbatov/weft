@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
-import { stored, subscribe } from '#graph/graph/graph.ts'
+import { port, subscribe } from '#graph/graph/graph.ts'
 import { keepInput, keepSource } from '#offline/keep.ts'
 import { memoryStore } from '#offline/store.ts'
 import { source } from '#async/source.ts'
@@ -10,7 +10,7 @@ import { settle, slowStore, world } from '../../../kit/index.ts'
 describe('keeping things on disk', () => {
   test('restoring never delays the first show: the initial value stands until the disk answers', async () => {
     const disk = slowStore({ note: { v: 1, at: 900, value: 'from disk' } })
-    const target = stored('draft')
+    const target = port('draft')
     const kept = keepInput(target, { key: 'note', store: disk.store })
 
     // The screen is already showing; the disk is still thinking.
@@ -24,7 +24,7 @@ describe('keeping things on disk', () => {
   test('an edit made while the disk was thinking wins over what the disk holds', async () => {
     const disk = slowStore({ note: { v: 1, at: 900, value: 'from disk' } })
     const clock = world()
-    const target = stored('draft')
+    const target = port('draft')
     const kept = keepInput(target, { key: 'note', store: disk.store, now: clock.now })
 
     target.set('typed before the disk answered')
@@ -44,7 +44,7 @@ describe('keeping things on disk', () => {
   test('quick edits on a slow disk are never lost: the disk ends on the latest', async () => {
     const disk = slowStore()
     const clock = world()
-    const target = stored('a')
+    const target = port('a')
     const kept = keepInput(target, { key: 'note', store: disk.store, now: clock.now })
     await disk.release() // the read: nothing there
 
@@ -61,7 +61,7 @@ describe('keeping things on disk', () => {
   test('a refusal to write is declared, and the next change recovers by itself', async () => {
     const disk = slowStore()
     const clock = world()
-    const target = stored('a')
+    const target = port('a')
     const kept = keepInput(target, { key: 'note', store: disk.store, now: clock.now })
     await disk.release() // the read
     assert.equal(kept.saving.peek().ok, true)
@@ -82,7 +82,7 @@ describe('keeping things on disk', () => {
 
   test('a disk that cannot even be read is the same declared state', async () => {
     const disk = slowStore()
-    const target = stored('draft')
+    const target = port('draft')
     const kept = keepInput(target, { key: 'note', store: disk.store })
     await disk.release(new Error('InvalidStateError'))
     assert.equal(await kept.restored, false)
@@ -91,17 +91,17 @@ describe('keeping things on disk', () => {
     kept.stop()
   })
 
-  test('a stored cell survives the reload', async () => {
+  test('a port cell survives the reload', async () => {
     const store = memoryStore()
     const clock = world()
-    const first = stored('draft')
+    const first = port('draft')
     const keptFirst = keepInput(first, { key: 'note', store, now: clock.now })
     assert.equal(await keptFirst.restored, false)
     first.set('a real note')
     await settle()
     keptFirst.stop()
 
-    const second = stored('draft')
+    const second = port('draft')
     const keptSecond = keepInput(second, { key: 'note', store, now: clock.now })
     assert.equal(await keptSecond.restored, true)
     assert.equal(second.peek(), 'a real note')
@@ -113,13 +113,13 @@ describe('keeping things on disk', () => {
   test('what is kept needs no text packing: a Date survives as a Date', async () => {
     const store = memoryStore()
     const clock = world()
-    const first = stored({ title: 'x', at: new Date(7) })
+    const first = port({ title: 'x', at: new Date(7) })
     const kept = keepInput(first, { key: 'row', store, now: clock.now })
     first.set({ title: 'kept', at: new Date(42) })
     await settle()
     kept.stop()
 
-    const second = stored({ title: '', at: new Date(0) })
+    const second = port({ title: '', at: new Date(0) })
     const keptSecond = keepInput(second, { key: 'row', store, now: clock.now })
     assert.equal(await keptSecond.restored, true)
     assert.ok(second.peek().at instanceof Date)
@@ -132,13 +132,13 @@ describe('keeping things on disk', () => {
     const clock = world()
     const dropped: Dropped[] = []
 
-    const old = stored({ title: 'x' })
+    const old = port({ title: 'x' })
     const keeping = keepInput(old, { key: 'row', store, version: 1, now: clock.now })
     old.set({ title: 'kept' })
     await settle()
     keeping.stop()
 
-    const plain = stored({ title: '' })
+    const plain = port({ title: '' })
     const withoutMigration = keepInput(plain, {
       key: 'row',
       store,
@@ -150,19 +150,19 @@ describe('keeping things on disk', () => {
     assert.deepEqual(dropped, ['version'])
     withoutMigration.stop()
 
-    const again = stored({ title: 'x' })
+    const again = port({ title: 'x' })
     const keepingAgain = keepInput(again, { key: 'row2', store, version: 1, now: clock.now })
     again.set({ title: 'kept' })
     await settle()
     keepingAgain.stop()
-    const rescued = stored({ title: '' })
+    const rescued = port({ title: '' })
     const withMigration = keepInput(rescued, {
       key: 'row2',
       store,
       version: 2,
       now: clock.now,
-      migrate: (stored, from) =>
-        from === 1 ? { title: `${(stored as { title: string }).title} (v1)` } : undefined,
+      migrate: (port, from) =>
+        from === 1 ? { title: `${(port as { title: string }).title} (v1)` } : undefined,
     })
     assert.equal(await withMigration.restored, true)
     assert.equal(rescued.peek().title, 'kept (v1)')
@@ -172,7 +172,7 @@ describe('keeping things on disk', () => {
   test('what is too old to keep is not put back', async () => {
     const store = memoryStore()
     const clock = world()
-    const before = stored(0)
+    const before = port(0)
     const keeping = keepInput(before, { key: 'n', store, now: clock.now })
     before.set(7)
     await settle()
@@ -180,7 +180,7 @@ describe('keeping things on disk', () => {
 
     clock.jump(10_000)
     const dropped: Dropped[] = []
-    const after = stored(0)
+    const after = port(0)
     const kept = keepInput(after, {
       key: 'n',
       store,
@@ -198,7 +198,7 @@ describe('keeping things on disk', () => {
     const store = memoryStore({ broken: 'not an envelope at all' })
     const clock = world()
     const dropped: Dropped[] = []
-    const target = stored('safe')
+    const target = port('safe')
     const kept = keepInput(target, {
       key: 'broken',
       store,
