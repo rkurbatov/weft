@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
 import { subscribe } from '#weft'
-import { byEach, feed, fold, keyedBy, shape } from '#loom'
+import { byEach, feed, fold, listsBy, shape } from '#loom'
+import { until } from '../kit/index.ts'
 
 describe('the shape of an answer', () => {
   interface Game {
@@ -12,7 +13,7 @@ describe('the shape of an answer', () => {
   }
 
   const make = () => {
-    const games = keyedBy(feed<Game>({ name: 'games', key: g => g.id }), 'id')
+    const games = feed<Game>({ name: 'games', key: g => g.id })
     games.take(
       { id: 1, status: 'live', start: 20, goals: 3 },
       { id: 2, status: 'live', start: 10, goals: 1 },
@@ -71,7 +72,7 @@ describe('the shape of an answer', () => {
   })
 
   test('the whole-collection fold lives even over nothing', () => {
-    const games = keyedBy(feed<Game>({ name: 'games', key: g => g.id }), 'id')
+    const games = feed<Game>({ name: 'games', key: g => g.id })
     const totals = shape({ all: fold(games, g => ({ n: g.count() })) })
     const stop = subscribe(totals.all, () => {})
     assert.deepEqual(totals.all.peek(), { n: 0 })
@@ -79,5 +80,74 @@ describe('the shape of an answer', () => {
     assert.deepEqual(totals.all.peek(), { n: 1 })
     stop()
     games.dispose()
+  })
+})
+
+describe('shelves taken from the data', () => {
+  interface Ticket {
+    id: number
+    state: 'open' | 'done'
+    weight: number
+    at: number
+  }
+
+  const ticket = (id: number, state: Ticket['state'], weight: number, at: number): Ticket => ({
+    id,
+    state,
+    weight,
+    at,
+  })
+
+  test('one shelf per value of a field, built on first look and kept after', () => {
+    const tickets = feed<Ticket>({ name: 'tickets', key: t => t.id })
+    const board = shape(
+      { shelves: listsBy(tickets, 'state', { order: 'at', whole: 'all' }) },
+      { name: 'board' },
+    )
+    // A form is alive while somebody looks at it, like everything here.
+    until(subscribe(board.shelves.all.size, () => {}))
+    until(subscribe(board.shelves.open.rows, () => {}))
+    until(subscribe(board.shelves.done.size, () => {}))
+    tickets.take(ticket(1, 'open', 3, 10), ticket(2, 'done', 5, 20), ticket(3, 'open', 1, 30))
+
+    assert.equal(board.shelves.all.size.peek(), 3)
+    assert.equal(board.shelves.open.size.peek(), 2)
+    assert.equal(board.shelves.done.size.peek(), 1)
+    assert.deepEqual(
+      board.shelves.open.rows.peek().map(t => t.id),
+      [1, 3],
+      'ordered by the field named once',
+    )
+
+    // The same shelf, asked for twice, is the same shelf.
+    assert.equal(board.shelves.open, board.shelves.open)
+  })
+
+  test('a value nobody has seen yet gets its shelf when it arrives', () => {
+    const tickets = feed<Ticket>({ name: 'tickets', key: t => t.id })
+    const board = shape({ shelves: listsBy(tickets, 'state', { order: 'at' }) }, { name: 'later' })
+    until(subscribe(board.shelves.done.size, () => {}))
+    tickets.take(ticket(1, 'open', 3, 10))
+    assert.equal(board.shelves.done.size.peek(), 0, 'an empty shelf is a shelf, not an error')
+
+    tickets.take(ticket(2, 'done', 1, 5))
+    assert.equal(board.shelves.done.size.peek(), 1)
+  })
+
+  test('a measure of one’s own, over a shelf’s worth of rows', () => {
+    const tickets = feed<Ticket>({ name: 'tickets', key: t => t.id })
+    const board = shape(
+      {
+        weight: fold(
+          tickets,
+          g => g.sum(t => t.weight * 2),
+          t => t.state === 'open',
+        ),
+      },
+      { name: 'weights' },
+    )
+    until(subscribe(board.weight, () => {}))
+    tickets.take(ticket(1, 'open', 3, 10), ticket(2, 'done', 5, 20), ticket(3, 'open', 1, 30))
+    assert.equal(board.weight.peek(), 8)
   })
 })

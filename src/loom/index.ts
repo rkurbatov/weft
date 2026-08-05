@@ -24,5 +24,5 @@ export { region } from '#weft'
 export { offer, adopt, carry } from './carry.ts'
 export type { Offering, OfferOptions, Adopted, Carried, CarrySpec } from './carry.ts'
 
-export { shape, byEach, fold, keyedBy } from './shape.ts'
-export type { Group } from './shape.ts'
+export { byEach, fold, keyedBy, list, listsBy, shape } from './shape.ts'
+export type { Group, ListSpec, ListView } from './shape.ts'

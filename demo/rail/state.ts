@@ -8,8 +8,8 @@
 // own for these is an open question in the register.
 import { command, watch } from '#weft'
 import type { Command, Watchable } from '#weft'
-import { fact, feed, truthBy } from '#loom'
-import type { Fact, Feed, Sorted, Truth } from '#loom'
+import { fact, feed, fold, listsBy, shape, truthBy } from '#loom'
+import type { Fact, Feed, ListView, Truth } from '#loom'
 import type { Game, GameDetails, GameOdds, RailServer, Status } from './server.ts'
 
 export type Shelf = Status | 'all'
@@ -18,8 +18,7 @@ export const PAGE = 40
 export interface Rail {
   games: Feed<Game>
   shelf: Fact<Shelf>
-  shelves: Record<Shelf, Sorted<Game>>
-  counts: Record<Shelf, Watchable<number>>
+  shelves: Record<Shelf, ListView<Game>>
   /** Goals across everything live right now. A fold, not a recount. */
   goals: Watchable<number>
   /** Games the server bore after this rail opened. */
@@ -76,26 +75,26 @@ export function rail(server: RailServer): Rail {
     void nextPage.run()
   })
 
-  const live = games.only(g => g.status === 'live', 'live')
-  const upcoming = games.only(g => g.status === 'upcoming', 'upcoming')
-  const final = games.only(g => g.status === 'final', 'final')
+  // The collection half of this screen, as one form: what each shelf is, in
+  // what order, and the two numbers the header shows.
+  const board = shape(
+    {
+      shelves: listsBy(games, 'status', { order: byStart, whole: 'all' }),
+      goals: fold(
+        games,
+        g => g.sum(r => r.score.h + r.score.a),
+        g => g.status === 'live',
+      ),
+      arrivals: fold(
+        games,
+        g => g.count(),
+        g => g.born > openedAt,
+      ),
+    },
+    { name: 'rail' },
+  )
 
-  const shelves: Record<Shelf, Sorted<Game>> = {
-    all: games.sortedBy(byStart, 'all.order'),
-    live: live.sortedBy(byStart, 'live.order'),
-    upcoming: upcoming.sortedBy(byStart, 'upcoming.order'),
-    final: final.sortedBy(byStart, 'final.order'),
-  }
-
-  const counts: Record<Shelf, Watchable<number>> = {
-    all: games.size,
-    live: live.size,
-    upcoming: upcoming.size,
-    final: final.size,
-  }
-
-  const goals = live.sumBy(g => g.score.h + g.score.a)
-  const arrivals = games.count(g => g.born > openedAt)
+  const shelves: Record<Shelf, ListView<Game>> = board.shelves
 
   const shelf = fact<Shelf>('all', { name: 'shelf' })
 
@@ -125,9 +124,8 @@ export function rail(server: RailServer): Rail {
     games,
     shelf,
     shelves,
-    counts,
-    goals,
-    arrivals,
+    goals: board.goals as Watchable<number>,
+    arrivals: board.arrivals as Watchable<number>,
     reach,
     loaded,
     nextPage,

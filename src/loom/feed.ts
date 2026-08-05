@@ -47,6 +47,9 @@ export interface Sorted<R> {
 
 export interface Feed<R> {
   readonly name: string
+  /** How a row's key is taken. Kept so the query layer can learn the field
+   *  names from it instead of being told them a second time. */
+  readonly keyOf: (row: R) => Key
   /** Every row, in the order they first arrived. */
   rows: Watchable<readonly R[]>
   size: Watchable<number>
@@ -75,14 +78,16 @@ type EngineTable<R> = ReturnType<typeof table<R>>
 /** The reading side of a feed, shared by the whole feed and by its parts. */
 function reading<R>(
   t: EngineTable<R> | ReturnType<EngineTable<R>['where']>,
+  keyOf: (row: R) => Key,
 ): Omit<Feed<R>, 'take' | 'lose' | 'feed' | 'reset' | 'peek'> {
   return {
     name: t.name,
+    keyOf,
     rows: t.all,
     size: t.size,
     row: key => t.row(key),
-    only: (test, name) => reading(t.where(test, name)) as Feed<R>,
-    onlyLive: (pick, name) => reading(t.whereLive(pick, name)) as Feed<R>,
+    only: (test, name) => reading(t.where(test, name), keyOf) as Feed<R>,
+    onlyLive: (pick, name) => reading(t.whereLive(pick, name), keyOf) as Feed<R>,
     sortedBy: (compare, name) => {
       const order = t.orderBy(compare, name)
       return {
@@ -129,7 +134,7 @@ export function feed<R>(passport: FeedPassport<R>): Feed<R> {
   })
 
   const self = {
-    ...reading(t),
+    ...reading(t, passport.key),
     take: (...rows) => t.put(...rows),
     lose: (...keys) => t.drop(...keys),
     feed: delta => t.apply(delta),

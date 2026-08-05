@@ -50,7 +50,10 @@ const Card = memo(function Card({ id }: { id: number }): ReactNode {
 })
 
 function Tab({ name }: { name: Shelf }): ReactNode {
-  const live = useLive(() => ({ picked: app.shelf.get() === name, count: app.counts[name].get() }))
+  const live = useLive(() => ({
+    picked: app.shelf.get() === name,
+    count: app.shelves[name].size.get(),
+  }))
   const { picked, count } = live
   return (
     <button className={picked ? 'tab on' : 'tab'} onClick={() => app.shelf.set(name)}>
@@ -231,7 +234,9 @@ export function App(): ReactNode {
       <Rail />
       {picked !== null && <Details id={picked} />}
       {waves && (
-        <WavesPanel inspect={[app.searchText, app.goals, app.counts.live, app.counts.all]} />
+        <WavesPanel
+          inspect={[app.searchText, app.goals, app.shelves.live.size, app.shelves.all.size]}
+        />
       )}
     </div>
   )

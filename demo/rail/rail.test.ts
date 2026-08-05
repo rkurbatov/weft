@@ -25,8 +25,11 @@ test('the rail feeds itself: a look starts the feed and loads pages; leaving sto
   }
 
   // The shelves partition the catalogue, live.
-  const { counts } = app
-  assert.equal(counts.live.peek() + counts.upcoming.peek() + counts.final.peek(), counts.all.peek())
+  const { shelves } = app
+  assert.equal(
+    shelves.live.size.peek() + shelves.upcoming.size.peek() + shelves.final.size.peek(),
+    shelves.all.size.peek(),
+  )
 
   stop()
   assert.equal(server.watching(), 0) // nobody looks — the feed rests
