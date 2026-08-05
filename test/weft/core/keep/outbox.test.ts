@@ -419,4 +419,69 @@ describe('the outbox', () => {
     await box.ready
     assert.throws(() => box.note('add', {}), /needs retain/)
   })
+
+  test('a lane held up by a refusal does not hold up the others', async () => {
+    const clock = world()
+    const sent: string[] = []
+    let analyticsUp = false
+    const box = outbox({
+      key: 'k',
+      store: memoryStore(),
+      handlers: {
+        track: () => {
+          if (analyticsUp) {
+            sent.push('track')
+            return Promise.resolve()
+          }
+          return Promise.reject(new Error('analytics is down'))
+        },
+        save: (args: unknown) => {
+          sent.push(`save:${String((args as { doc: string }).doc)}`)
+          return Promise.resolve()
+        },
+      },
+      retry: 1000,
+      timers: clock.timers,
+      now: clock.now,
+    })
+    await box.ready
+
+    // The slow, broken thing is written first — in one queue it would hold
+    // everything behind it for as long as it keeps failing.
+    box.send('track', { event: 'opened' }, { lane: 'analytics' })
+    box.send('save', { doc: 'a' })
+    box.send('save', { doc: 'b' })
+    await clock.advance(1)
+
+    assert.deepEqual(sent, ['save:a', 'save:b'], 'the documents went while analytics kept failing')
+    assert.equal(box.owed.peek(), 1, 'the analytics note is still owed')
+
+    // And when it comes back, its own lane carries on where it stopped.
+    analyticsUp = true
+    await clock.advance(5000)
+    assert.deepEqual(sent, ['save:a', 'save:b', 'track'])
+    assert.equal(box.owed.peek(), 0)
+  })
+
+  test('order still holds within a lane', async () => {
+    const clock = world()
+    const sent: string[] = []
+    const box = outbox({
+      key: 'k',
+      store: memoryStore(),
+      handlers: {
+        step: (args: unknown) => {
+          sent.push(String((args as { n: number }).n))
+          return Promise.resolve()
+        },
+      },
+      timers: clock.timers,
+      now: clock.now,
+    })
+    await box.ready
+
+    for (const n of [1, 2, 3]) box.send('step', { n }, { lane: 'one' })
+    await clock.advance(1)
+    assert.deepEqual(sent, ['1', '2', '3'])
+  })
 })

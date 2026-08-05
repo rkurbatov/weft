@@ -77,7 +77,11 @@ export interface Outbox {
   /** With opts.key the caller names the note: a repeat under the same key
    *  returns the very note already in the book instead of writing a second —
    *  the law of the key on this boundary. */
-  send(name: string, args: unknown, opts?: { key?: string }): { id: string; done: Promise<void> }
+  send(
+    name: string,
+    args: unknown,
+    opts?: { key?: string; lane?: string },
+  ): { id: string; done: Promise<void> }
   /** Write down a fait accompli: confirmed elsewhere, never sent. Born 'done',
    *  it lays over the base until absorb() says the base has caught up.
    *  Meaningful with `retain`; without it the base has nothing to catch up to,
@@ -94,6 +98,9 @@ export interface Outbox {
   resume(): void
   readonly paused: boolean
 }
+
+/** The lane everything shares unless it asks for one of its own. */
+const MAIN = 'main'
 
 function randomId(): string {
   const crypto = (globalThis as { crypto?: { randomUUID?: () => string } }).crypto
@@ -122,21 +129,38 @@ export function outbox(options: OutboxOptions): Outbox {
   const now = options.now ?? Date.now
   const newId = options.newId ?? randomId
 
-  const clock = schedule({
+  const laneOptions = {
     retry,
     cap: options.retryCap ?? retry * 32,
     ...(options.timers === undefined ? {} : { timers: options.timers }),
     ...(options.paused === undefined ? {} : { paused: options.paused }),
-  })
+  }
+  /**
+   * One clock per lane, born when the lane is first used. Order holds within a
+   * lane; a lane waiting out a refusal does not hold up the others — an
+   * analytics call must not delay the saving of a document.
+   */
+  const clocks = new Map<string, ReturnType<typeof schedule>>()
+  let held = laneOptions.paused ?? false
+  const clockOf = (lane: string): ReturnType<typeof schedule> => {
+    const standing = clocks.get(lane)
+    if (standing !== undefined) return standing
+    const made = schedule({ ...laneOptions, paused: held })
+    clocks.set(lane, made)
+    return made
+  }
+  const laneOf = (entry: Entry): string => entry.lane ?? MAIN
+
   const pages = openBook(key, store, () => {
-    if (!clock.held()) void pump()
+    if (!held) pumpAll()
   })
   const { entries, saving } = pages
   const waiting = new Map<
     string,
     { resolve: () => void; reject: (error: unknown) => void; promise?: Promise<void> }
   >()
-  let sending = false
+  /** Lanes with something in flight right now. */
+  const sending = new Set<string>()
 
   function settle(id: string, error?: unknown): void {
     const waiter = waiting.get(id)
@@ -146,15 +170,26 @@ export function outbox(options: OutboxOptions): Outbox {
     else waiter.reject(error)
   }
 
-  /** Try the head again after a wait: the only thing that touches the clock. */
-  function retryLater(delay: number): void {
-    clock.after(delay, () => void pump())
+  /** Try this lane's head again after a wait: the only thing touching a clock. */
+  function retryLater(lane: string, delay: number): void {
+    clockOf(lane).after(delay, () => void pump(lane))
+  }
+
+  /** Wake every lane that has something owed. */
+  function pumpAll(): void {
+    const lanes = new Set<string>()
+    for (const entry of entries.peek()) {
+      if (entry.state !== 'stuck' && entry.state !== 'done') lanes.add(laneOf(entry))
+    }
+    for (const lane of lanes) void pump(lane)
   }
 
   /** Send the head of the book, one at a time: order is part of the promise. */
-  async function pump(): Promise<void> {
-    if (sending || clock.held() || !pages.lifted()) return
-    const head = entries.peek().find(entry => entry.state !== 'stuck' && entry.state !== 'done')
+  async function pump(lane: string = MAIN): Promise<void> {
+    if (sending.has(lane) || held || !pages.lifted()) return
+    const head = entries
+      .peek()
+      .find(entry => laneOf(entry) === lane && entry.state !== 'stuck' && entry.state !== 'done')
     if (head === undefined) return
 
     const handler = handlers[head.name]
@@ -167,11 +202,11 @@ export function outbox(options: OutboxOptions): Outbox {
       pages.replace(head.id, () => stuckEntry)
       onStuck?.(stuckEntry)
       settle(head.id, new Error(stuckEntry.lastError))
-      void pump()
+      void pump(lane)
       return
     }
 
-    sending = true
+    sending.add(lane)
     const attempt = head.attempts + 1
     pages.replace(head.id, entry => ({ ...entry, state: 'sending', attempts: attempt }))
     try {
@@ -202,7 +237,7 @@ export function outbox(options: OutboxOptions): Outbox {
           attempts: head.attempts,
           lastError: message,
         }))
-        retryLater(clock.backoff(head.attempts + 1))
+        retryLater(lane, clockOf(lane).backoff(head.attempts + 1))
       } else if (attempt >= maxAttempts) {
         const stuckEntry: Entry = { ...head, attempts: attempt, state: 'stuck', lastError: message }
         pages.replace(head.id, () => stuckEntry)
@@ -210,17 +245,20 @@ export function outbox(options: OutboxOptions): Outbox {
         settle(head.id, error)
       } else {
         pages.replace(head.id, entry => ({ ...entry, state: 'waiting', lastError: message }))
-        retryLater(clock.backoff(attempt))
+        retryLater(lane, clockOf(lane).backoff(attempt))
       }
     } finally {
-      sending = false
+      sending.delete(lane)
     }
-    if (!clock.waiting()) void pump()
+    if (!clockOf(lane).waiting()) void pump(lane)
   }
 
   // A region taking this outbox down holds the book: entries stay written,
   // nothing more is sent, no timer stays on the clock.
-  owned(() => clock.hold())
+  owned(() => {
+    held = true
+    for (const clock of clocks.values()) clock.hold()
+  })
 
   return {
     ready: pages.ready,
@@ -255,7 +293,16 @@ export function outbox(options: OutboxOptions): Outbox {
         done.catch(() => {})
         return { id, done }
       }
-      const entry: Entry = { id, name, args, at: now(), attempts: 0, state: 'waiting' }
+      const lane = opts?.lane ?? MAIN
+      const entry: Entry = {
+        id,
+        name,
+        args,
+        at: now(),
+        attempts: 0,
+        state: 'waiting',
+        ...(lane === MAIN ? {} : { lane }),
+      }
       // Written down before it is sent: a death between the two loses nothing.
       pages.write([...entries.peek(), entry])
       let arm: { resolve: () => void; reject: (error: unknown) => void } | undefined
@@ -266,7 +313,7 @@ export function outbox(options: OutboxOptions): Outbox {
       // The caller may ignore `done`; a refusal is already reported through the
       // entry itself, so an ignored promise must not look like a lost error.
       done.catch(() => {})
-      void pump()
+      void pump(lane)
       return { id, done }
     },
 
@@ -298,27 +345,34 @@ export function outbox(options: OutboxOptions): Outbox {
       pages.replace(id, entry =>
         entry.state === 'stuck' ? { ...entry, state: 'waiting', attempts: 0 } : entry,
       )
-      void pump()
+      const revived = entries.peek().find(one => one.id === id)
+      if (revived !== undefined) void pump(laneOf(revived))
     },
 
     forget(id) {
       const entry = entries.peek().find(one => one.id === id)
       pages.remove(id)
-      if (entry !== undefined) onDiscarded?.({ ...entry, lastError: 'discarded by hand' })
+      if (entry !== undefined) {
+        onDiscarded?.({ ...entry, lastError: 'discarded by hand' })
+        // Its lane may have been waiting behind it.
+        void pump(laneOf(entry))
+      }
       settle(id, new Error(`discarded by hand: ${id}`))
     },
 
     pause() {
-      clock.hold()
+      held = true
+      for (const clock of clocks.values()) clock.hold()
     },
 
     resume() {
-      clock.release()
-      void pump()
+      held = false
+      for (const clock of clocks.values()) clock.release()
+      pumpAll()
     },
 
     get paused() {
-      return clock.held()
+      return held
     },
   }
 }

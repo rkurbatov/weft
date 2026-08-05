@@ -19,6 +19,12 @@ export interface Entry {
   /** The idempotency key. The same one on every attempt, including after a reload. */
   readonly id: string
   readonly name: string
+  /**
+   * Which lane this entry waits in. Order holds within a lane; lanes do not
+   * wait for each other. Absent on entries written before lanes existed, and
+   * on everything that never asked for one — they share the main lane.
+   */
+  readonly lane?: string
   readonly args: unknown
   /** When it was written down. */
   readonly at: number
