@@ -39,13 +39,17 @@ export interface Offsets {
 export function offsets(initial: readonly number[] = []): Offsets {
   let sizes: number[] = initial.slice()
   let n = sizes.length
-  let tree = new Float64Array(0) // 1-based Fenwick, built lazily
+  // 1-based Fenwick, built lazily and grown with room to spare, so that rows
+  // arriving one at a time do not each cost a new array.
+  let tree = new Float64Array(0)
   let stale = true
   let worked = 0
 
   const rebuild = (): void => {
     n = sizes.length
-    tree = new Float64Array(n + 1)
+    // Half again as much room: appending stays cheap for a while after every
+    // rebuild, and the slack is one number per row at worst.
+    tree = new Float64Array(Math.max(n + 1, Math.ceil(n * 1.5) + 1))
     for (let i = 0; i < n; i++) {
       worked++
       tree[i + 1] = (tree[i + 1] as number) + (sizes[i] as number)
@@ -110,9 +114,36 @@ export function offsets(initial: readonly number[] = []): Offsets {
 
     insert(index, fresh) {
       if (fresh.length === 0) return
-      // Not splice(...fresh): a big batch as call arguments overflows the stack.
       const at = Math.max(0, Math.min(index, sizes.length))
-      sizes = [...sizes.slice(0, at), ...fresh, ...sizes.slice(at)]
+      // Rows landing at the end — a feed, a log, a page of results — extend
+      // the tree instead of retiring it. Without this a screen that reads
+      // between arrivals pays a full rebuild per row, and that, not the array
+      // itself, was the expensive part: appending cost as much as prepending.
+      if (!stale && at === sizes.length && tree.length > n) {
+        for (const size of fresh) {
+          sizes.push(size)
+          const i = ++n
+          // A Fenwick node covers the last `lowbit(i)` sizes; both prefixes it
+          // is made of are already true, since they end before i.
+          const low = i & -i
+          tree[i] = prefix(i - 1) - prefix(i - low) + size
+          worked++
+        }
+        return
+      }
+      if (!stale && at === sizes.length) {
+        // The tree has no room to grow into: fall through to a rebuild.
+        stale = true
+      }
+      // In place, in chunks. Not `splice(at, 0, ...fresh)`: a big batch passed
+      // as call arguments overflows the stack. And not three new arrays: that
+      // copied the whole line on every insertion, so a list filled one row at
+      // a time cost the square of its length.
+      const STEP = 8192
+      for (let from = 0; from < fresh.length; from += STEP) {
+        const part = fresh.slice(from, from + STEP)
+        sizes.splice(at + from, 0, ...part)
+      }
       stale = true
     },
 
