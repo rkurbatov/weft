@@ -13,7 +13,7 @@ import { subscribe, untracked } from '#weft'
 import type { Input, Key, Watchable } from '#weft'
 import type { Command, CommandState } from '#weft'
 import { arrivalOf, fresh } from '#weft'
-import type { Source } from '#weft'
+import type { Fault, Source } from '#weft'
 import { heldOf } from '#weft'
 import type { Remote } from '#weft'
 
@@ -97,12 +97,63 @@ export function useInputBinding(field: Input<string>): InputBinding {
  * whole story read useSource and its flat fields instead. A refusal with
  * empty hands is thrown to the nearest boundary.
  */
-export function useSourceValue<T>(feed: Source<T>, options: { within?: number } = {}): T {
+export function useSourceValue<T>(feed: Source<T>, options: SourceValueOptions = {}): T {
   const state = useSource(feed, options)
   const held = heldOf(state)
   if (held !== undefined) return held.value
-  if (state.kind === 'failed') throw state.error
-  throw arrivalOf(feed)
+  if (state.kind !== 'failed') throw arrivalOf(feed)
+  if (!repeating(state.fault, state.attempt, options)) throw state.error
+  // A refusal the source will try again on its own is not news yet. Waiting is
+  // the honest answer: an error boundary shown here stays shown, and a retry
+  // that succeeds two seconds later cannot take it down — the screen would sit
+  // red over a graph that is perfectly well.
+  throw afterAttempt(feed, state.attempt)
+}
+
+/**
+ * Waiting for the next attempt, rather than for an arrival.
+ *
+ * `arrivalOf` counts a refusal as an arrival, so throwing it while refusals
+ * repeat would resolve at once and spin the render. This settles when the
+ * state moves on from the refusal we already saw: a value, or one more attempt
+ * — either way there is something new to say.
+ */
+const attempts = new WeakMap<object, { attempt: number; landing: Promise<void> }>()
+
+function afterAttempt<T>(feed: Source<T>, attempt: number): Promise<void> {
+  const known = attempts.get(feed)
+  if (known !== undefined && known.attempt === attempt) return known.landing
+  const landing = new Promise<void>(resolve => {
+    const stop = subscribe(feed.state, () => {
+      const now = untracked(() => feed.state.peek())
+      const moved = heldOf(now) !== undefined || (now.kind === 'failed' && now.attempt !== attempt)
+      if (!moved) return
+      stop()
+      attempts.delete(feed)
+      resolve()
+    })
+  })
+  attempts.set(feed, { attempt, landing })
+  return landing
+}
+
+export interface SourceValueOptions {
+  /** Treat what is held as good enough for this long; older starts a load. */
+  within?: number
+  /**
+   * How many refusals to wait through before showing the error. A refusal the
+   * source repeats by itself is not news until it stops being repeated.
+   * Default 3; `0` shows the very first one.
+   */
+  patience?: number
+}
+
+/** Is this refusal one the source will try again by itself, and soon? */
+function repeating(fault: Fault, attempt: number, options: SourceValueOptions): boolean {
+  // Permanent and rejected are the world's answer, not a hiccup: no repeat is
+  // coming, so waiting for one would hang the screen forever.
+  if (fault !== 'transient' && fault !== 'unknown') return false
+  return attempt <= (options.patience ?? 3)
 }
 
 export interface KeepRowOptions<R> {

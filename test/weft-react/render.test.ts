@@ -138,10 +138,14 @@ describe('the React seam, rendered', () => {
     shown.unmount()
   })
 
-  test('useSourceValue: a refusal with empty hands lands in the boundary', async () => {
-    const sour = source(() => Promise.reject(new Error('the world is down')), { name: 'sour' })
+  test('useSourceValue: a refusal with empty hands lands in the boundary once patience runs out', async () => {
+    const sour = source(() => Promise.reject(new Error('the world is down')), {
+      name: 'sour',
+      retry: 1,
+    })
     function Shows(): ReactNode {
-      return h('b', null, useSourceValue(sour))
+      // No patience asked for: the first refusal is the answer.
+      return h('b', null, useSourceValue(sour, { patience: 0 }))
     }
     const shown = mount(
       h(Boundary, null, h(Suspense, { fallback: h('i', null, 'wait') }, h(Shows))),
@@ -151,6 +155,34 @@ describe('the React seam, rendered', () => {
       await wait(20)
     })
     assert.match(shown.el.textContent ?? '', /the world is down/)
+    shown.unmount()
+  })
+
+  test('useSourceValue: a refusal that will be tried again keeps waiting, and the retry shows', async () => {
+    let up = false
+    const flaky = source(
+      () => (up ? Promise.resolve('here') : Promise.reject(new Error('down for now'))),
+      { name: 'flaky', retry: 5 },
+    )
+    function Shows(): ReactNode {
+      return h('b', null, useSourceValue(flaky))
+    }
+    const shown = mount(
+      h(Boundary, null, h(Suspense, { fallback: h('i', null, 'wait') }, h(Shows))),
+    )
+
+    await act(async () => {
+      await wait(20)
+    })
+    // The old behaviour painted the boundary here, and no later success could
+    // take it down.
+    assert.equal(shown.el.textContent, 'wait')
+
+    up = true
+    await act(async () => {
+      await wait(60)
+    })
+    assert.equal(shown.el.textContent, 'here')
     shown.unmount()
   })
 
