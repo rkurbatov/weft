@@ -13,8 +13,8 @@
     "#loom/react": "./src/loom/react.ts"
   },
   "scripts": {
-    "test": "node --test \"test/**/*.test.ts\" \"demo/**/*.test.ts\"",
-    "test:weft": "node --test \"test/weft/**/*.test.ts\"",
+    "test": "node --test \"src/**/*.test.ts\" \"test/**/*.test.ts\" \"demo/**/*.test.ts\"",
+    "test:weft": "node --test \"src/weft/**/*.test.ts\" \"test/weft/**/*.test.ts\"",
     "test:weft-react": "node --test \"test/weft-react/*.test.ts\"",
     "test:loom": "node --test \"test/loom/*.test.ts\"",
     "test:stands": "node --test \"demo/**/*.test.ts\"",

@@ -1,3 +1,9 @@
+// The planner and the carriers, tested beside the code they belong to: they
+// are the library's own machinery — thresholds, traits, the choice between
+// implementations — and an application never names them. What a fold answers,
+// as opposed to how it keeps the answer, is tested through the public surface
+// in test/.
+
 // The planner decides, the carriers do the work, and neither knows the other.
 //
 // Which is why this file tests them apart: the planner without a single cell,
@@ -6,14 +12,14 @@
 
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
-import { carrierFor, runningCarrier, treeCarrier } from '#weft/core/table/carriers/index.ts'
-import type { FoldCarrier, FoldWork, Rows } from '#weft/core/table/carriers/index.ts'
-import { onPlan, planFold, TREE_WORTH_IT } from '#weft/core/table/plan.ts'
-import type { Plan } from '#weft/core/table/plan.ts'
-import { watch } from '#weft/core/graph/graph.ts'
-import { table } from '#weft/core/table/table.ts'
-import type { Change } from '#weft/core/table/table.ts'
-import { held, until } from '../../../kit/index.ts'
+import { carrierFor, runningCarrier, treeCarrier } from './carriers/index.ts'
+import type { FoldCarrier, FoldWork, Rows } from './carriers/index.ts'
+import { onPlan, planFold, TREE_SPAN, TREE_WORTH_IT } from './plan.ts'
+import type { Plan } from './plan.ts'
+import { subscribe, watch } from '../graph/graph.ts'
+import { table } from './table.ts'
+import type { Change } from './table.ts'
+import { held, until } from '../../../../test/kit/index.ts'
 
 interface Row {
   id: number
@@ -235,5 +241,86 @@ describe('a fold re-planned as its collection grows', () => {
     for (let i = 0; i < TREE_WORTH_IT + 10; i++) t.put(row(i, 1))
     assert.equal(total.peek(), TREE_WORTH_IT + 10)
     assert.deepEqual(new Set(heard), new Set(['recount']), 'the passport stands')
+  })
+})
+
+interface Scored {
+  id: number
+  group: string
+  score: number
+}
+
+const scored = (id: number, group: string, score: number): Scored => ({ id, group, score })
+
+/** A table of scored rows, disposed of when the test ends. */
+const filled = (): ReturnType<typeof table<Scored>> =>
+  held(table<Scored>({ key: r => r.id, name: 'scored' }))
+
+describe('a fold through the table, where the thresholds decide', () => {
+  test('a fold names its carrier by rule, and the choice is visible', () => {
+    const heard: Array<{ name: string; carrier: string }> = []
+    until(onPlan((name, plan) => heard.push({ name, carrier: plan.carrier })))
+
+    const t = filled()
+    for (let i = 0; i < TREE_WORTH_IT + 10; i++) t.put(scored(i, 'a', i))
+
+    // An inverse exists: the running accumulator wins regardless of size.
+    t.fold(
+      {
+        zero: 0,
+        add: (a: number, r: Scored) => a + r.score,
+        sub: (a: number, r: Scored) => a - r.score,
+      },
+      'total',
+    )
+    // No inverse, but partials join and the collection is big: a tree.
+    t.fold({ zero: 0, add: (a: number, r: Scored) => Math.max(a, r.score), join: Math.max }, 'peak')
+    // Forced by hand for tests.
+    t.fold(
+      {
+        zero: 0,
+        add: (a: number, r: Scored) => Math.max(a, r.score),
+        join: Math.max,
+        carrier: 'recount' as const,
+      },
+      'peak.slow',
+    )
+
+    assert.deepEqual(heard, [
+      { name: 'total', carrier: 'running' },
+      { name: 'peak', carrier: 'tree' },
+      { name: 'peak.slow', carrier: 'recount' },
+    ])
+  })
+  test('the tree carrier answers like the recount, and an edit pays one block', () => {
+    const t = filled()
+    const N = TREE_SPAN * 4
+    for (let i = 0; i < N; i++) t.put(scored(i, 'a', i))
+
+    let added = 0
+    const spec = {
+      zero: 0,
+      add: (a: number, r: Scored) => {
+        added++
+        return Math.max(a, r.score)
+      },
+      join: Math.max,
+    }
+    const fast = t.fold({ ...spec, carrier: 'tree' as const }, 'peak.tree')
+    const slow = t.fold({ ...spec, carrier: 'recount' as const }, 'peak.recount')
+    until(subscribe(fast, () => {}))
+    until(subscribe(slow, () => {}))
+    assert.equal(fast.peek(), slow.peek())
+
+    added = 0
+    t.put(scored(3, 'a', 999_999))
+    assert.equal(fast.peek(), 999_999)
+    assert.equal(fast.peek(), slow.peek())
+    // The tree recounted its one dirty block; the recount walked everything.
+    assert.ok(added <= TREE_SPAN + N + 4, `added ${added}`)
+    assert.ok(added >= N, 'the recount alone walks the collection')
+
+    t.drop(3) // a hole, not a shift: the same block recounts, answers still agree
+    assert.equal(fast.peek(), slow.peek())
   })
 })

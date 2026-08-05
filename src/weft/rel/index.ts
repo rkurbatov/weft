@@ -8,7 +8,7 @@
 // expression language the attributes are written in.
 
 export { from, Rel } from './builder.ts'
-export type { RelationOf, Folds, Fold } from './builder.ts'
+export type { Fold, Folds, RelationOf } from './builder.ts'
 
 export { relate } from './live.ts'
 export type { Relation, RelateOptions, Ordering } from './live.ts'

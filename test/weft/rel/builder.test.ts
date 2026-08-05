@@ -28,67 +28,6 @@ describe('the query builder', () => {
     tier: string
   }
 
-  // Type proofs: they run as a no-op, they prove at compile time.
-  type Flat<T> = { [K in keyof T]: T[K] }
-  type Same<A, B> =
-    (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false
-  const proven = <T extends true>(): T => true as T
-
-  test('the chain carries the row type: joins merge, keeping admits null, folds answer', () => {
-    const orders = from<Order>('orders', 'id')
-    const clients = from<Client>('clients', 'id')
-
-    const matched = orders.join(clients, { as: 'c', on: ['client', 'id'] })
-    type MatchedRow = ReturnType<
-      (typeof matched)['live']
-    >['all']['peek'] extends () => readonly (infer T)[]
-      ? T
-      : never
-    proven<Same<Flat<MatchedRow>, Flat<Order & { c: Client }>>>()
-
-    const kept = orders.join(clients, { as: 'c', on: ['client', 'id'], keeping: true })
-    type KeptRow = ReturnType<
-      (typeof kept)['live']
-    >['all']['peek'] extends () => readonly (infer T)[]
-      ? T
-      : never
-    proven<Same<Flat<KeptRow>, Flat<Order & { c: Client | null }>>>()
-
-    const shelves = orders.groupBy('client', g => ({
-      n: g.count(),
-      total: g.sum('sum'),
-      top: g.max('sum'),
-      ids: g.collectOf('id'),
-    }))
-    type ShelfRow = ReturnType<
-      (typeof shelves)['live']
-    >['all']['peek'] extends () => readonly (infer T)[]
-      ? T
-      : never
-    proven<
-      Same<
-        Flat<ShelfRow>,
-        { client: number; n: number; total: number; top: number | null; ids: number[] }
-      >
-    >()
-
-    const picked = orders.pick('id', 'sum')
-    type PickedRow = ReturnType<
-      (typeof picked)['live']
-    >['all']['peek'] extends () => readonly (infer T)[]
-      ? T
-      : never
-    proven<Same<Flat<PickedRow>, Flat<Pick<Order, 'id' | 'sum'>>>>()
-
-    // Typos and wrong operators do not compile:
-    // @ts-expect-error — no such field on Order
-    orders.where('summ', '>', 5)
-    // @ts-expect-error — order comparison on a string field
-    clients.where('tier', '>', 'gold')
-    // @ts-expect-error — sum wants a numeric field
-    clients.groupBy('id', g => ({ s: g.sum('tier') }))
-  })
-
   test('the chain builds the very tree a hand would: canon for canon', () => {
     const chained = from<Order>('orders', 'id')
       .where('sum', '>', 10)
@@ -154,16 +93,9 @@ describe('the query builder', () => {
     const docs = table<Row>({ key: r => r['id'] as Key, name: 'docs' })
     docs.put({ id: 1, title: 'a', links: [{ to: 9, weight: 2 }] })
 
+    // What the row type becomes here is proven beside the code, in
+    // builder.types.test.ts; this checks what it does.
     const opened = from<Doc>('docs', 'id').expand('links', { as: 'link', key: ['to'] })
-    type OpenedRow = ReturnType<
-      (typeof opened)['live']
-    >['all']['peek'] extends () => readonly (infer T)[]
-      ? T
-      : never
-    proven<
-      Same<Flat<OpenedRow>, Flat<Omit<Doc, 'links'> & { link: { to: number; weight: number } }>>
-    >()
-
     const live = opened.live({ docs })
     const stop = subscribe(live.all, () => {})
     assert.deepEqual(live.all.peek()[0], { id: 1, title: 'a', link: { to: 9, weight: 2 } })

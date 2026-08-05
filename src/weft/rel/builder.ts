@@ -44,6 +44,60 @@ type RowsField<R> = {
 }[keyof R & string]
 type FieldType<R, F> = F extends keyof R ? R[F] : never
 
+// ── what the compiler says when a field is the wrong kind ────────────────
+//
+// A mapped type in an argument position produces the whole union in the error
+// message, and for a wide row that is a wall of text with the real complaint
+// buried in it. These carry the complaint in their own name instead: the
+// message reads `not assignable to 'NotANumberField<"title">'`, which says
+// what is wrong and about which field.
+
+export interface NotANumberField<F> {
+  readonly weft: 'this field does not hold a number, and only numbers can be summed'
+  readonly field: F
+}
+
+export interface NotAComparableField<F> {
+  readonly weft: 'this field holds neither a number, a string nor a boolean, so it cannot be compared or grouped by'
+  readonly field: F
+}
+
+export interface NotAFieldOfRows<F> {
+  readonly weft: 'this field does not hold an array of rows, and only those can be expanded'
+  readonly field: F
+}
+
+export interface NoSuchField<F> {
+  readonly weft: 'this row has no such field'
+  readonly field: F
+}
+
+export interface JoinedOnDifferentTypes<L, R> {
+  readonly weft: 'the two sides of a join must be matched on fields of the same type'
+  readonly left: L
+  readonly right: R
+}
+
+export interface FieldAlreadyTaken<N> {
+  readonly weft: 'this name is already a field of the row: adding it would hide the one there'
+  readonly name: N
+}
+
+/** `F` if it names a number, otherwise a type whose name is the complaint. */
+type MustBeNumber<R, F extends string> = F extends NumericField<R> ? F : NotANumberField<F>
+type MustBeComparable<R, F extends string> = F extends ScalarField<R> ? F : NotAComparableField<F>
+type MustHoldRows<R, F extends string> = F extends RowsField<R> ? F : NotAFieldOfRows<F>
+type MustBeAField<R, F extends string> = F extends keyof R & string ? F : NoSuchField<F>
+/** A name a row does not have yet: adding one it has would hide the old value. */
+type MustBeFree<R, N extends string> = N extends keyof R ? FieldAlreadyTaken<N> : N
+/** Both sides of a join must be comparable, and comparable to each other. */
+type MustMatch<R, T, F extends string, G extends string> =
+  FieldType<R, F> extends FieldType<T, G>
+    ? FieldType<T, G> extends FieldType<R, F>
+      ? readonly [F, G]
+      : JoinedOnDifferentTypes<FieldType<R, F>, FieldType<T, G>>
+    : JoinedOnDifferentTypes<FieldType<R, F>, FieldType<T, G>>
+
 /** What a comparison may ask of a field: order needs order, `has` is the
  *  substring word and belongs to strings. */
 type OpFor<T> = [T] extends [number]
@@ -51,6 +105,13 @@ type OpFor<T> = [T] extends [number]
   : [T] extends [string]
     ? '==' | '!=' | 'has'
     : '==' | '!='
+
+/**
+ * The row type a chain has arrived at. Every step changes it — a join merges,
+ * a pick narrows, a group replaces — and this is how a caller (or a test) asks
+ * what it is now, without digging through the reading surface to find out.
+ */
+export type RowOf<B> = B extends Rel<infer R> ? R : never
 
 // ── fold toolkit: the carrier of the row type ────────────────────────────
 
@@ -62,12 +123,12 @@ export interface Fold<T> {
 
 export interface Folds<R> {
   count(): Fold<number>
-  sum(field: NumericField<R>): Fold<number>
-  min<F extends ScalarField<R>>(field: F): Fold<FieldType<R, F> | null>
-  max<F extends ScalarField<R>>(field: F): Fold<FieldType<R, F> | null>
+  sum<F extends string>(field: F & MustBeNumber<R, F>): Fold<number>
+  min<F extends string>(field: F & MustBeComparable<R, F>): Fold<FieldType<R, F> | null>
+  max<F extends string>(field: F & MustBeComparable<R, F>): Fold<FieldType<R, F> | null>
   /** The group gathered into an array, ordered by row key. */
   collect(): Fold<R[]>
-  collectOf<F extends ScalarField<R>>(field: F): Fold<Array<FieldType<R, F>>>
+  collectOf<F extends string>(field: F & MustBeComparable<R, F>): Fold<Array<FieldType<R, F>>>
 }
 
 const toolkit = <R>(): Folds<R> => ({
@@ -110,8 +171,8 @@ export class Rel<R> {
 
   /** One typed comparison; chained calls are joined with `and` by filter
    *  nodes stacking. `filter` below is the door for anything richer. */
-  where<F extends ScalarField<R>>(
-    field: F,
+  where<F extends string>(
+    field: F & MustBeComparable<R, F>,
     op: OpFor<FieldType<R, F>>,
     value: FieldType<R, F> | Watchable<FieldType<R, F>>,
   ): Rel<R> {
@@ -133,33 +194,35 @@ export class Rel<R> {
   /** A computed field. The value's type is declared, not inferred — the
    *  expression is data and TS cannot see through it; `checkNode` and the
    *  oracle hold it to account instead. */
-  with<N extends string, T>(name: N, of: Expr | RowFn): Rel<R & { [K in N]: T }> {
+  with<N extends string, T>(
+    name: N & MustBeFree<R, N>,
+    of: Expr | RowFn,
+  ): Rel<R & { [K in N]: T }> {
     return this.grow(pureNode(this.node, { fields: { [name]: of } }))
   }
 
-  pick<F extends keyof R & string>(...fields: F[]): Rel<Pick<R, F>> {
+  pick<F extends string>(...fields: Array<F & MustBeAField<R, F>>): Rel<Pick<R, F & keyof R>> {
     return this.grow(pureNode(this.node, { pick: fields }))
   }
 
   /** Reach the matching row of another relation; it lands under the alias.
    *  `keeping` keeps unmatched left rows, the alias then holding null —
    *  the type says so: the flag is carried into the merged row's type. */
-  join<
-    T,
-    A extends string,
-    F extends ScalarField<R>,
-    G extends ScalarField<T>,
-    Keep extends boolean = false,
-  >(
+  join<T, A extends string, F extends string, G extends string, Keep extends boolean = false>(
     other: Rel<T>,
     spec: {
-      as: A
-      on: readonly [F, G] | ReadonlyArray<readonly [F, G]>
+      as: A & MustBeFree<R, A>
+      on:
+        | MustMatch<R, T, F & MustBeComparable<R, F>, G & MustBeComparable<T, G>>
+        | ReadonlyArray<MustMatch<R, T, F & MustBeComparable<R, F>, G & MustBeComparable<T, G>>>
       residual?: Expr | RowFn
       keeping?: Keep
     },
   ): Rel<R & { [K in A]: Keep extends true ? T | null : T }> {
-    const pairs = (typeof spec.on[0] === 'string' ? [spec.on] : spec.on) as ReadonlyArray<
+    // The types above have already said whether the pairs are lawful; here
+    // they are just pairs of names.
+    const on = spec.on as readonly [string, string] | ReadonlyArray<readonly [string, string]>
+    const pairs = (typeof on[0] === 'string' ? [on] : on) as ReadonlyArray<
       readonly [string, string]
     >
     return this.grow(
@@ -175,8 +238,8 @@ export class Rel<R> {
 
   /** Groups by fields, folds by the toolkit; the group's row carries the
    *  by-fields beside every fold's answer. */
-  groupBy<F extends ScalarField<R>, S extends Record<string, Fold<unknown>>>(
-    by: F | readonly F[],
+  groupBy<F extends string, S extends Record<string, Fold<unknown>>>(
+    by: (F & MustBeComparable<R, F>) | ReadonlyArray<F & MustBeComparable<R, F>>,
     form: (g: Folds<R>) => S,
   ): Rel<{ [K in F]: FieldType<R, K> } & FoldAnswers<S>> {
     const fields = (typeof by === 'string' ? [by] : by) as readonly string[]
@@ -201,13 +264,13 @@ export class Rel<R> {
 
   /** A row with a nested table unfolds into a row per nested entry; the
    *  table field is consumed, the nested row lands under the alias. */
-  expand<F extends RowsField<R>, A extends string>(
-    field: F,
+  expand<F extends string, A extends string>(
+    field: F & MustHoldRows<R, F>,
     spec: {
       as: A
-      key: ReadonlyArray<keyof (R[F] extends readonly (infer E)[] ? E : never) & string>
+      key: ReadonlyArray<keyof (FieldType<R, F> extends readonly (infer E)[] ? E : never) & string>
     },
-  ): Rel<Omit<R, F> & { [K in A]: R[F] extends readonly (infer E)[] ? E : never }> {
+  ): Rel<Omit<R, F> & { [K in A]: FieldType<R, F> extends readonly (infer E)[] ? E : never }> {
     return this.grow(
       expandNode(this.node, { field, as: spec.as, key: spec.key as readonly string[] }),
     ) as never
@@ -217,14 +280,14 @@ export class Rel<R> {
    *  each row — its offset — and `through` the carry including it. This is
    *  what a virtualised list asks: where a row starts, and how tall the
    *  whole is. The carrier is chosen by the same door as folds. */
-  scan<N extends string = never, T extends string = never>(spec: {
+  scan<N extends string = never, T extends string = never, S extends string = never>(spec: {
     by: ScanOrder<R>
-    step: NumericField<R> | Expr | RowFn
+    step: (S & MustBeNumber<R, S>) | Expr | RowFn
     /** Name it only if the screen shows it per row: naming asks for the carry
      *  to be written into every row, and over a long list the plan takes that
      *  back — the view answers offsets either way. */
-    as?: N
-    through?: T
+    as?: N & MustBeFree<R, N>
+    through?: T & MustBeFree<R, T>
     from?: number
   }): Rel<R & { [K in N | T]: number }> {
     const order = (typeof spec.by === 'string' ? [spec.by] : spec.by) as ReadonlyArray<

@@ -15,7 +15,6 @@ export {
   trace,
   graph,
   attachProbe,
-  engineOf,
 } from './core/graph/graph.ts'
 export type {
   Equal,
@@ -34,22 +33,11 @@ export type { Command, CommandOptions, CommandState, WhileRunning } from './core
 export { family } from './core/graph/family.ts'
 export type { Family, FamilyOptions } from './core/graph/family.ts'
 
-export {
-  planFold,
-  planScan,
-  onPlan,
-  onScanPlan,
-  TREE_SPAN,
-  TREE_WORTH_IT,
-} from './core/table/plan.ts'
-export type {
-  Plan,
-  Carrier,
-  FoldTraits,
-  ScanPlan,
-  ScanCarrier,
-  ScanTraits,
-} from './core/table/plan.ts'
+// Of the planner, only what an application has a reason to touch: hearing the
+// decisions, and naming a carrier by hand in a passport. Deciding is the
+// library's own business, and its traits and plans are not offered.
+export { onPlan, onScanPlan } from './core/table/plan.ts'
+export type { Carrier, Plan, ScanPlan } from './core/table/plan.ts'
 export { blocks } from './core/table/blocks.ts'
 export type { Blocks, BlockOptions } from './core/table/blocks.ts'
 export { offsets } from './core/table/offsets.ts'
