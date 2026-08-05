@@ -1,9 +1,9 @@
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
-import { cell, subscribe } from '#weft/core/graph/graph.ts'
-import { outbox } from '#weft/core/keep/outbox.ts'
-import { memoryStore } from '#weft/core/keep/store.ts'
-import type { Entry, Handler } from '#weft/core/keep/outbox.ts'
+import { cell, subscribe } from '#graph/graph/graph.ts'
+import { outbox } from '#offline/outbox.ts'
+import { memoryStore } from '#offline/store.ts'
+import type { Entry, Handler } from '#offline/outbox.ts'
 import { settle, until, world } from '../../../kit/index.ts'
 
 describe('the outbox', () => {

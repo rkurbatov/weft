@@ -13,9 +13,9 @@ import {
   lit,
   param as paramDoor,
   relate as relateDoor,
-  source,
-} from '#weft/rel'
-import type { Row } from '#weft/rel'
+} from '#rel'
+import type { Row } from '#rel'
+import { source } from '#rel/rel/node.ts'
 
 describe('the query builder', () => {
   interface Order {
@@ -153,7 +153,7 @@ describe('the query builder', () => {
     // Parity with the substituted oracle at the current value.
     const rows = new Map<Key, Row>()
     for (const r of games.all.peek()) rows.set(r['id'] as Key, r)
-    const { substituteNode, recount: recountDoor } = await import('#weft/rel')
+    const { substituteNode, recount: recountDoor } = await import('#rel')
     const truth = recountDoor(substituteNode(chain.tree(), new Map([['p1', 'sou']])), {
       games: rows,
     })

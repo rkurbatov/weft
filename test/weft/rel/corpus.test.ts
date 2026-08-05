@@ -12,10 +12,10 @@ import { join as joinPath } from 'node:path'
 import { describe, test } from 'node:test'
 import { subscribe, table } from '#weft'
 import type { Key, SourceTable } from '#weft'
-import { keyOfRow, recount } from '#weft/rel/node.ts'
-import type { RelNode, SourceNode } from '#weft/rel/node.ts'
-import { relate } from '#weft/rel/live.ts'
-import type { Row } from '#weft/rel/expr.ts'
+import { keyOfRow, recount } from '#rel/rel/node.ts'
+import type { RelNode, SourceNode } from '#rel/rel/node.ts'
+import { relate } from '#rel/rel/live.ts'
+import type { Row } from '#rel/rel/expr.ts'
 
 describe('the cross-corpus scenarios', () => {
   interface Scenario {

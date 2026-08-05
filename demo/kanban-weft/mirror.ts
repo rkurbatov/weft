@@ -5,7 +5,7 @@
 
 import { adopt, offer, view } from '#loom'
 import type { Refusal, View } from '#loom'
-import type { OfferOptions } from '../../src/loom/carry.ts'
+import type { OfferOptions } from '#loom'
 import type { Channel } from '#weft'
 import type { Card, ColumnData } from '../kanban-common/types.ts'
 import type { Kanban } from './state.ts'

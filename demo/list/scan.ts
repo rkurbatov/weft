@@ -29,8 +29,8 @@
 
 import { table, watch } from '#weft'
 import type { Key } from '#weft'
-import { from } from '#weft/rel'
-import type { Ordering, Row } from '#weft/rel'
+import { from } from '#rel'
+import type { Ordering, Row } from '#rel'
 import type { List } from './classic.ts'
 
 interface ListRow {

@@ -1,6 +1,6 @@
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
-import { input, cell, watch, subscribe, batch, untracked } from '#weft/core/graph/graph.ts'
+import { input, cell, watch, subscribe, batch, untracked } from '#graph/graph/graph.ts'
 
 describe('the cell graph', () => {
   test('formula reads its inputs without declaring them', () => {

@@ -1,15 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import {
-  EMPTY,
-  arrived,
-  firstOf,
-  heldOf,
-  loading,
-  refused,
-  together,
-} from '#weft/core/remote/remote.ts'
-import type { Remote } from '#weft/core/remote/remote.ts'
+import { EMPTY, arrived, firstOf, heldOf, loading, refused, together } from '#async/remote.ts'
+import type { Remote } from '#async/remote.ts'
 
 const value = <T>(v: T, at: number): Remote<T> => arrived(v, at)
 const flight = <T>(previous: Remote<T>, since = 50): Remote<T> => loading(previous, since)

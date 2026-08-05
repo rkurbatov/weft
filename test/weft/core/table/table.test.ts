@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
-import { input, subscribe, watch } from '#weft/core/graph/graph.ts'
-import { table } from '#weft/core/table/table.ts'
-import type { SourceTable } from '#weft/core/table/table.ts'
+import { input, subscribe, watch } from '#graph/graph/graph.ts'
+import { table } from '#rel/table/table.ts'
+import type { SourceTable } from '#rel/table/table.ts'
 import { hasIds, held, until } from '../../../kit/index.ts'
 
 describe('tables', () => {

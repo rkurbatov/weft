@@ -1,8 +1,8 @@
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
-import { cell, input, subscribe } from '#weft/core/graph/graph.ts'
-import { source } from '#weft/core/remote/source.ts'
-import { reconcile } from '#weft/core/remote/reconcile.ts'
+import { cell, input, subscribe } from '#graph/graph/graph.ts'
+import { source } from '#async/source.ts'
+import { reconcile } from '#async/reconcile.ts'
 import { settle, until, world } from '../../../kit/index.ts'
 
 describe('reconciling the world', () => {

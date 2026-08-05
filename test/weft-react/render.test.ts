@@ -14,7 +14,7 @@ import { Component, StrictMode, Suspense, act, createElement as h, useRef, useSt
 import type { ReactNode } from 'react'
 import { input } from '#weft'
 import { source } from '#weft'
-import { useCell, useInputBinding, useKeepRow, useSourceValue } from '#weft-react'
+import { useCell, useInputBinding, useKeepRow, useSourceValue } from '#react'
 import { useLive } from '#loom/react'
 import { wait } from '../kit/index.ts'
 

@@ -222,7 +222,7 @@ describe('engines', () => {
     // `instanceof` across copies is false.
     // The path is held in a variable on purpose: the query string is what makes
     // the loader hand back a second, separate copy of the library.
-    const secondCopy = '../../../../src/weft/index.ts?copy=2'
+    const secondCopy = '../../../../packages/weft/src/index.ts?copy=2'
     const other = (await import(secondCopy)) as typeof Weft
 
     const mine = graph('checkout')

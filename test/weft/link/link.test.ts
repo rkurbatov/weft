@@ -1,11 +1,11 @@
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { MessageChannel } from 'node:worker_threads'
-import { cell, input, subscribe } from '#weft/core/graph/graph.ts'
-import { atOnce } from '#weft/link/channel.ts'
-import { portChannel, pairInMemory } from '#weft/link/ports.ts'
-import { link, Unknown } from '#weft/link/link.ts'
-import { serve } from '#weft/link/serve.ts'
+import { cell, input, subscribe } from '#graph/graph/graph.ts'
+import { atOnce } from '#ipc/channel.ts'
+import { portChannel, pairInMemory } from '#ipc/ports.ts'
+import { link, Unknown } from '#ipc/link.ts'
+import { serve } from '#ipc/serve.ts'
 import { settle, until as after } from '../../kit/index.ts'
 
 describe('the wire', () => {
@@ -381,7 +381,7 @@ describe('the wire', () => {
       configurable: true,
     })
     try {
-      const { perFrame: frozenFrame } = await import('#weft/link/channel.ts')
+      const { perFrame: frozenFrame } = await import('#ipc/channel.ts')
       const ran: number[] = []
       frozenFrame(() => ran.push(1))
       await new Promise(resolve => setTimeout(resolve, 80))
@@ -394,7 +394,7 @@ describe('the wire', () => {
   })
 
   test('an idle mirror lingers, then is let go; a fresh look brings it back', async () => {
-    const { heldOf } = await import('#weft/core/remote/remote.ts')
+    const { heldOf } = await import('#async/remote.ts')
     const rest = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms))
     const pair = pairInMemory()
     const feed = input(1, { name: 'n' })

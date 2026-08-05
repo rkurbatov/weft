@@ -1,0 +1,19 @@
+// The ipc package: transport, addressing, the tab protocol, serving a graph to
+// other tabs and mirroring one from them, leadership.
+
+export { serve } from './serve.ts'
+export type { Surface, ServeOptions } from './serve.ts'
+export { link, Unknown } from './link.ts'
+export type { Link, LinkOptions } from './link.ts'
+export { pairInMemory, portChannel } from './ports.ts'
+export type { Pair, Port } from './ports.ts'
+export { busHub, busChannel } from './bus.ts'
+export type { Hub, HubOptions, KeepAliveOptions } from './bus.ts'
+export { localBroadcast, openBroadcast, overBus } from './transport.ts'
+export type { Broadcast, BusLike as Bus } from './transport.ts'
+export { sharedWorkerHub, sharedWorkerChannel, sharedWorkersExist } from './shared.ts'
+export type { SharedScope } from './shared.ts'
+export { leadOrFollow, webLocks } from './lead.ts'
+export type { Lock, LeadOptions } from './lead.ts'
+export { atOnce, perFrame } from './channel.ts'
+export type { Channel, Schedule, ToGraph, ToWatcher } from './channel.ts'

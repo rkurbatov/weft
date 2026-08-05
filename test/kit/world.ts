@@ -5,7 +5,7 @@
 // clock, ten of `settle`, twelve of `wait`. One copy means one place to fix
 // when the shape of time changes, and one place to make it safe.
 
-import type { Timers } from '#weft/core/graph/time.ts'
+import type { Timers } from '#graph/graph/time.ts'
 import { cleanupWith } from './lifetime.ts'
 
 /** Let promise callbacks run. The shortest wait there is. */

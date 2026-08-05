@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
-import { input, subscribe } from '#weft/core/graph/graph.ts'
-import { keepInput, keepSource } from '#weft/core/keep/keep.ts'
-import { memoryStore } from '#weft/core/keep/store.ts'
-import { source } from '#weft/core/remote/source.ts'
-import type { Dropped } from '#weft/core/keep/keep.ts'
+import { input, subscribe } from '#graph/graph/graph.ts'
+import { keepInput, keepSource } from '#offline/keep.ts'
+import { memoryStore } from '#offline/store.ts'
+import { source } from '#async/source.ts'
+import type { Dropped } from '#offline/keep.ts'
 import { settle, slowStore, world } from '../../../kit/index.ts'
 
 describe('keeping things on disk', () => {

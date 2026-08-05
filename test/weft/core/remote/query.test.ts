@@ -1,8 +1,8 @@
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
-import { subscribe } from '#weft/core/graph/graph.ts'
-import { query } from '#weft/core/remote/query.ts'
-import { heldOf } from '#weft/core/remote/remote.ts'
+import { subscribe } from '#graph/graph/graph.ts'
+import { query } from '#async/query.ts'
+import { heldOf } from '#async/remote.ts'
 import { settle, world } from '../../../kit/index.ts'
 
 describe('parametric queries', () => {

@@ -4,11 +4,11 @@
 
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
-import { batch, cell, input, subscribe, trace } from '#weft/core/graph/graph.ts'
-import { attachProbe } from '#weft/core/graph/graph.ts'
-import type { WaveSummary } from '#weft/core/graph/waves.ts'
-import { journal } from '#weft/core/graph/journal.ts'
-import type { Input } from '#weft/core/graph/graph.ts'
+import { batch, cell, input, subscribe, trace } from '#graph/graph/graph.ts'
+import { attachProbe } from '#graph/graph/graph.ts'
+import type { WaveSummary } from '#graph/graph/waves.ts'
+import { journal } from '#graph/graph/journal.ts'
+import type { Input } from '#graph/graph/graph.ts'
 
 describe('waves and the journal', () => {
   test('the red dot: a wave dies on equality and the summary names the place', () => {

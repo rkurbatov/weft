@@ -1,7 +1,7 @@
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
-import { input, cell, subscribe, untracked } from '#weft/core/graph/graph.ts'
-import { command, onCommandFailure } from '#weft/core/graph/command.ts'
+import { input, cell, subscribe, untracked } from '#graph/graph/graph.ts'
+import { command, onCommandFailure } from '#graph/graph/command.ts'
 import { settle, world } from '../../../kit/index.ts'
 
 function deferred<T>() {

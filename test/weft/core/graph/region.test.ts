@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
-import { cell, input, subscribe } from '#weft/core/graph/graph.ts'
-import { outbox } from '#weft/core/keep/outbox.ts'
-import { region } from '#weft/core/graph/region.ts'
-import { memoryStore } from '#weft/core/keep/store.ts'
-import { source } from '#weft/core/remote/source.ts'
+import { cell, input, subscribe } from '#graph/graph/graph.ts'
+import { outbox } from '#offline/outbox.ts'
+import { region } from '#graph/graph/region.ts'
+import { memoryStore } from '#offline/store.ts'
+import { source } from '#async/source.ts'
 import { held, wakings, world } from '../../../kit/index.ts'
 
 describe('a region owns what is born inside it', () => {

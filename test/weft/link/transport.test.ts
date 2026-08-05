@@ -11,12 +11,12 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
 import { heldOf, input, subscribe } from '#weft'
-import { busChannel, busHub } from '#weft/link/bus.ts'
-import { link } from '#weft/link/link.ts'
-import { claimOf, greeting, isGreeting, postbox } from '#weft/link/postbox.ts'
-import { serve } from '#weft/link/serve.ts'
-import { localBroadcast } from '#weft/link/transport.ts'
-import type { Broadcast } from '#weft/link/transport.ts'
+import { busChannel, busHub } from '#ipc/bus.ts'
+import { link } from '#ipc/link.ts'
+import { claimOf, greeting, isGreeting, postbox } from '#ipc/postbox.ts'
+import { serve } from '#ipc/serve.ts'
+import { localBroadcast } from '#ipc/transport.ts'
+import type { Broadcast } from '#ipc/transport.ts'
 import { settle, until, world } from '../../kit/index.ts'
 
 const atOnce = (work: () => void): void => work()

@@ -5,7 +5,7 @@
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { source } from '#weft'
-import { arrivalOf } from '#weft-react'
+import { arrivalOf } from '#react'
 import { world } from '../kit/index.ts'
 
 describe('the React seam', () => {

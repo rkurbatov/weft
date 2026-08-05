@@ -1,7 +1,7 @@
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
-import { input, cell, subscribe } from '#weft/core/graph/graph.ts'
-import { family } from '#weft/core/graph/family.ts'
+import { input, cell, subscribe } from '#graph/graph/graph.ts'
+import { family } from '#graph/graph/family.ts'
 
 describe('families of cells', () => {
   test('same key gives the same cell, different keys different cells', () => {

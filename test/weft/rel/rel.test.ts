@@ -4,8 +4,8 @@ import { subscribe } from '#weft'
 import { table } from '#weft'
 import type { SourceTable } from '#weft'
 import type { Key } from '#weft'
-import { and, canonExpr, cmp, evalExpr, field, lit, math } from '#weft/rel/expr.ts'
-import type { Row } from '#weft/rel/expr.ts'
+import { and, canonExpr, cmp, evalExpr, field, lit, math } from '#rel/rel/expr.ts'
+import type { Row } from '#rel/rel/expr.ts'
 import {
   agg,
   checkNode,
@@ -17,10 +17,10 @@ import {
   scan,
   source,
   union,
-} from '#weft/rel/node.ts'
-import { relate } from '#weft/rel/live.ts'
-import { CROWDED_KEY } from '#weft/rel/runners/join.ts'
-import { onNotice } from '#weft/core/data/notice.ts'
+} from '#rel/rel/node.ts'
+import { relate } from '#rel/rel/live.ts'
+import { CROWDED_KEY } from '#rel/rel/runners/join.ts'
+import { onNotice } from '#graph/data/notice.ts'
 import { held as owned, until } from '../../kit/index.ts'
 
 describe('the relational layer', () => {

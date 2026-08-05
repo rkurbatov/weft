@@ -6,10 +6,10 @@
 
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
-import { book } from '#weft/core/keep/book.ts'
-import type { Entry } from '#weft/core/keep/book.ts'
-import { schedule } from '#weft/core/keep/schedule.ts'
-import { memoryStore } from '#weft/core/keep/store.ts'
+import { book } from '#offline/book.ts'
+import type { Entry } from '#offline/book.ts'
+import { schedule } from '#offline/schedule.ts'
+import { memoryStore } from '#offline/store.ts'
 import { settle, slowStore, world } from '../../../kit/index.ts'
 
 const entry = (id: string, name = 'move'): Entry => ({
