@@ -25,4 +25,6 @@ export { offer, adopt, carry } from './carry.ts'
 export type { Offering, OfferOptions, Adopted, Carried, CarrySpec } from './carry.ts'
 
 export { byEach, fold, keyedBy, list, listsBy, shape } from './shape.ts'
+export { Timeout, when, whenever } from './wait.ts'
+export type { Standing, WheneverOptions, WhenOptions, WhileRunning } from './wait.ts'
 export type { Group, ListSpec, ListView } from './shape.ts'

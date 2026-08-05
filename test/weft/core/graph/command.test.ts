@@ -1,7 +1,8 @@
-import { test } from 'node:test'
+import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { input, cell, subscribe, untracked } from '#weft/core/graph/graph.ts'
 import { command } from '#weft/core/graph/command.ts'
+import { world } from '../../../kit/index.ts'
 
 function deferred<T>() {
   let resolve!: (v: T) => void
@@ -108,4 +109,40 @@ test('store shape React needs: stable snapshot, change notification, dispose', (
   stop()
   source.set(9)
   assert.equal(notified, 1)
+})
+
+describe('a command asked to wait for quiet', () => {
+  test('the last start within the quiet is the one that runs', async () => {
+    const clock = world()
+    const asked: string[] = []
+    const search = command(
+      async (text: string) => {
+        asked.push(text)
+        return text.length
+      },
+      { calm: 300, timers: clock.timers },
+    )
+
+    const first = search.run('a')
+    const second = search.run('ab')
+    const third = search.run('abc')
+    await clock.advance(100)
+    assert.deepEqual(asked, [], 'still typing')
+
+    await clock.advance(300)
+    assert.deepEqual(asked, ['abc'], 'only the last one happened')
+
+    // And nobody is left waiting: the earlier callers get the answer that ran.
+    assert.deepEqual(await Promise.all([first, second, third]), [3, 3, 3])
+  })
+
+  test('without a quiet asked for, a start is a start', async () => {
+    const asked: string[] = []
+    const save = command(async (text: string) => {
+      asked.push(text)
+      return text
+    })
+    await save.run('now')
+    assert.deepEqual(asked, ['now'])
+  })
 })

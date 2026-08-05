@@ -1,8 +1,10 @@
 // Commands: the only way anything reaches the world. A command is started,
 // awaited, and observed — its state is a cell like any other.
 
-import { input, cell } from './graph.ts'
+import { cell, input } from './graph.ts'
 import type { Input, Readable } from './graph.ts'
+import { wallClock } from './time.ts'
+import type { Timers } from './time.ts'
 
 export type CommandState<T> =
   | { readonly kind: 'idle' }
@@ -17,6 +19,14 @@ export interface CommandOptions {
   name?: string
   /** 'drop' (default) protects the world from double submits; 'restart' abandons the older answer. */
   whileRunning?: WhileRunning
+  /**
+   * Wait for this much quiet before actually starting. What a typing field
+   * needs: the last start within the quiet wins, the ones before it never
+   * happen. Sources and queries have had this from the beginning; a command
+   * without it left every search box writing its own timer.
+   */
+  calm?: number
+  timers?: Timers
   now?: () => number
 }
 
@@ -55,7 +65,7 @@ export function command<A extends unknown[], T>(
     state.set(next)
   }
 
-  const run = (...args: A): Promise<T> => {
+  const start = (...args: A): Promise<T> => {
     if (inFlight !== null) {
       if (whileRunning === 'drop') return inFlight.promise
       inFlight = null // 'restart': the older attempt loses its claim on the state
@@ -74,6 +84,37 @@ export function command<A extends unknown[], T>(
     })()
     inFlight = { generation: mine, promise }
     return promise
+  }
+
+  const calm = options.calm
+  const timers = options.timers ?? wallClock
+  let quiet: { timer: unknown; resolve: (value: T | Promise<T>) => void } | undefined
+
+  /**
+   * With no quiet asked for, a start is a start. With one, the start is held,
+   * and a start arriving during the wait replaces it — the caller of the
+   * replaced one gets the answer of the one that actually ran, so nobody is
+   * left waiting on a promise that will never settle.
+   */
+  const run = (...args: A): Promise<T> => {
+    if (calm === undefined) return start(...args)
+    if (quiet !== undefined) timers.clear(quiet.timer)
+    return new Promise<T>((resolve, reject) => {
+      const waiting = quiet
+      const timer = timers.set(() => {
+        quiet = undefined
+        const answer = start(...args)
+        resolve(answer)
+        waiting?.resolve(answer)
+      }, calm)
+      quiet = { timer, resolve: waiting === undefined ? resolve : waiting.resolve }
+      if (waiting !== undefined)
+        quiet.resolve = value => {
+          waiting.resolve(value)
+          resolve(value)
+        }
+      void reject
+    })
   }
 
   return {
