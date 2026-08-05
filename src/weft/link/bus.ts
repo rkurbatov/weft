@@ -1,13 +1,19 @@
-// A bus between tabs of one origin. `BroadcastChannel` carries everything to
-// everybody, so the envelope adds who it is from and who it is for; each end
-// keeps only what belongs to it.
+// Tabs of one origin, talking over a broadcast line.
+//
+// This file is the protocol and nothing else: who is served and for how long,
+// how an arrival is met, and how a watcher keeps itself known. The carrying is
+// `transport.ts`, the addressing is `postbox.ts` — so the same protocol runs
+// over a browser's bus, Node's own, or a pair of functions in a test.
 //
 // The graph's side is a hub rather than a channel: several tabs may be watching
 // at once, and each of them gets a channel of its own.
 
-import type { Channel } from './channel.ts'
 import { wallClock } from '../core/graph/time.ts'
 import type { Timers } from '../core/graph/time.ts'
+import type { Channel } from './channel.ts'
+import { claimOf, EVERYONE, GRAPH, greeting, isGreeting, newName, postbox } from './postbox.ts'
+import { openBroadcast, overBus } from './transport.ts'
+import type { Broadcast, BusLike } from './transport.ts'
 
 /** A place new watchers arrive at. Each one is handed its own channel. */
 export interface Hub {
@@ -25,11 +31,11 @@ export interface HubOptions {
   lease?: number | false
   timers?: Timers
   /**
-   * Who may be served. A tab says whose it is when it says hello; a hub that
-   * holds one person's household refuses anybody else's — by name, so the tab
+   * Who may be served. A tab says whose it is when it greets the hub; a hub
+   * holding one person's household refuses anybody else's — by name, so the tab
    * learns why it sees nothing instead of watching an empty screen. Without
-   * this everyone is admitted, which is right for an application with one
-   * graph and one person.
+   * this everyone is admitted, which is right for an application with one graph
+   * and one person.
    */
   admit?: (claim: string | undefined) => boolean
 }
@@ -64,59 +70,20 @@ export function heartbeat(say: () => void, keepAlive: number | false, timers: Ti
   }
 }
 
-interface Envelope {
-  readonly weft: true
-  readonly from: string
-  readonly to: string | 'graph' | 'all'
-  readonly body: unknown
-}
-
-export const HELLO = { hello: true } as const
-
-/** Hello with a claim: whose tab this is. The hub decides whether to serve it. */
-export function helloFrom(claim: string | undefined): unknown {
-  return claim === undefined ? HELLO : { hello: true, claim }
-}
-
-export function claimOf(body: unknown): string | undefined {
-  if (typeof body !== 'object' || body === null) return undefined
-  const claim = (body as { claim?: unknown }).claim
-  return typeof claim === 'string' ? claim : undefined
-}
-
-function isEnvelope(message: unknown): message is Envelope {
-  return typeof message === 'object' && message !== null && (message as Envelope).weft === true
-}
-
-function newName(): string {
-  const crypto = (globalThis as { crypto?: { randomUUID?: () => string } }).crypto
-  return (
-    crypto?.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
-  )
-}
-
-/** Anything shaped like a BroadcastChannel: the browser's, or Node's own. */
-export interface Bus {
-  postMessage(message: unknown): void
-  addEventListener(kind: 'message', handler: (event: { data: unknown }) => void): void
-  removeEventListener(kind: 'message', handler: (event: { data: unknown }) => void): void
-  close(): void
-}
-
-function openBus(name: string): Bus {
-  const make = (globalThis as { BroadcastChannel?: new (name: string) => Bus }).BroadcastChannel
-  if (make === undefined) throw new Error('weft: no BroadcastChannel here')
-  return new make(name)
+/** Where a bus comes from: a line given, a BroadcastChannel-shaped thing, or a name. */
+function lineFor(name: string, given?: Broadcast | BusLike): { line: Broadcast; owned: boolean } {
+  if (given === undefined) return { line: openBroadcast(name), owned: true }
+  return { line: 'post' in given ? given : overBus(given), owned: false }
 }
 
 /** The graph's side of a bus: a hub that hands out one channel per watcher. */
-export function busHub(name: string, bus?: Bus, options: HubOptions = {}): Hub {
-  const owned = bus === undefined
-  const line = bus ?? openBus(name)
-  const me = 'graph'
+export function busHub(name: string, bus?: Broadcast | BusLike, options: HubOptions = {}): Hub {
+  const { line, owned } = lineFor(name, bus)
+  const mail = postbox(line, GRAPH)
   const lease = options.lease ?? LEASE
   const timers = options.timers ?? wallClock
   const admit = options.admit
+
   return {
     accept(onWatcher) {
       const serving = new Map<string, { stop: () => void; held?: unknown }>()
@@ -139,20 +106,11 @@ export function busHub(name: string, bus?: Bus, options: HubOptions = {}): Hub {
         entry.held = timers.set(() => drop(them), lease)
       }
 
-      const onMessage = (event: { data: unknown }): void => {
-        const envelope = event.data
-        if (!isEnvelope(envelope) || envelope.to !== me) return
-        const them = envelope.from
-
-        if (!serving.has(them) && admit !== undefined && !admit(claimOf(envelope.body))) {
-          // Somebody else's tab. Say so and serve nothing: a mirror handed to
-          // the wrong session is a leak, and silence would look like a bug.
-          line.postMessage({
-            weft: true,
-            from: me,
-            to: them,
-            body: { kind: 'refused', why: `not this station's session` },
-          })
+      const stopListening = mail.listen((them, body) => {
+        if (!serving.has(them) && admit !== undefined && !admit(claimOf(body))) {
+          // Somebody else's tab. Say so and serve nothing: a replica handed to
+          // the wrong session is a leak, and silence would look like a fault.
+          mail.send(them, { kind: 'refused', why: `not this station's session` })
           return
         }
 
@@ -161,7 +119,7 @@ export function busHub(name: string, bus?: Bus, options: HubOptions = {}): Hub {
           // give it a channel of its own. Its serve announces itself, so a
           // returning watcher re-asks for everything on its own accord.
           const channel: Channel = {
-            send: body => line.postMessage({ weft: true, from: me, to: them, body }),
+            send: body_ => mail.send(them, body_),
             listen: handler => {
               handlers.set(them, handler)
               return () => handlers.delete(them)
@@ -170,74 +128,59 @@ export function busHub(name: string, bus?: Bus, options: HubOptions = {}): Hub {
           serving.set(them, { stop: onWatcher(channel) })
         }
         renew(them)
-        if (envelope.body !== undefined && !isHello(envelope.body)) {
-          handlers.get(them)?.(envelope.body)
-        }
-      }
+        if (body !== undefined && !isGreeting(body)) handlers.get(them)?.(body)
+      })
 
-      line.addEventListener('message', onMessage)
       // Say we are here to the whole bus at once: watchers that outlived the
       // last graph re-ask immediately instead of waiting out their heartbeat,
       // and their watches introduce them before any command of theirs flies.
-      line.postMessage({ weft: true, from: me, to: 'all', body: { kind: 'up' } })
+      mail.send(EVERYONE, { kind: 'up' })
 
       return () => {
-        line.removeEventListener('message', onMessage)
-        // Snapshot: drop() deletes from `serving` while we walk it.
-        // oxlint-disable-next-line unicorn/no-useless-spread
-        for (const them of [...serving.keys()]) drop(them)
+        stopListening()
+        // A copy on purpose: drop() deletes from `serving` while we walk it.
+        const leaving = Array.from(serving.keys())
+        for (const them of leaving) drop(them)
         // A bus the hub opened, the hub closes.
-        if (owned) (line as { close?(): void }).close?.()
+        if (owned) line.close()
       }
     },
   }
 }
 
-export function isHello(body: unknown): boolean {
-  return typeof body === 'object' && body !== null && (body as { hello?: true }).hello === true
-}
-
-/** A watcher's side of a bus. Says hello, so the hub knows to serve it. */
+/** A watcher's side of a bus. Greets the hub, so it knows to serve it. */
 export interface ChannelOptions extends KeepAliveOptions {
   /** Whose tab this is. The hub of a station serving one person checks it. */
   claim?: string
 }
 
-export function busChannel(name: string, bus?: Bus, options: ChannelOptions = {}): Channel {
-  const owned = bus === undefined
-  const line = bus ?? openBus(name)
+export function busChannel(
+  name: string,
+  bus?: Broadcast | BusLike,
+  options: ChannelOptions = {},
+): Channel {
+  const { line, owned } = lineFor(name, bus)
+  const mail = postbox(line, newName())
   const keepAlive = options.keepAlive ?? KEEP_ALIVE
   const timers = options.timers ?? wallClock
-  const me = newName()
-  const send = (body: unknown): void => {
-    line.postMessage({ weft: true, from: me, to: 'graph', body })
-  }
-  const hello = helloFrom(options.claim)
-  send(hello)
+  const hello = greeting(options.claim)
+
+  const say = (body: unknown): void => mail.send(GRAPH, body)
+  say(hello)
+
   return {
-    send,
-    listen: handler => {
-      const onMessage = (event: { data: unknown }): void => {
-        const envelope = event.data
-        if (!isEnvelope(envelope) || (envelope.to !== me && envelope.to !== 'all')) return
-        handler(envelope.body)
-      }
-      line.addEventListener('message', onMessage)
+    send: say,
+    listen(handler) {
+      const stopListening = mail.listen((_from, body) => handler(body))
       // The heartbeat lives with the listener: while somebody listens on this
       // end, the hub's lease on us is kept; stop listening and it runs out.
-      const stopBeating = heartbeat(() => send(hello), keepAlive, timers)
+      const stopBeating = heartbeat(() => say(hello), keepAlive, timers)
       return () => {
-        line.removeEventListener('message', onMessage)
+        stopListening()
         stopBeating()
       }
     },
     // A bus this channel opened, this channel closes.
-    ...(owned
-      ? {
-          close: () => {
-            ;(line as { close?(): void }).close?.()
-          },
-        }
-      : {}),
+    ...(owned ? { close: () => line.close() } : {}),
   }
 }

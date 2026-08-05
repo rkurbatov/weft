@@ -8,9 +8,13 @@
 import { portChannel } from './ports.ts'
 import type { Port } from './ports.ts'
 import type { Channel } from './channel.ts'
-import { HELLO, LEASE, KEEP_ALIVE, heartbeat, isHello } from './bus.ts'
+import { heartbeat, KEEP_ALIVE, LEASE } from './bus.ts'
+import { greeting, isGreeting } from './postbox.ts'
 import type { Hub, HubOptions, KeepAliveOptions } from './bus.ts'
 import { wallClock } from '../core/graph/time.ts'
+
+/** A port carries one tab only, so the greeting needs no claim of its own. */
+const GREETING = greeting(undefined)
 
 /** What a shared worker's global scope offers: a connection per tab. */
 export interface SharedScope {
@@ -52,7 +56,7 @@ export function sharedWorkerHub(scope: SharedScope, options: HubOptions = {}): H
           listen: handler =>
             raw.listen(message => {
               renew(port)
-              if (!isHello(message)) handler(message)
+              if (!isGreeting(message)) handler(message)
             }),
         }
         serving.set(port, { stop: onWatcher(channel) })
@@ -79,7 +83,7 @@ export function sharedWorkerChannel(port: Port, options: KeepAliveOptions = {}):
     send: raw.send,
     listen: handler => {
       const stop = raw.listen(handler)
-      const stopBeating = heartbeat(() => raw.send(HELLO), keepAlive, timers)
+      const stopBeating = heartbeat(() => raw.send(GREETING), keepAlive, timers)
       return () => {
         stop()
         stopBeating()

@@ -129,7 +129,9 @@ export { pairInMemory, portChannel } from './link/ports.ts'
 export type { Pair, Port } from './link/ports.ts'
 
 export { busHub, busChannel } from './link/bus.ts'
-export type { Bus, Hub, HubOptions, KeepAliveOptions } from './link/bus.ts'
+export type { Hub, HubOptions, KeepAliveOptions } from './link/bus.ts'
+export { localBroadcast, openBroadcast, overBus } from './link/transport.ts'
+export type { Broadcast, BusLike as Bus } from './link/transport.ts'
 
 export { sharedWorkerHub, sharedWorkerChannel, sharedWorkersExist } from './link/shared.ts'
 export type { SharedScope } from './link/shared.ts'
