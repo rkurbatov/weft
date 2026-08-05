@@ -264,4 +264,37 @@ describe('the Loom dialect', () => {
     )
     assert.equal(given.shelf, 'given')
   })
+
+  test('a local change costs the size of the book, not the size of the board', () => {
+    const cards = Array.from({ length: 2000 }, (_, i) => ({ id: `c${i}` }))
+    const order = cards.map(c => c.id)
+    const base = { get: () => ({ cards, order }), asked: input(0) }
+    const book = input<readonly Entry[]>([])
+    const seen = laid(
+      base,
+      { notes: book, absorb: () => {} },
+      {
+        shape: {
+          rows: (s: { cards: Array<{ id: string }> }) => s.cards,
+          key: r => r.id,
+          lanes: (s: { order: string[] }) => [{ id: 'all', items: s.order }],
+        },
+        rules: { move: (b, op: { id: string; at: number }) => b.place(op.id, 'all', op.at) },
+      },
+    )
+
+    const before = seen.peek()
+    book.set([
+      { id: '1', name: 'move', args: { id: 'c1999', at: 0 }, at: 0, attempts: 0, state: 'waiting' },
+    ])
+    const after = seen.peek()
+
+    // The rows the book did not touch are the very same objects — not copies —
+    // which is what the board of a real screen depends on.
+    for (const id of ['c0', 'c1', 'c1000']) {
+      assert.equal(after.rows.get(id), before.rows.get(id))
+    }
+    assert.equal(after.rows.size, before.rows.size)
+    assert.equal(after.lanes[0]?.items[0], 'c1999', 'and the move itself landed')
+  })
 })
