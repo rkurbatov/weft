@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { cell, input, subscribe } from '#weft/core/graph/graph.ts'
 import { source } from '#weft/core/remote/source.ts'
 import { reconcile } from '#weft/core/remote/reconcile.ts'
-import { settle, world } from '../../../kit/index.ts'
+import { settle, until, world } from '../../../kit/index.ts'
 
 describe('reconciling the world', () => {
   test('the world is brought in line at once and then on every change', async () => {
@@ -194,5 +194,64 @@ describe('reconciling the world', () => {
     assert.deepEqual(seen, [false])
     stop()
     job.stop()
+  })
+
+  test('a newer value calls off the run in flight, rather than letting it finish', async () => {
+    const clock = world()
+    const title = input('first')
+    const started: string[] = []
+    const abandoned: string[] = []
+    let release = (): void => {}
+
+    const job = reconcile(
+      title,
+      async (value, signal) => {
+        started.push(value)
+        await new Promise<void>(resolve => {
+          release = resolve
+        })
+        if (signal.aborted) abandoned.push(value)
+      },
+      { name: 'title', timers: clock.timers },
+    )
+    until(job.stop)
+
+    await settle()
+    assert.deepEqual(started, ['first'])
+
+    title.set('second')
+    await settle()
+    assert.deepEqual(started, ['first'], 'the second waits for the first to let go')
+
+    release()
+    await settle(3)
+    assert.deepEqual(abandoned, ['first'], 'the first learned it was called off')
+    assert.deepEqual(started, ['first', 'second'])
+    release()
+    await settle(2)
+  })
+
+  test('stopping calls off the run in flight too', async () => {
+    const clock = world()
+    const title = input('only')
+    let told = false
+    let release = (): void => {}
+
+    const job = reconcile(
+      title,
+      async (_value, signal) => {
+        await new Promise<void>(resolve => {
+          release = resolve
+        })
+        told = signal.aborted
+      },
+      { name: 'title', timers: clock.timers },
+    )
+
+    await settle()
+    job.stop()
+    release()
+    await settle(2)
+    assert.equal(told, true)
   })
 })

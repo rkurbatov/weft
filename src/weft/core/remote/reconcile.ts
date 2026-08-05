@@ -41,7 +41,7 @@ export interface Reconciliation<T> {
 
 export function reconcile<T>(
   target: Readable<T>,
-  apply: (value: T) => void | Promise<void>,
+  apply: (value: T, signal: AbortSignal) => void | Promise<void>,
   options: ReconcileOptions<T> = {},
 ): Reconciliation<T> {
   const name = options.name ?? 'reconcile'
@@ -64,6 +64,18 @@ export function reconcile<T>(
   let timer: unknown = null
   let stopped = false
   let started = false
+  /**
+   * The run in flight, and how to call it off. A newer value used to leave the
+   * old run going: its answer was thrown away, but the request itself ran to
+   * the end — traffic spent on a world state that no longer exists.
+   */
+  let asking: AbortController | null = null
+
+  function abandon(why: string): void {
+    if (asking === null) return
+    asking.abort(new Error(`weft: ${name} — ${why}`))
+    asking = null
+  }
 
   function cancel(): void {
     if (timer === null) return
@@ -75,6 +87,8 @@ export function reconcile<T>(
     const key = keyOf(value)
     if (wanted !== null && Object.is(wanted.key, key)) return
     if (wanted === null && Object.is(settledKey, key)) return
+    // What is in flight is now for a world state nobody wants.
+    if (running) abandon('a newer value arrived')
     wanted = { value, key }
     attempt = 0
     failure.set(undefined)
@@ -88,8 +102,10 @@ export function reconcile<T>(
     running = true
     working.set(true)
     attempt++
+    const controller = new AbortController()
+    asking = controller
     try {
-      await apply(goal.value)
+      await apply(goal.value, controller.signal)
       if (stopped) return
       // A newer goal may have arrived while this one was being applied; only
       // the latest matters, the ones in between were never the world's state.
@@ -116,6 +132,7 @@ export function reconcile<T>(
       }
     } finally {
       running = false
+      if (asking === controller) asking = null
       working.set(wanted !== null)
     }
     if (timer === null) void pump()
@@ -146,6 +163,7 @@ export function reconcile<T>(
     stop: () => {
       stopped = true
       cancel()
+      abandon('reconciliation stopped')
       stopWatching()
     },
   }
