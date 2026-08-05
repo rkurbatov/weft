@@ -7,8 +7,8 @@
 // Nothing here knows about clocks, handlers or retries: a book can be tested
 // with a disk and nothing else.
 
-import { input } from '#graph/graph/graph.ts'
-import type { Input } from '#graph/graph/graph.ts'
+import { stored } from '#graph/graph/graph.ts'
+import type { Stored } from '#graph/graph/graph.ts'
 import { SAVING } from './keep.ts'
 import type { Saving } from './keep.ts'
 import type { Store } from './store.ts'
@@ -36,8 +36,8 @@ export interface Entry {
 }
 
 export interface Book {
-  readonly entries: Input<readonly Entry[]>
-  readonly saving: Input<Saving>
+  readonly entries: Stored<readonly Entry[]>
+  readonly saving: Stored<Saving>
   /** Settles when whatever a previous run left behind has been lifted. */
   readonly ready: Promise<void>
   /** Whether the old book has been lifted: before that, writing would bury it. */
@@ -60,8 +60,8 @@ function mend(raw: unknown): Entry[] {
 }
 
 export function book(key: string, store: Store, onLifted: () => void): Book {
-  const entries = input<readonly Entry[]>([], { name: `${key}.entries` })
-  const saving = input<Saving>(SAVING, { name: `${key}.saving` })
+  const entries = stored<readonly Entry[]>([], { name: `${key}.entries` })
+  const saving = stored<Saving>(SAVING, { name: `${key}.saving` })
   let up = false
 
   let pending: readonly Entry[] | undefined

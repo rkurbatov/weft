@@ -1,8 +1,8 @@
 // Families: one cell per entity, built on first demand.
 // A member nobody watches is a cache entry, not state — it may be dropped.
 
-import { cell } from './graph.ts'
-import type { Cell } from './graph.ts'
+import { derived } from './graph.ts'
+import type { Derived } from './graph.ts'
 
 export interface FamilyOptions<K, T> {
   name?: string
@@ -15,7 +15,7 @@ export interface FamilyOptions<K, T> {
 
 export interface Family<K, T> {
   /** The cell for this key — the same cell for the same key, while it lives. */
-  (key: K): Cell<T>
+  (key: K): Derived<T>
   readonly name: string
   /** Members currently held, watched and cached alike. */
   readonly size: number
@@ -33,7 +33,7 @@ export interface Family<K, T> {
 
 interface Member<K, T> {
   readonly key: K
-  readonly cell: Cell<T>
+  readonly cell: Derived<T>
 }
 
 function defaultKeyOf<K>(key: K): string {
@@ -75,7 +75,7 @@ export function family<K, T>(
     return dropped
   }
 
-  const get = (key: K): Cell<T> => {
+  const get = (key: K): Derived<T> => {
     const id = keyOf(key)
     const existing = members.get(id)
     if (existing !== undefined) {
@@ -86,7 +86,7 @@ export function family<K, T>(
     }
     const member: Member<K, T> = {
       key,
-      cell: cell(() => build(key), {
+      cell: derived(() => build(key), {
         name: `${name}[${id}]`,
         ...(equal ? { equal } : {}),
       }),

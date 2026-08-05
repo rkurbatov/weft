@@ -3,10 +3,10 @@
 // tests cannot tell which side of the boundary they run on — that is the
 // whole point.
 
-import { adopt, offer, view } from '#loom'
-import type { Refusal, View } from '#loom'
+import { adopt, cell, offer } from '#loom'
+import type { Refusal } from '#loom'
 import type { OfferOptions } from '#loom'
-import type { Channel } from '#weft'
+import type { Channel, Watchable } from '#weft'
 import type { Card, ColumnData } from '../kanban-common/types.ts'
 import type { Kanban } from './state.ts'
 
@@ -42,9 +42,9 @@ export function serveKanban(app: Kanban, channel: Channel, options: OfferOptions
 export function kanbanMirror(channel: Channel): Kanban {
   const tab = adopt(channel)
 
-  const plain = <T>(name: string, empty: T): View<T> => {
+  const plain = <T>(name: string, empty: T): Watchable<T> => {
     const face = tab.view<T>(name)
-    return view(() => face.get() ?? empty, { name: `${name}.plain` })
+    return cell(() => face.get() ?? empty, { name: `${name}.plain` })
   }
 
   const move = tab.act<[string, string, number]>('move')

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
-import { cell, input, subscribe } from '#graph/graph/graph.ts'
+import { derived, stored, subscribe } from '#graph/graph/graph.ts'
 import { outbox } from '#offline/outbox.ts'
 import { region } from '#graph/graph/region.ts'
 import { memoryStore } from '#offline/store.ts'
@@ -9,11 +9,11 @@ import { held, wakings, world } from '../../../kit/index.ts'
 
 describe('a region owns what is born inside it', () => {
   test('lets go of its watchers and cells in one move', () => {
-    const outside = input(1)
+    const outside = stored(1)
     const woke = wakings()
     const box = held(
       region('mod', () => {
-        const doubled = cell(() => outside.get() * 2, { name: 'doubled' })
+        const doubled = derived(() => outside.get() * 2, { name: 'doubled' })
         subscribe(doubled, woke.note)
         return doubled
       }),
@@ -93,7 +93,7 @@ describe('a region owns what is born inside it', () => {
   })
 
   test('nest, and so do their names', () => {
-    const box = held(region('app', () => region('board', () => cell(() => 1, { name: 'size' }))))
+    const box = held(region('app', () => region('board', () => derived(() => 1, { name: 'size' }))))
     assert.equal(box.value.value.name, 'app.board.size')
   })
 })

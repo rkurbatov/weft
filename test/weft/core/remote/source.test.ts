@@ -1,6 +1,6 @@
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
-import { cell, subscribe } from '#graph/graph/graph.ts'
+import { derived, subscribe } from '#graph/graph/graph.ts'
 import { source } from '#async/source.ts'
 import { settle, until, world } from '../../../kit/index.ts'
 
@@ -20,8 +20,8 @@ describe('sources', () => {
       { now: clock.now, timers: clock.timers },
     )
     feed.state.peek()
-    const derived = cell(() => feed.state.get().value)
-    derived.peek() // computed on request; nobody live behind it
+    const twice = derived(() => feed.state.get().value)
+    twice.peek() // computed on request; nobody live behind it
     await settle()
     assert.equal(calls, 0)
     assert.equal(feed.state.peek().kind, 'empty')
@@ -203,7 +203,7 @@ describe('sources', () => {
       now: clock.now,
       timers: clock.timers,
     })
-    const id = cell(() => feed.state.get().value?.id)
+    const id = derived(() => feed.state.get().value?.id)
     let woke = 0
     until(subscribe(id, () => woke++))
     await settle()

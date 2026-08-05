@@ -1,4 +1,4 @@
-// Cell graph: stored cells (one writer each), derived cells (formulas),
+// Derived graph: stored cells (one writer each), derived cells (formulas),
 // watchers. Dependencies are discovered by reading, never declared.
 //
 // Demand is counted alongside the links: a source knows whether any live
@@ -21,12 +21,12 @@ import type { Probe } from './waves.ts'
 
 export type Equal<T> = (a: T, b: T) => boolean
 
-export interface CellOptions<T> {
+export interface DerivedOptions<T> {
   equal?: Equal<T>
   name?: string
 }
 
-export interface InputOptions<T> extends CellOptions<T> {
+export interface StoredOptions<T> extends DerivedOptions<T> {
   /** First live watcher arrived. Runs outside any formula. */
   onDemand?: () => void
   /** Last live watcher left. Runs outside any formula. */
@@ -34,7 +34,7 @@ export interface InputOptions<T> extends CellOptions<T> {
 }
 
 /** Stored cell: the only thing that can be written, by its single writer. */
-export class Input<T> implements Source {
+export class Stored<T> implements Source {
   // Mark and shape live on the prototype, not on every node: a table can hold
   // a cell per row, and three extra slots per node are three too many.
   get [NODE](): NodeKind {
@@ -49,7 +49,7 @@ export class Input<T> implements Source {
   private readonly onDemand: (() => void) | undefined
   private readonly onIdle: (() => void) | undefined
 
-  constructor(initial: T, options: InputOptions<T> = {}, core: Core = coreForBuild()) {
+  constructor(initial: T, options: StoredOptions<T> = {}, core: Core = coreForBuild()) {
     this.engine = core
     this.current = initial
     this.equal = options.equal ?? Object.is
@@ -105,7 +105,7 @@ export class Input<T> implements Source {
 }
 
 /** Derived cell: a formula. Nobody writes it; it recomputes when its inputs move. */
-export class Cell<T> implements Source, Consumer {
+export class Derived<T> implements Source, Consumer {
   get [NODE](): NodeKind {
     return 'cell'
   }
@@ -131,7 +131,7 @@ export class Cell<T> implements Source, Consumer {
   private readonly formula: () => T
   private readonly equal: Equal<T>
 
-  constructor(formula: () => T, options: CellOptions<T> = {}, core: Core = coreForBuild()) {
+  constructor(formula: () => T, options: DerivedOptions<T> = {}, core: Core = coreForBuild()) {
     this.engine = core
     this.formula = formula
     this.equal = options.equal ?? Object.is
@@ -326,7 +326,7 @@ export class Watcher implements Consumer {
   }
 }
 
-export type Readable<T> = Input<T> | Cell<T>
+export type Readable<T> = Stored<T> | Derived<T>
 
 /**
  * Anything that can be read and watched. Stated structurally so that a mirror,
@@ -344,12 +344,12 @@ export function engineOf(value: unknown): Core | undefined {
 
 // ── Building in an engine ────────────────────────────────────────────────────
 
-function makeInput<T>(core: Core, initial: T, options?: InputOptions<T>): Input<T> {
-  return new Input(initial, options, core)
+function makeStored<T>(core: Core, initial: T, options?: StoredOptions<T>): Stored<T> {
+  return new Stored(initial, options, core)
 }
 
-function makeCell<T>(core: Core, formula: () => T, options?: CellOptions<T>): Cell<T> {
-  const c = new Cell(formula, options, core)
+function makeDerived<T>(core: Core, formula: () => T, options?: DerivedOptions<T>): Derived<T> {
+  const c = new Derived(formula, options, core)
   core.owned(() => c.dispose())
   return c
 }
@@ -360,12 +360,12 @@ function makeWatcher(core: Core, body: () => void, options?: WatchOptions): () =
   return () => w.dispose()
 }
 
-export function input<T>(initial: T, options?: InputOptions<T>): Input<T> {
-  return makeInput(coreForBuild(), initial, options)
+export function stored<T>(initial: T, options?: StoredOptions<T>): Stored<T> {
+  return makeStored(coreForBuild(), initial, options)
 }
 
-export function cell<T>(formula: () => T, options?: CellOptions<T>): Cell<T> {
-  return makeCell(coreForBuild(), formula, options)
+export function derived<T>(formula: () => T, options?: DerivedOptions<T>): Derived<T> {
+  return makeDerived(coreForBuild(), formula, options)
 }
 
 export function watch(body: () => void, options?: WatchOptions): () => void {
@@ -432,7 +432,7 @@ function watcherName(consumer: Consumer): string {
 export function trace(node: Watchable<unknown>, depth = 2): Trace {
   const kind = markOf(node)
   if (kind === 'input') {
-    const held = node as unknown as Input<unknown>
+    const held = node as unknown as Stored<unknown>
     return {
       name: held.name,
       kind: 'input',
@@ -442,7 +442,7 @@ export function trace(node: Watchable<unknown>, depth = 2): Trace {
     }
   }
   if (kind === 'cell') {
-    const derived = node as unknown as Cell<unknown>
+    const derived = node as unknown as Derived<unknown>
     const raw = node as unknown as { value?: unknown; state: State; failure: unknown }
     const reads =
       depth > 0
@@ -487,8 +487,8 @@ export interface Engine {
   /** The propagation core. Library plumbing reaches for it; applications do not. */
   readonly core: Core
   readonly disposed: boolean
-  input<T>(initial: T, options?: InputOptions<T>): Input<T>
-  cell<T>(formula: () => T, options?: CellOptions<T>): Cell<T>
+  stored<T>(initial: T, options?: StoredOptions<T>): Stored<T>
+  derived<T>(formula: () => T, options?: DerivedOptions<T>): Derived<T>
   watch(body: () => void, options?: WatchOptions): () => void
   batch<T>(fn: () => T): T
   untracked<T>(fn: () => T): T
@@ -514,8 +514,8 @@ export function graph(name = 'engine', how?: EngineOptions): Engine {
     get disposed() {
       return core.disposed
     },
-    input: (initial, options) => makeInput(core, initial, options),
-    cell: (formula, options) => makeCell(core, formula, options),
+    stored: (initial, options) => makeStored(core, initial, options),
+    derived: (formula, options) => makeDerived(core, formula, options),
     watch: (body, options) => makeWatcher(core, body, options),
     batch: fn => core.batch(fn),
     untracked: fn => core.untracked(fn),
@@ -534,7 +534,7 @@ function adopt<T>(core: Core, source: Watchable<T>): Watchable<T> {
   if (home === core) return source
   const named = source as unknown as { name: string }
   let hot: (() => void) | undefined
-  const mirror = makeInput(core, source.peek(), {
+  const mirror = makeStored(core, source.peek(), {
     name: `adopted(${named.name})`,
     // Demand crosses the border but is not what keeps the value true: the
     // shared engine starts its own sources only while somebody here looks.

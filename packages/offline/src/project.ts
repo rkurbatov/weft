@@ -5,8 +5,8 @@
 // stays quiet. The identity keeping is the one deliberately impure spot, and
 // it lives here, under the floor, not in application formulas.
 
-import { cell } from '#graph/graph/graph.ts'
-import type { Cell, Watchable } from '#graph/graph/graph.ts'
+import { derived } from '#graph/graph/graph.ts'
+import type { Derived, Watchable } from '#graph/graph/graph.ts'
 import type { Entry } from './outbox.ts'
 import { preserve } from '#graph/data/preserve.ts'
 
@@ -26,9 +26,9 @@ export function projected<S>(
   base: Watchable<S>,
   book: Watchable<readonly Entry[]>,
   spec: ProjectionSpec<S>,
-): Cell<S> {
+): Derived<S> {
   let previous: S | undefined
-  return cell<S>(
+  return derived<S>(
     () => {
       const start = base.get()
       const laid = book.get().reduce((state, entry) => {

@@ -7,9 +7,9 @@
 // for the one standing order. Whether the convenient layer wants words of its
 // own for these is an open question in the register.
 import { command, watch } from '#weft'
-import type { Command, Watchable } from '#weft'
-import { fact, feed, fold, listsBy, shape, truthBy } from '#loom'
-import type { Fact, Feed, ListView, Truth } from '#loom'
+import type { Command, Stored, Watchable } from '#weft'
+import { feed, fold, listsBy, cell, shape, truthBy } from '#loom'
+import type { Feed, ListView, Truth } from '#loom'
 import type { Game, GameDetails, GameOdds, RailServer, Status } from './server.ts'
 
 export type Shelf = Status | 'all'
@@ -17,21 +17,21 @@ export const PAGE = 40
 
 export interface Rail {
   games: Feed<Game>
-  shelf: Fact<Shelf>
+  shelf: Stored<Shelf>
   shelves: Record<Shelf, ListView<Game>>
   /** Goals across everything live right now. A fold, not a recount. */
   goals: Watchable<number>
   /** Games the server bore after this rail opened. */
   arrivals: Watchable<number>
   /** The furthest row any screen has looked at. Screens report it; pages follow. */
-  reach: Fact<number>
-  loaded: Fact<number>
+  reach: Stored<number>
+  loaded: Stored<number>
   nextPage: Command<[], void>
   /** What the person is typing. The question with a calm in its passport. */
-  searchText: Fact<string>
+  searchText: Stored<string>
   find: (text: string) => Truth<Game[]>
   /** The opened game, if any; its details come from two services at once. */
-  picked: Fact<number | null>
+  picked: Stored<number | null>
   gameInfo: (id: number) => Truth<GameDetails | null>
   gameOdds: (id: number) => Truth<GameOdds | null>
   dispose(): void
@@ -51,9 +51,9 @@ export function rail(server: RailServer): Rail {
     live: hand => server.live(hand),
   })
 
-  const loaded = fact(0, { name: 'loaded' })
-  const total = fact<number | null>(null, { name: 'total' })
-  const reach = fact(0, { name: 'reach' })
+  const loaded = cell(0, { name: 'loaded' })
+  const total = cell<number | null>(null, { name: 'total' })
+  const reach = cell(0, { name: 'reach' })
 
   const nextPage = command(
     async () => {
@@ -96,11 +96,11 @@ export function rail(server: RailServer): Rail {
 
   const shelves: Record<Shelf, ListView<Game>> = board.shelves
 
-  const shelf = fact<Shelf>('all', { name: 'shelf' })
+  const shelf = cell<Shelf>('all', { name: 'shelf' })
 
   // Search: the churn of typing asks only the question that survives the calm,
   // and a question abandoned mid-flight is disowned by the move itself.
-  const searchText = fact('', { name: 'searchText' })
+  const searchText = cell('', { name: 'searchText' })
   const find = truthBy((text: string) => server.search(text), {
     name: 'find',
     calm: 250,
@@ -108,7 +108,7 @@ export function rail(server: RailServer): Rail {
     empty: [] as Game[],
   })
 
-  const picked = fact<number | null>(null, { name: 'picked' })
+  const picked = cell<number | null>(null, { name: 'picked' })
   const gameInfo = truthBy((id: number) => server.details(id), {
     name: 'gameInfo',
     keep: 16,

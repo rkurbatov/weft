@@ -3,7 +3,7 @@
 
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
-import { input } from '#graph/graph/graph.ts'
+import { stored } from '#graph/graph/graph.ts'
 import { projected } from '#offline/project.ts'
 import { PRESERVE_LIMIT, preserve } from '#graph/data/preserve.ts'
 import { forgetNotices, onNotice } from '#graph/data/notice.ts'
@@ -32,8 +32,8 @@ test('preserve: an unchanged piece keeps being the very same object', () => {
 })
 
 test('the projection lays the book over the base in order, skips the stuck, keeps identity', () => {
-  const base = input<{ lanes: Lanes }>({ lanes: { todo: ['a', 'b'], doing: [] } })
-  const book = input<readonly Entry[]>([])
+  const base = stored<{ lanes: Lanes }>({ lanes: { todo: ['a', 'b'], doing: [] } })
+  const book = stored<readonly Entry[]>([])
   const visible = projected(base, book, {
     apply: {
       move: (s: { lanes: Lanes }, op: { id: string; into: string; at: number }) => ({

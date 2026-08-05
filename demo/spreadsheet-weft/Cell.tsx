@@ -10,7 +10,7 @@ import type { CellProps } from '../common/ui.tsx'
 import type { Sheet } from './sheet.ts'
 
 export function cellOf(sheet: Sheet) {
-  return memo(function Cell({ at }: CellProps) {
+  return memo(function Derived({ at }: CellProps) {
     const shown = useCell(sheet.shown(at))
     countCellRender()
     return <CellFrame shown={shown} text={sheet.text(at)} onCommit={text => sheet.set(at, text)} />

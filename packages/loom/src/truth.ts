@@ -4,7 +4,7 @@
 // and flight, fault and freshness are cells standing beside it. heldOf does
 // not exist in application code.
 
-import { cell } from '#weft'
+import { derived } from '#weft'
 import type { Watchable } from '#weft'
 import { heldOf } from '#weft'
 import type { Remote } from '#weft'
@@ -55,16 +55,16 @@ function faceOf<T>(
   name: string,
 ): Truth<T> {
   const state = feed.state
-  const value = cell(() => heldOf(state.get())?.value.value ?? empty, { name: `${name}.value` })
-  const flight = cell(() => state.get().loading, { name: `${name}.flight` })
-  const fault = cell(
+  const value = derived(() => heldOf(state.get())?.value.value ?? empty, { name: `${name}.value` })
+  const flight = derived(() => state.get().loading, { name: `${name}.flight` })
+  const fault = derived(
     () => {
       const s = state.get()
       return s.kind === 'failed' ? String(s.error) : null
     },
     { name: `${name}.fault` },
   )
-  const asked = cell(() => heldOf(state.get())?.value.askedAt ?? 0, { name: `${name}.asked` })
+  const asked = derived(() => heldOf(state.get())?.value.askedAt ?? 0, { name: `${name}.asked` })
   return {
     get: () => value.get(),
     peek: () => value.peek(),

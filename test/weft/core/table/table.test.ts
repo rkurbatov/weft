@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
-import { input, subscribe, watch } from '#graph/graph/graph.ts'
+import { stored, subscribe, watch } from '#graph/graph/graph.ts'
 import { table } from '#rel/table/table.ts'
 import type { SourceTable } from '#rel/table/table.ts'
 import { hasIds, held, until } from '../../../kit/index.ts'
@@ -284,7 +284,7 @@ describe('tables', () => {
   test('whereLive: the predicate is a formula, so typing re-filters the view', () => {
     const people = table<{ id: number; name: string }>({ key: p => p.id, name: 'people' })
     people.put({ id: 1, name: 'anna' }, { id: 2, name: 'boris' }, { id: 3, name: 'anatoly' })
-    const query = input('', { name: 'query' })
+    const query = stored('', { name: 'query' })
     const found = held(
       people.whereLive(() => {
         const text = query.get()
@@ -317,7 +317,7 @@ describe('tables', () => {
   test('whereLive: followers hear only the difference when the filter moves', () => {
     const rows = table<{ id: number; n: number }>({ key: r => r.id, name: 'rows' })
     for (let id = 1; id <= 20; id++) rows.put({ id, n: id })
-    const floor = input(0, { name: 'floor' })
+    const floor = stored(0, { name: 'floor' })
     const above = held(
       rows.whereLive(() => {
         const least = floor.get()

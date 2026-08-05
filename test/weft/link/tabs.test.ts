@@ -1,7 +1,7 @@
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { MessageChannel } from 'node:worker_threads'
-import { cell, input, subscribe } from '#graph/graph/graph.ts'
+import { derived, stored, subscribe } from '#graph/graph/graph.ts'
 import type { Timers } from '#graph/graph/time.ts'
 import { atOnce } from '#ipc/channel.ts'
 import { busHub, busChannel, heartbeat } from '#ipc/bus.ts'
@@ -19,11 +19,11 @@ describe('tabs and leadership', () => {
   // A bus message takes a turn each way, and a hello-then-watch takes several.
 
   function scene() {
-    const count = input(1)
+    const count = stored(1)
     return {
       count,
       surface: {
-        cells: { count, doubled: cell(() => count.get() * 2) },
+        cells: { count, doubled: derived(() => count.get() * 2) },
         commands: { add: (by: number) => count.set(count.peek() + by) },
       },
     }
@@ -54,8 +54,8 @@ describe('tabs and leadership', () => {
 
     const first = link(busChannel('weft-test-a', buses.make()))
     const second = link(busChannel('weft-test-a', buses.make()))
-    const mirrorOne = first.cell<number>('count')
-    const mirrorTwo = second.cell<number>('doubled')
+    const mirrorOne = first.derived<number>('count')
+    const mirrorTwo = second.derived<number>('doubled')
     const stopOne = subscribe(mirrorOne, () => {})
     const stopTwo = subscribe(mirrorTwo, () => {})
     await settle(4)
@@ -85,7 +85,7 @@ describe('tabs and leadership', () => {
 
     const writer = link(busChannel('weft-test-b', buses.make()))
     const reader = link(busChannel('weft-test-b', buses.make()))
-    const mirror = reader.cell<number>('count')
+    const mirror = reader.derived<number>('count')
     const stop = subscribe(mirror, () => {})
     await settle(4)
 
@@ -106,7 +106,7 @@ describe('tabs and leadership', () => {
     let stopServing = serve(surface, wire.graph, { schedule: atOnce })
     const seen = link(wire.watcher)
 
-    const mirror = seen.cell<number>('count')
+    const mirror = seen.derived<number>('count')
     const stop = subscribe(mirror, () => {})
     await settle(4)
     assert.equal(mirror.peek().value, 1)
@@ -316,11 +316,11 @@ describe('tabs and leadership', () => {
   test('the hub lets go of a tab that fell silent, and keeps serving the live one', async () => {
     const clock = fakeTimers()
     const awake: string[] = []
-    const talking = input(1, {
+    const talking = stored(1, {
       onDemand: () => awake.push('start'),
       onIdle: () => awake.push('stop'),
     })
-    const silent = input(10)
+    const silent = stored(10)
     const surface = { cells: { talking, silent } }
     const buses = busPair('weft-test-lease')
     const stopHub = busHub('weft-test-lease', buses.make(), {
@@ -332,8 +332,8 @@ describe('tabs and leadership', () => {
       busChannel('weft-test-lease', buses.make(), { keepAlive: 5_000, timers: clock.timers }),
     )
     const dead = link(busChannel('weft-test-lease', buses.make(), { keepAlive: false }))
-    const aliveMirror = alive.cell<number>('silent')
-    const deadMirror = dead.cell<number>('talking')
+    const aliveMirror = alive.derived<number>('silent')
+    const deadMirror = dead.derived<number>('talking')
     const stopAlive = subscribe(aliveMirror, () => {})
     const stopDead = subscribe(deadMirror, () => {})
     await settle(4)
@@ -369,11 +369,11 @@ describe('tabs and leadership', () => {
   test('the shared-worker hub lets go of a tab that fell silent', async () => {
     const clock = fakeTimers()
     const awake: string[] = []
-    const talking = input(1, {
+    const talking = stored(1, {
       onDemand: () => awake.push('start'),
       onIdle: () => awake.push('stop'),
     })
-    const lonely = input(10, {
+    const lonely = stored(10, {
       onDemand: () => awake.push('lonely starts'),
       onIdle: () => awake.push('lonely stops'),
     })
@@ -401,8 +401,8 @@ describe('tabs and leadership', () => {
     )
     const dead = link(sharedWorkerChannel(gone.port2 as unknown as Port, { keepAlive: false }))
 
-    const aliveMirror = alive.cell<number>('talking')
-    const deadMirror = dead.cell<number>('lonely')
+    const aliveMirror = alive.derived<number>('talking')
+    const deadMirror = dead.derived<number>('lonely')
     const stopAlive = subscribe(aliveMirror, () => {})
     const stopDead = subscribe(deadMirror, () => {})
     await settle(4)

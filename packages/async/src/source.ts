@@ -2,7 +2,7 @@
 // It runs only while somebody live is watching it — demand starts it, idleness
 // stops it — so an unwatched screen costs nothing.
 
-import { cell, input, subscribe, untracked } from '#graph/graph/graph.ts'
+import { derived, stored, subscribe, untracked } from '#graph/graph/graph.ts'
 import type { Watchable } from '#graph/graph/graph.ts'
 import { owned } from '#graph/graph/region.ts'
 import type { Readable } from '#graph/graph/graph.ts'
@@ -99,7 +99,7 @@ export function source<T>(
   let inFlight: Promise<void> | null = null
   let asking: AbortController | null = null
 
-  const state = input<Remote<T>>(EMPTY, {
+  const state = stored<Remote<T>>(EMPTY, {
     name,
     onDemand: () => {
       reschedule()
@@ -328,7 +328,7 @@ export function source<T>(
  */
 export function fresh<T>(feed: Source<T>, within: number): Readable<Remote<T>> {
   let release: (() => void) | null = null
-  const gate = input(0, {
+  const gate = stored(0, {
     name: `${feed.name}!${within}`,
     onDemand: () => {
       release = feed.require(within)
@@ -338,7 +338,7 @@ export function fresh<T>(feed: Source<T>, within: number): Readable<Remote<T>> {
       release = null
     },
   })
-  return cell(
+  return derived(
     () => {
       gate.get()
       return feed.state.get()

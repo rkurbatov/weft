@@ -2,8 +2,8 @@
 // writer is the wire, and watching it is what asks the other side for it:
 // demand crosses the boundary by itself, so nothing has to be released by hand.
 
-import { input, untracked } from '#graph/graph/graph.ts'
-import type { Input, Watchable } from '#graph/graph/graph.ts'
+import { stored, untracked } from '#graph/graph/graph.ts'
+import type { Stored, Watchable } from '#graph/graph/graph.ts'
 import { EMPTY, arrived, heldOf, refused } from '#async/remote.ts'
 import { preserve } from '#graph/data/preserve.ts'
 import type { Remote } from '#async/remote.ts'
@@ -27,7 +27,7 @@ export interface Link {
   /** Ask again for everything being watched. Called for you when the other side announces itself. */
   rewatch(): void
   /** A cell of the other side, by name; a family needs its key as well. */
-  cell<T>(name: string, key?: unknown): Watchable<Remote<T>>
+  derived<T>(name: string, key?: unknown): Watchable<Remote<T>>
   /** A command of the other side. Arguments and the answer must be cloneable. */
   command<A extends readonly unknown[], T>(name: string): (...args: A) => Promise<T>
   /** Write into a fact the other side published. */
@@ -62,9 +62,9 @@ export function link(channel: Channel, options: LinkOptions = {}): Link {
   const within = options.within ?? 10_000
   const linger = options.linger ?? 15_000
   const timers = options.timers ?? wallClock
-  const mirrors = new Map<string, { id: number; cell: Input<Remote<unknown>> }>()
+  const mirrors = new Map<string, { id: number; cell: Stored<Remote<unknown>> }>()
   const lingering = new Set<unknown>()
-  const byId = new Map<number, Input<Remote<unknown>>>()
+  const byId = new Map<number, Stored<Remote<unknown>>>()
   const waiting = new Map<
     number,
     { resolve: (value: never) => void; reject: (error: unknown) => void; held?: unknown }
@@ -150,14 +150,14 @@ export function link(channel: Channel, options: LinkOptions = {}): Link {
     }
   }
 
-  function mirrorOf(name: string, key: unknown): Input<Remote<unknown>> {
+  function mirrorOf(name: string, key: unknown): Stored<Remote<unknown>> {
     const at = key === undefined ? name : `${name}\u0000${JSON.stringify(key)}`
     const known = mirrors.get(at)
     if (known !== undefined) return known.cell
 
     const id = next++
     let letGo: unknown
-    const cell = input<Remote<unknown>>(EMPTY, {
+    const cell = stored<Remote<unknown>>(EMPTY, {
       name: at,
       // Watching here is asking there; nobody watching is nobody asking.
       onDemand: () => {
@@ -192,7 +192,7 @@ export function link(channel: Channel, options: LinkOptions = {}): Link {
     rewatch,
     /** How many mirrors are held right now. For the instruments' eyes. */
     held: () => mirrors.size,
-    cell: <T>(name: string, key?: unknown) =>
+    derived: <T>(name: string, key?: unknown) =>
       mirrorOf(name, key) as unknown as Watchable<Remote<T>>,
 
     command<A extends readonly unknown[], T>(name: string) {

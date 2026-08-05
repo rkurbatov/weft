@@ -1,15 +1,15 @@
-// The graph package: cells, engines, regions, commands, families, waves and
+// The graph package: nodes, engines, regions, commands, families, waves and
 // the journal, plus the plain values everything else is built from.
 
 export {
-  input,
-  cell,
+  stored,
+  derived,
   watch,
   subscribe,
   batch,
   untracked,
-  Input,
-  Cell,
+  Stored,
+  Derived,
   Watcher,
   trace,
   graph,
@@ -17,8 +17,8 @@ export {
 } from './graph/graph.ts'
 export type {
   Equal,
-  CellOptions,
-  InputOptions,
+  DerivedOptions,
+  StoredOptions,
   WatchOptions,
   Readable,
   Watchable,

@@ -5,8 +5,8 @@
 // laying and the truths live in the station only; a tab holds nothing but
 // mirrors.
 
-import { cell, input } from '#weft'
-import type { Input, Watchable } from '#weft'
+import { derived, stored } from '#weft'
+import type { Stored, Watchable } from '#weft'
 import { heldOf } from '#weft'
 import { preserve } from '#weft'
 import { journal } from '#weft'
@@ -22,7 +22,7 @@ import { subscribe } from '#weft'
 
 export interface Offering {
   views?: Readonly<Record<string, Watchable<unknown>>>
-  facts?: Readonly<Record<string, Input<never>>>
+  facts?: Readonly<Record<string, Stored<never>>>
   acts?: Readonly<Record<string, (...args: never[]) => unknown>>
 }
 
@@ -38,7 +38,7 @@ export function offer(handles: Offering, channel: Channel, options: OfferOptions
 
   if (options.instruments !== undefined && options.instruments !== false) {
     const keep = options.instruments === true ? 64 : (options.instruments.keep ?? 64)
-    const tail = input<readonly WaveSummary[]>([], { name: 'loom.waves' })
+    const tail = stored<readonly WaveSummary[]>([], { name: 'loom.waves' })
     const book = journal(keep, () => quietly(() => tail.set([...book.waves()])))
     book.start()
     stopInstruments = () => book.stop()
@@ -84,11 +84,11 @@ export function adopt(channel: Channel, options: LinkOptions = {}): Adopted {
   const view = <T>(name: string): Watchable<T | undefined> => {
     const known = faces.get(name)
     if (known !== undefined) return known as Watchable<T | undefined>
-    const mirror = wire.cell<T>(name)
+    const mirror = wire.derived<T>(name)
     // The unwrapping lives here, under the floor: a screen reads plain — and
     // an unchanged piece keeps being the very same object across flushes.
     let previous: T | undefined
-    const face = cell(
+    const face = derived(
       () => {
         const held = heldOf(mirror.get())
         if (held === undefined) return undefined
@@ -160,7 +160,7 @@ export function carry(spec: CarrySpec, options: CarryOptions = {}): Carried {
     const built = spec.station()
     const pair = pairInMemory()
     const stopServe = built.serve(pair.graph)
-    const role = input<'inline' | 'leading' | 'following'>('inline', { name: `${spec.name}.role` })
+    const role = stored<'inline' | 'leading' | 'following'>('inline', { name: `${spec.name}.role` })
     return {
       channel: pair.watcher,
       role,
@@ -173,7 +173,9 @@ export function carry(spec: CarrySpec, options: CarryOptions = {}): Carried {
     }
   }
 
-  const role = input<'inline' | 'leading' | 'following'>('following', { name: `${spec.name}.role` })
+  const role = stored<'inline' | 'leading' | 'following'>('following', {
+    name: `${spec.name}.role`,
+  })
   const stopLead = leadOrFollow({
     name: spec.name,
     lock: options.lock ?? webLocks(),

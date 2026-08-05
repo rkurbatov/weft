@@ -2,23 +2,23 @@
 
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
-import { blocks, cell, input, watch } from '#weft'
-import type { Input } from '#weft'
+import { blocks, derived, stored, watch } from '#weft'
+import type { Stored } from '#weft'
 
 describe('block trees', () => {
   /** A line of numbers as cells, plus a count of how many were read. */
   function numbers(size: number): {
-    at: (i: number) => Input<number>
+    at: (i: number) => Stored<number>
     read: (line: string, i: number) => number
     reads: () => number
     resetReads: () => void
   } {
-    const cells = new Map<number, Input<number>>()
+    const cells = new Map<number, Stored<number>>()
     let reads = 0
-    const at = (i: number): Input<number> => {
+    const at = (i: number): Stored<number> => {
       let box = cells.get(i)
       if (box === undefined) {
-        box = input(i < size ? i + 1 : 0, { name: `n${i}` })
+        box = stored(i < size ? i + 1 : 0, { name: `n${i}` })
         cells.set(i, box)
       }
       return box
@@ -63,7 +63,7 @@ describe('block trees', () => {
 
   test('an edit touches one partial per level, not the whole line', async () => {
     const { source, tree } = sums(4096, 32)
-    const total = cell(() => tree.range('c', 0, 4095), { name: 'total' })
+    const total = derived(() => tree.range('c', 0, 4095), { name: 'total' })
     const answer: number[] = []
     const stop = watch(() => answer.push(total.get()))
     const first = answer.at(-1) as number

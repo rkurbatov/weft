@@ -10,7 +10,7 @@ GlobalRegistrator.register()
 
 import { act, createElement as h } from 'react'
 import type { ReactNode } from 'react'
-import { cell, input, subscribe } from '#weft'
+import { derived, stored, subscribe } from '#weft'
 import { WavesPanel } from './waves.ts'
 
 const { createRoot } = await import('react-dom/client')
@@ -39,8 +39,8 @@ function type(box: HTMLInputElement, text: string): void {
 }
 
 test('a wave shows up, the filter narrows, following a name opens its trace', () => {
-  const price = input(1, { name: 'price' })
-  const doubled = cell(() => price.get() * 2, { name: 'doubled' })
+  const price = stored(1, { name: 'price' })
+  const doubled = derived(() => price.get() * 2, { name: 'doubled' })
   const stop = subscribe(doubled, () => {})
 
   const shown = mount(h(WavesPanel, { inspect: [doubled] }))

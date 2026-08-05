@@ -4,7 +4,7 @@ import { key, sampleSheet, shapeFromLocation, sizeOf } from '../common/sample.ts
 import { countGridRender, timeEdit } from '../common/stats.ts'
 import { createSheet } from './store.ts'
 import { SheetProvider } from './useSheet.ts'
-import { Cell } from './Cell.tsx'
+import { Derived } from './Cell.tsx'
 
 export function App() {
   const shape = useMemo(() => shapeFromLocation(), [])
@@ -50,7 +50,7 @@ export function App() {
         note={`${sizeOf(shape).toLocaleString()} cells worked out at startup in ${built} ms. A store of texts, a dependency graph kept both ways, a topological order for recomputation, loop detection, and a subscription per cell.`}
         actions={actions}
       />
-      <Grid shape={shape} cell={Cell} />
+      <Grid shape={shape} cell={Derived} />
     </SheetProvider>
   )
 }

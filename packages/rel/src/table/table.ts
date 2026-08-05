@@ -5,8 +5,8 @@
 // the cost of an edit is the size of the edit, not the size of the collection.
 // A follower that fell too far behind rebuilds once and goes on incrementally.
 
-import { cell, input } from '#graph/graph/graph.ts'
-import type { Cell, Equal, Watchable } from '#graph/graph/graph.ts'
+import { derived, stored } from '#graph/graph/graph.ts'
+import type { Derived, Equal, Watchable } from '#graph/graph/graph.ts'
 import { family } from '#graph/graph/family.ts'
 import { planFold, TREE_WORTH_IT } from './plan.ts'
 import type { FoldTraits } from './plan.ts'
@@ -194,7 +194,7 @@ export function follow<R>(feed: Feed<R>, on: Follower<R>): () => void {
   }
 }
 
-function foldOver<R, A>(feed: Feed<R>, spec: FoldSpec<R, A>, name: string): Cell<A> {
+function foldOver<R, A>(feed: Feed<R>, spec: FoldSpec<R, A>, name: string): Derived<A> {
   // The rows a carrier is built over: the feed, seen as little as a carrier
   // needs to see it.
   const rows = {
@@ -246,7 +246,7 @@ function foldOver<R, A>(feed: Feed<R>, spec: FoldSpec<R, A>, name: string): Cell
     },
   })
 
-  return cell(
+  return derived(
     () => {
       ensure()
       return carrier.answer()
@@ -323,7 +323,7 @@ function orderedOver<R>(feed: Feed<R>, compare: (a: R, b: R) => number, name: st
     },
   })
 
-  const version = cell(
+  const version = derived(
     () => {
       ensure()
       return v
@@ -340,7 +340,7 @@ function orderedOver<R>(feed: Feed<R>, compare: (a: R, b: R) => number, name: st
     { name: `${name}.slice`, equal: sameItems },
   )
 
-  const size = cell(
+  const size = derived(
     () => {
       version.get()
       return entries.length
@@ -378,7 +378,7 @@ function whereOver<R>(parent: Feed<R>, pick: () => (row: R) => boolean, name: st
   let v = 0
   // The living predicate: whatever `pick` reads is a dependency, so a filter
   // typed into a field is an ordinary cell change, not a rebuild by hand.
-  const chosen = cell(pick, { name: `${name}.test` })
+  const chosen = derived(pick, { name: `${name}.test` })
   let test: (row: R) => boolean = passes
   let judged = false
 
@@ -429,7 +429,7 @@ function whereOver<R>(parent: Feed<R>, pick: () => (row: R) => boolean, name: st
     },
   })
 
-  const version = cell(
+  const version = derived(
     () => {
       const next = chosen.get()
       const moved = judged && next !== test
@@ -485,7 +485,7 @@ function tableOver<R>(feed: Feed<R>, dispose: () => void): Table<R> {
     { name: `${feed.name}.row` },
   )
 
-  const size = cell(
+  const size = derived(
     () => {
       feed.version.get()
       return feed.count()
@@ -493,7 +493,7 @@ function tableOver<R>(feed: Feed<R>, dispose: () => void): Table<R> {
     { name: `${feed.name}.size` },
   )
 
-  const all = cell(
+  const all = derived(
     () => {
       feed.version.get()
       const out: R[] = []
@@ -548,7 +548,7 @@ export function table<R>(options: TableOptions<R>): SourceTable<R> {
   const state = new Map<Key, R>()
   const log = changeLog<R>(options.keep ?? KEEP)
   let v = 0
-  const version = input(0, {
+  const version = stored(0, {
     name: `${name}.version`,
     ...(options.onDemand ? { onDemand: options.onDemand } : {}),
     ...(options.onIdle ? { onIdle: options.onIdle } : {}),

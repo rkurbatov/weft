@@ -2,7 +2,7 @@
 import * as React from 'react'
 import { cn } from './cn.ts'
 
-function Input({ className, type, ...props }: React.InputHTMLAttributes<HTMLInputElement>) {
+function Stored({ className, type, ...props }: React.InputHTMLAttributes<HTMLInputElement>) {
   return (
     <input
       type={type}
@@ -15,4 +15,4 @@ function Input({ className, type, ...props }: React.InputHTMLAttributes<HTMLInpu
   )
 }
 
-export { Input }
+export { Stored }

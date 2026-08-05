@@ -1,11 +1,11 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { input, cell, watch, subscribe, untracked } from '#graph/graph/graph.ts'
+import { stored, derived, watch, subscribe, untracked } from '#graph/graph/graph.ts'
 import { family } from '#graph/graph/family.ts'
 
 function tracked() {
   const log: string[] = []
-  const source = input(0, { onDemand: () => log.push('start'), onIdle: () => log.push('stop') })
+  const source = stored(0, { onDemand: () => log.push('start'), onIdle: () => log.push('stop') })
   return { source, log }
 }
 
@@ -27,16 +27,16 @@ test('reading without a watcher does not demand', () => {
   const { source, log } = tracked()
   source.peek()
   untracked(() => source.get())
-  const derived = cell(() => source.get() * 2)
-  derived.peek() // computed on request, nobody live behind it
+  const twice = derived(() => source.get() * 2)
+  twice.peek() // computed on request, nobody live behind it
   assert.deepEqual(log, [])
   assert.equal(source.demand, 0)
 })
 
 test('demand travels through a chain of formulas', () => {
   const { source, log } = tracked()
-  const one = cell(() => source.get() + 1)
-  const two = cell(() => one.get() + 1)
+  const one = derived(() => source.get() + 1)
+  const two = derived(() => one.get() + 1)
   const stop = subscribe(two, () => {})
   assert.deepEqual(log, ['start'])
   assert.equal(one.demanded, true)
@@ -46,9 +46,9 @@ test('demand travels through a chain of formulas', () => {
 })
 
 test('a dependency dropped by a branch releases its source', () => {
-  const useIt = input(true)
+  const useIt = stored(true)
   const { source, log } = tracked()
-  const pick = cell(() => (useIt.get() ? source.get() : -1))
+  const pick = derived(() => (useIt.get() ? source.get() : -1))
   const stop = subscribe(pick, () => {})
   assert.deepEqual(log, ['start'])
   useIt.set(false)
@@ -60,9 +60,9 @@ test('a dependency dropped by a branch releases its source', () => {
 })
 
 test('a surviving dependency is not restarted on recompute', () => {
-  const other = input(0)
+  const other = stored(0)
   const { source, log } = tracked()
-  const both = cell(() => source.get() + other.get())
+  const both = derived(() => source.get() + other.get())
   const stop = subscribe(both, () => {})
   other.set(1)
   other.set(2)
@@ -71,7 +71,7 @@ test('a surviving dependency is not restarted on recompute', () => {
 })
 
 test('the hook may write its own cell: it runs outside the formula', () => {
-  const store = input(0, {
+  const store = stored(0, {
     onDemand: () => {
       store.set(42)
     },
@@ -108,8 +108,8 @@ test('a watched member keeps its source while an unwatched sibling is swept', ()
 
 test('demand counts paths, not readers', () => {
   const { source } = tracked()
-  const left = cell(() => source.get())
-  const right = cell(() => source.get())
+  const left = derived(() => source.get())
+  const right = derived(() => source.get())
   const stopL = subscribe(left, () => {})
   const stopR = subscribe(right, () => {})
   assert.equal(source.demand, 2)

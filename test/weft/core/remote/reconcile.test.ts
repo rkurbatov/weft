@@ -1,6 +1,6 @@
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
-import { cell, input, subscribe } from '#graph/graph/graph.ts'
+import { derived, stored, subscribe } from '#graph/graph/graph.ts'
 import { source } from '#async/source.ts'
 import { reconcile } from '#async/reconcile.ts'
 import { settle, until, world } from '../../../kit/index.ts'
@@ -8,7 +8,7 @@ import { settle, until, world } from '../../../kit/index.ts'
 describe('reconciling the world', () => {
   test('the world is brought in line at once and then on every change', async () => {
     const clock = world()
-    const identity = input({ user: 'u1', token: 'a' })
+    const identity = stored({ user: 'u1', token: 'a' })
     const applied: string[] = []
     const job = reconcile(identity, value => void applied.push(value.token), {
       timers: clock.timers,
@@ -26,10 +26,10 @@ describe('reconciling the world', () => {
   test('there is no trigger list: whatever moves the value, the world follows', async () => {
     const clock = world()
     // Three unrelated things feed the identity a screen must match.
-    const login = input('u1')
-    const plan = input('free')
-    const region = input('eu')
-    const headers = cell(() => `${login.get()}/${plan.get()}/${region.get()}`)
+    const login = stored('u1')
+    const plan = stored('free')
+    const region = stored('eu')
+    const headers = derived(() => `${login.get()}/${plan.get()}/${region.get()}`)
     const sent: string[] = []
     const job = reconcile(headers, value => void sent.push(value), { timers: clock.timers })
     assert.deepEqual(sent, ['u1/free/eu'])
@@ -45,7 +45,7 @@ describe('reconciling the world', () => {
 
   test('an equal value is not applied again', async () => {
     const clock = world()
-    const rows = input({ id: 1, seen: 0 })
+    const rows = stored({ id: 1, seen: 0 })
     const applied: number[] = []
     const job = reconcile(rows, value => void applied.push(value.id), {
       by: value => value.id,
@@ -81,7 +81,7 @@ describe('reconciling the world', () => {
 
   test('atOnce off: it starts following from the next change', async () => {
     const clock = world()
-    const title = input('first')
+    const title = stored('first')
     const applied: string[] = []
     const job = reconcile(title, value => void applied.push(value), {
       atOnce: false,
@@ -98,7 +98,7 @@ describe('reconciling the world', () => {
     const clock = world()
     const gates: Array<() => void> = []
     const started: string[] = []
-    const wanted = input('a')
+    const wanted = stored('a')
     const job = reconcile(
       wanted,
       value =>
@@ -124,7 +124,7 @@ describe('reconciling the world', () => {
 
   test('a refusal is retried with growing waits, then reported', async () => {
     const clock = world()
-    const value = input('x')
+    const value = stored('x')
     const errors: unknown[] = []
     let tries = 0
     const job = reconcile(
@@ -157,7 +157,7 @@ describe('reconciling the world', () => {
 
   test('a new value clears the refusal and starts over', async () => {
     const clock = world()
-    const value = input('bad')
+    const value = stored('bad')
     let allow = false
     const job = reconcile(
       value,
@@ -182,7 +182,7 @@ describe('reconciling the world', () => {
     const gate = new Promise<void>(resolve => {
       release = resolve
     })
-    const value = input(1)
+    const value = stored(1)
     const job = reconcile(value, async () => gate, { timers: clock.timers })
     const seen: boolean[] = []
     const stop = subscribe(job.working, v => seen.push(v))
@@ -198,7 +198,7 @@ describe('reconciling the world', () => {
 
   test('a newer value calls off the run in flight, rather than letting it finish', async () => {
     const clock = world()
-    const title = input('first')
+    const title = stored('first')
     const started: string[] = []
     const abandoned: string[] = []
     let release = (): void => {}
@@ -233,7 +233,7 @@ describe('reconciling the world', () => {
 
   test('stopping calls off the run in flight too', async () => {
     const clock = world()
-    const title = input('only')
+    const title = stored('only')
     let told = false
     let release = (): void => {}
 

@@ -18,7 +18,7 @@ describe('what the engine holds', () => {
     const g = graph('app')
     const core = g.core
 
-    const first = g.region('modal', () => g.input(1))
+    const first = g.region('modal', () => g.stored(1))
     assert.equal(holdings(core).length, 1)
 
     first.dispose()
@@ -33,7 +33,7 @@ describe('what the engine holds', () => {
 
     for (let i = 0; i < 1000; i++) {
       const module = g.region(`modal-${i}`, () => {
-        const value = g.input(i)
+        const value = g.stored(i)
         g.watch(() => {
           value.get()
         })
@@ -60,12 +60,12 @@ describe('what the engine holds', () => {
       const held = page?.teardowns ?? []
 
       for (let i = 0; i < 100; i++) {
-        const panel = g.region(`panel-${i}`, () => g.input(i))
+        const panel = g.region(`panel-${i}`, () => g.stored(i))
         panel.dispose()
       }
       assert.equal(held.length, 0, 'the page does not collect its dead panels')
 
-      const standing = g.region('kept', () => g.input(0))
+      const standing = g.region('kept', () => g.stored(0))
       assert.equal(held.length, 1, 'a living one is held')
       return standing
     })

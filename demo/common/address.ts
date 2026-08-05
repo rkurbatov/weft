@@ -1,4 +1,4 @@
-// Cell addresses. A1 on the outside, row and column numbers on the inside.
+// Derived addresses. A1 on the outside, row and column numbers on the inside.
 
 export interface Ref {
   readonly row: number

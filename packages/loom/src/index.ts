@@ -1,14 +1,9 @@
-// Loom's words. fact and view are the graph's own under shorter names; truth,
-// feed, will and laid are the doors and the picture, with the machinery under
-// the floor.
+// Loom's words. One word for a cell — which kind it is decided by what it is
+// given, and the word is the language's own; truth, feed, will and laid are the doors and the picture, with
+// the machinery under the floor.
 
-export { input as fact, cell as view } from '#weft'
-
-// The dialect's own type words: a fact you can set, a view you can read.
-// The graph's names stay in the engine room.
-import type { Input, Watchable } from '#weft'
-export type Fact<T> = Input<T>
-export type View<T> = Watchable<T>
+export { cell } from './cell.ts'
+export type { Cell } from './cell.ts'
 export { truth, truthBy } from './truth.ts'
 export type { Truth, TruthPassport } from './truth.ts'
 export { feed } from './feed.ts'

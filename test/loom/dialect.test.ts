@@ -3,8 +3,8 @@
 
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
-import { input } from '#weft'
-import { fact, laid, notes, sends, truth, will } from '#loom'
+import { stored } from '#weft'
+import { laid, cell, notes, sends, truth, will } from '#loom'
 import type { Entry } from '#weft'
 import type { Channel as Wire } from '#weft'
 import { wait } from '../kit/index.ts'
@@ -58,9 +58,9 @@ describe('the Loom dialect', () => {
   test('laid assembles the void into nothing and keeps identity', () => {
     const base = {
       get: () => ({ items: [{ id: 'a' }, { id: 'b' }], order: ['a', 'b'] }),
-      asked: input(0),
+      asked: stored(0),
     }
-    const book = input<readonly Entry[]>([])
+    const book = stored<readonly Entry[]>([])
     const post = { notes: book, absorb: () => {} }
     const seen = laid(base, post, {
       shape: {
@@ -86,7 +86,7 @@ describe('the Loom dialect', () => {
     ])
     assert.deepEqual(seen.peek().lanes[0]?.items, ['b', 'a'])
 
-    const f = fact(1)
+    const f = cell(1)
     assert.equal(f.peek(), 1) // fact is the graph's own word
   })
 
@@ -230,7 +230,7 @@ describe('the Loom dialect', () => {
     }
 
     const station = () => {
-      const n = fact(41, { name: 'n' })
+      const n = cell(41, { name: 'n' })
       return { serve: (channel: Wire) => offer({ views: { n } }, channel, { schedule: atOnce }) }
     }
     const one = carry({ name: 'carried-tabs', station }, { mode: 'tabs', lock })
@@ -240,7 +240,7 @@ describe('the Loom dialect', () => {
     assert.equal(two.role.peek(), 'following')
 
     const wire = link(two.channel) // the follower mirrors the leader's station
-    const face = wire.cell<number>('n')
+    const face = wire.derived<number>('n')
     const warm = subscribe(face, () => {})
     await wait(5)
     assert.equal(heldOf(face.peek())?.value, 41)
@@ -268,8 +268,8 @@ describe('the Loom dialect', () => {
   test('a local change costs the size of the book, not the size of the board', () => {
     const cards = Array.from({ length: 2000 }, (_, i) => ({ id: `c${i}` }))
     const order = cards.map(c => c.id)
-    const base = { get: () => ({ cards, order }), asked: input(0) }
-    const book = input<readonly Entry[]>([])
+    const base = { get: () => ({ cards, order }), asked: stored(0) }
+    const book = stored<readonly Entry[]>([])
     const seen = laid(
       base,
       { notes: book, absorb: () => {} },

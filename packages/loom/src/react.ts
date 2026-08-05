@@ -3,8 +3,8 @@
 // what re-renders the component, structural equality gates the rest.
 
 import { useCallback, useRef, useSyncExternalStore } from 'react'
-import { cell, subscribe, untracked } from '#weft'
-import type { Cell } from '#weft'
+import { derived, subscribe, untracked } from '#weft'
+import type { Derived } from '#weft'
 import { alike } from '#weft'
 
 export { useInputBinding as useField, useKeepRow } from '#react'
@@ -16,13 +16,13 @@ export function useLive<T>(formula: () => T): T {
   // an effect: StrictMode mounts, unmounts and mounts again, and a disposed
   // cell kept in state would freeze the first frame forever. Whoever asks next
   // gets a fresh one.
-  const made = useRef<Cell<T> | null>(null)
+  const made = useRef<Derived<T> | null>(null)
   // Born on subscription, never in a render. React may render a component and
   // throw the render away — a suspended tree, an abandoned transition — and
   // then it never subscribes, so nothing would ever take the cell down. By
   // then it has read its sources, and they hold it forever.
-  const screen = useCallback((): Cell<T> => {
-    made.current ??= cell(() => body.current(), { name: 'screen', equal: (a, b) => alike(a, b) })
+  const screen = useCallback((): Derived<T> => {
+    made.current ??= derived(() => body.current(), { name: 'screen', equal: (a, b) => alike(a, b) })
     return made.current
   }, [])
   // The store contract: the snapshot must be the very same object between

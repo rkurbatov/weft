@@ -1,6 +1,6 @@
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
-import { cell, subscribe } from '#graph/graph/graph.ts'
+import { derived, subscribe } from '#graph/graph/graph.ts'
 import { outbox } from '#offline/outbox.ts'
 import { memoryStore } from '#offline/store.ts'
 import type { Entry, Handler } from '#offline/outbox.ts'
@@ -262,7 +262,7 @@ describe('the outbox', () => {
         }) as Handler,
       },
     })
-    const label = cell(() => (book.owed.get() === 0 ? 'saved' : `${book.owed.get()} unsent`))
+    const label = derived(() => (book.owed.get() === 0 ? 'saved' : `${book.owed.get()} unsent`))
     const seen: string[] = []
     until(subscribe(label, value => seen.push(value)))
     const { done } = book.send('slow', {})

@@ -2,7 +2,7 @@
 // it is written down before it is sent, carries an idempotency key so a repeat
 // is not a second purchase, and leaves the book only when the world confirms.
 
-import { cell } from '#graph/graph/graph.ts'
+import { derived } from '#graph/graph/graph.ts'
 import { book as openBook } from './book.ts'
 import type { Entry } from './book.ts'
 import { schedule } from './schedule.ts'
@@ -264,15 +264,18 @@ export function outbox(options: OutboxOptions): Outbox {
     ready: pages.ready,
     saving,
     entries,
-    active: cell<readonly Entry[]>(() => entries.get().filter(entry => entry.state !== 'stuck'), {
-      name: `${key}.active`,
-      equal: (a, b) => a.length === b.length && a.every((entry, i) => entry === b[i]),
-    }),
-    owed: cell(
+    active: derived<readonly Entry[]>(
+      () => entries.get().filter(entry => entry.state !== 'stuck'),
+      {
+        name: `${key}.active`,
+        equal: (a, b) => a.length === b.length && a.every((entry, i) => entry === b[i]),
+      },
+    ),
+    owed: derived(
       () => entries.get().filter(entry => entry.state !== 'stuck' && entry.state !== 'done').length,
       { name: `${key}.owed` },
     ),
-    stuck: cell<readonly Entry[]>(() => entries.get().filter(entry => entry.state === 'stuck'), {
+    stuck: derived<readonly Entry[]>(() => entries.get().filter(entry => entry.state === 'stuck'), {
       name: `${key}.stuck`,
       equal: (a, b) => a.length === b.length && a.every((entry, i) => entry === b[i]),
     }),

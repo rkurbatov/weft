@@ -15,7 +15,7 @@
 // The escape hatch is the same as everywhere: a closure may stand in for any
 // expression, and the tree honestly loses its canon.
 
-import { cell } from '#graph/graph/graph.ts'
+import { derived } from '#graph/graph/graph.ts'
 import type { Watchable } from '#graph/graph/graph.ts'
 import type { Key, Table } from '#rel/table/table.ts'
 import { field as fieldExpr, lit } from '#rel/rel/expr.ts'
@@ -169,7 +169,7 @@ export function fold<R>(
   return {
     build: name => {
       const many = part.build(name)
-      return cell(
+      return derived(
         () => {
           const first = many.get()[0] ?? {}
           return one ? (first as { it?: unknown }).it : first
@@ -196,7 +196,7 @@ function group<R, S extends Record<string, Piece<unknown>>>(
       }
       node = aggNode(node, { by, folds })
       const live = relate(node, { [source]: tableOfFeed(feed) as Table<Row> }, { name })
-      return cell(() => live.all.get() as Array<Answers<S>>, { name: `${name}.rows` })
+      return derived(() => live.all.get() as Array<Answers<S>>, { name: `${name}.rows` })
     },
   }
 }
@@ -312,8 +312,8 @@ export function list<R>(feed: Feed<R>, spec: ListSpec<R>): Part<ListView<R>> {
       const window = spec.window
       const rows =
         window === undefined
-          ? cell(() => part.rows.get(), { name: `${name}.rows` })
-          : cell(() => sorted.window(window.from.get(), window.from.get() + window.size).get(), {
+          ? derived(() => part.rows.get(), { name: `${name}.rows` })
+          : derived(() => sorted.window(window.from.get(), window.from.get() + window.size).get(), {
               name: `${name}.window`,
             })
       return {

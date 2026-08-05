@@ -12,7 +12,7 @@ export function App() {
     const made = createSheet(sampleSheet(shape))
     return { sheet: made, built: Math.round(performance.now() - started) }
   }, [shape])
-  const Cell = useMemo(() => cellOf(sheet), [sheet])
+  const Derived = useMemo(() => cellOf(sheet), [sheet])
   countGridRender()
 
   const actions = [
@@ -52,7 +52,7 @@ export function App() {
         note={`${sizeOf(shape).toLocaleString()} cells laid out in ${built} ms, and only what is looked at is worked out. No dependency graph is written here, no order of recomputation, no invalidation, no loop search.`}
         actions={actions}
       />
-      <Grid shape={shape} cell={Cell} />
+      <Grid shape={shape} cell={Derived} />
     </>
   )
 }

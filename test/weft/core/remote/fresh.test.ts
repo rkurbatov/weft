@@ -1,6 +1,6 @@
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
-import { cell, subscribe } from '#graph/graph/graph.ts'
+import { derived, subscribe } from '#graph/graph/graph.ts'
 import { source, fresh } from '#async/source.ts'
 import { settle, world } from '../../../kit/index.ts'
 import type { World } from '../../../kit/index.ts'
@@ -147,7 +147,7 @@ describe('freshness requirements', () => {
     const clock = world()
     const { feed } = counting(clock, { every: 100 })
     const view = fresh(feed, 100)
-    const doubled = cell(() => (view.get().value ?? 0) * 2)
+    const doubled = derived(() => (view.get().value ?? 0) * 2)
     const stop = subscribe(doubled, () => {})
     await settle()
     assert.equal(doubled.peek(), 2)

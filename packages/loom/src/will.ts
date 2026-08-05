@@ -5,7 +5,7 @@
 // sender that creates state must hand the key to the world, and the world
 // must recognize a repeat by it.
 
-import { cell, input } from '#weft'
+import { derived, stored } from '#weft'
 import type { Watchable } from '#weft'
 import { bestStore } from '#weft'
 import type { Store } from '#weft'
@@ -98,7 +98,7 @@ export type Will<D extends WillDict> = WillBase<D> & Speak<D>
 export function will<D extends WillDict>(dict: D, passport: WillPassport = {}): Will<D> {
   const name = passport.name ?? 'will'
   const shelf = bestStore(`weft.${name}`)
-  const refused = input<Refusal | null>(null, { name: `${name}.refused` })
+  const refused = stored<Refusal | null>(null, { name: `${name}.refused` })
 
   const handlers: Record<string, Handler> = {}
   for (const [kind, spec] of Object.entries(dict)) {
@@ -138,7 +138,7 @@ export function will<D extends WillDict>(dict: D, passport: WillPassport = {}): 
   const base: WillBase<D> = {
     notes: box.entries,
     pending: pick =>
-      cell(
+      derived(
         () => {
           const ids = new Set<string>()
           for (const entry of box.entries.get()) {

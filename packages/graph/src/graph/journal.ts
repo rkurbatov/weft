@@ -10,7 +10,7 @@
 // waves read fine either way.
 
 import { attachProbe, batch } from './graph.ts'
-import type { Engine, Input } from './graph.ts'
+import type { Engine, Stored } from './graph.ts'
 import type { WaveSummary } from './waves.ts'
 
 export interface Journal {
@@ -21,7 +21,7 @@ export interface Journal {
   /** The last wave that wrote, recomputed or gated this node. */
   why(node: string): WaveSummary | undefined
   /** Re-apply the recorded writes, wave by wave, one batch per wave. */
-  replay(resolve: (node: string) => Input<unknown> | undefined): void
+  replay(resolve: (node: string) => Stored<unknown> | undefined): void
   clear(): void
 }
 

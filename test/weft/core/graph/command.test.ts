@@ -1,6 +1,6 @@
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
-import { input, cell, subscribe, untracked } from '#graph/graph/graph.ts'
+import { stored, derived, subscribe, untracked } from '#graph/graph/graph.ts'
 import { command, onCommandFailure } from '#graph/graph/command.ts'
 import { settle, world } from '../../../kit/index.ts'
 
@@ -85,8 +85,8 @@ test('reset forgets the outcome and disowns what is in flight', async () => {
 test('pending is a cell: formulas may depend on it', async () => {
   const gate = deferred<void>()
   const cmd = command(async () => gate.promise)
-  const enabled = input(true)
-  const clickable = cell(() => enabled.get() && !cmd.pending.get())
+  const enabled = stored(true)
+  const clickable = derived(() => enabled.get() && !cmd.pending.get())
   assert.equal(clickable.peek(), true)
   const answer = cmd.run()
   assert.equal(clickable.peek(), false)
@@ -96,8 +96,8 @@ test('pending is a cell: formulas may depend on it', async () => {
 })
 
 test('store shape React needs: stable snapshot, change notification, dispose', () => {
-  const source = input(1)
-  const view = cell(() => source.get() * 2)
+  const source = stored(1)
+  const view = derived(() => source.get() * 2)
   const snapshot = () => untracked(() => view.get())
   let notified = 0
   const stop = subscribe(view, () => notified++)

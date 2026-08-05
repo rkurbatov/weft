@@ -11,7 +11,7 @@
 // A rule of application is a property of the picture, not of the note: one
 // will may lay over any number of truths, each absorbing what concerns it.
 
-import { cell, watch } from '#weft'
+import { derived, watch } from '#weft'
 import type { Watchable } from '#weft'
 import { laneDrop, lanePlace } from '#weft'
 import type { Lanes } from '#weft'
@@ -82,7 +82,7 @@ export function laid<S, R>(
    * identity of untouched pieces is restored.
    */
   let lastBase: Board<R> | undefined
-  const fromBase = cell<Board<R>>(
+  const fromBase = derived<Board<R>>(
     () => {
       const snapshot = base.get()
       const rows = new Map<string, R>()
@@ -110,7 +110,7 @@ export function laid<S, R>(
    * the book: what it put, and what it took away. Everything else is read
    * through to the server's map.
    */
-  const seen = cell<Board<R>>(
+  const seen = derived<Board<R>>(
     () => {
       const under = fromBase.get()
       const notes = post.notes.get()

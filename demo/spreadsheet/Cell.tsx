@@ -7,7 +7,7 @@ import { countCellRender } from '../common/stats.ts'
 import type { CellProps } from '../common/ui.tsx'
 import { useSheet, useShown } from './useSheet.ts'
 
-export const Cell = memo(function Cell({ at }: CellProps) {
+export const Derived = memo(function Derived({ at }: CellProps) {
   const sheet = useSheet()
   const shown = useShown(at)
   countCellRender()
