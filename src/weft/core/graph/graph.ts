@@ -8,7 +8,7 @@
 // reading, watching and tracing never have to be told which graph is meant.
 // The propagation core itself lives in engine.ts.
 
-import { CHECK, CLEAN, Core, coreForBuild, declare, DIRTY, markOf, NODE, track } from './engine.ts'
+import { CHECK, CLEAN, Core, coreForBuild, DIRTY, markOf, NODE, register, track } from './engine.ts'
 import type {
   Consumer,
   EngineOptions,
@@ -507,7 +507,7 @@ export interface Engine {
 
 export function graph(name = 'engine', how?: EngineOptions): Engine {
   const core = new Core(name, how)
-  declare(core)
+  register(core)
   const engine: Engine = {
     name,
     core,

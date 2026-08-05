@@ -427,7 +427,7 @@ function crossing(reader: Consumer, source: Source): Error {
 
 let building: Core | null = null
 let root: Core | null = null
-const declared = new Set<Core>()
+const registered = new Set<Core>()
 
 function buildIn<T>(core: Core, fn: () => T): T {
   const before = building
@@ -439,34 +439,34 @@ function buildIn<T>(core: Core, fn: () => T): T {
   }
 }
 
-export function declare(core: Core): void {
-  declared.add(core)
+export function register(core: Core): void {
+  registered.add(core)
 }
 
 function forget(core: Core): void {
-  declared.delete(core)
+  registered.delete(core)
 }
 
 /** Engines alive right now — for a tools panel, and for the ambiguity rule. */
 export function engines(): readonly Core[] {
-  return [...declared]
+  return [...registered]
 }
 
 /**
  * Which core a bare `input`/`cell`/`watch` belongs to.
  *
- * With no engine declared there is nothing to be ambiguous about: the root
+ * With no engine registered there is nothing to be ambiguous about: the root
  * core serves, and an ordinary single-graph application never learns that
- * engines exist. The moment one is declared, building without saying where
+ * engines exist. The moment one is registered, building without saying where
  * means one user's cell landing in another user's graph — so it is refused.
  * A build that crossed an `await` lands here too, which is the point.
  */
 export function coreForBuild(): Core {
   if (building !== null) return building
-  if (declared.size > 0) {
-    const names = [...declared].map(c => `"${c.name}"`).join(', ')
+  if (registered.size > 0) {
+    const names = [...registered].map(c => `"${c.name}"`).join(', ')
     throw new Error(
-      `weft: cannot build without an engine while ${names} ${declared.size === 1 ? 'is' : 'are'} alive. ` +
+      `weft: cannot build without an engine while ${names} ${registered.size === 1 ? 'is' : 'are'} alive. ` +
         `Use engine.input/cell/watch, or build inside engine.build(...).`,
     )
   }
