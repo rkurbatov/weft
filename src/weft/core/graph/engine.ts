@@ -174,15 +174,20 @@ export class Core {
       this.leaveRegion(before)
     }
     let dead = false
+    // Whoever holds this region: the engine itself, or the surrounding region.
+    const holder = before === null ? this.household : before.teardowns
     const kill = (): void => {
       if (dead) return
       dead = true
       for (let i = owner.teardowns.length - 1; i >= 0; i--) owner.teardowns[i]?.()
       owner.teardowns.length = 0
+      // And sign itself out of the holder's list. Without this, a long-lived
+      // region that raises and drops modules — a modal, a route, a panel —
+      // keeps a dead closure for every one of them, forever.
+      const at = holder.indexOf(kill)
+      if (at >= 0) holder.splice(at, 1)
     }
-    // The engine (or the enclosing region) takes down the regions it holds.
-    if (before === null) this.household.push(kill)
-    else before.teardowns.push(kill)
+    holder.push(kill)
     return {
       name: owner.name,
       value,
