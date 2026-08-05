@@ -1,8 +1,8 @@
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { input, cell, subscribe, untracked } from '#weft/core/graph/graph.ts'
-import { command } from '#weft/core/graph/command.ts'
-import { world } from '../../../kit/index.ts'
+import { command, onCommandFailure } from '#weft/core/graph/command.ts'
+import { settle, world } from '../../../kit/index.ts'
 
 function deferred<T>() {
   let resolve!: (v: T) => void
@@ -144,5 +144,52 @@ describe('a command asked to wait for quiet', () => {
     })
     await save.run('now')
     assert.deepEqual(asked, ['now'])
+  })
+})
+
+describe('a refusal nobody awaited', () => {
+  test('goes to the command’s own handler', async () => {
+    const caught: Array<{ error: unknown; name: string }> = []
+    const save = command(() => Promise.reject(new Error('the disk said no')), {
+      name: 'save',
+      onError: (error, name) => caught.push({ error, name }),
+    })
+
+    // Started and not awaited, as a fire-and-forget save would be.
+    void save.run()
+    await settle(2)
+
+    assert.equal(caught.length, 1)
+    assert.equal(caught[0]?.name, 'save')
+    assert.match(String(caught[0]?.error), /disk said no/)
+    assert.equal(save.state.peek().kind, 'failed', 'and the state still says so')
+  })
+
+  test('goes to the standing handler when the command has none', async () => {
+    const caught: string[] = []
+    const stop = onCommandFailure((_error, name) => caught.push(name))
+
+    const sync = command(() => Promise.reject(new Error('offline')), { name: 'sync' })
+    void sync.run()
+    await settle(2)
+    assert.deepEqual(caught, ['sync'])
+
+    stop()
+    const quiet = command(() => Promise.reject(new Error('offline')), { name: 'after' })
+    quiet.run().catch(() => {})
+    await settle(2)
+    assert.deepEqual(caught, ['sync'], 'the standing handler is gone with its lease')
+  })
+
+  test('a handler does not swallow it: whoever awaits still gets the refusal', async () => {
+    const caught: unknown[] = []
+    const save = command(() => Promise.reject(new Error('no')), {
+      name: 'save',
+      onError: error => caught.push(error),
+    })
+
+    await assert.rejects(() => save.run(), /no/)
+    await settle(2)
+    assert.equal(caught.length, 1)
   })
 })

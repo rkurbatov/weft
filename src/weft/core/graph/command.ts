@@ -17,6 +17,16 @@ export type WhileRunning = 'drop' | 'restart'
 
 export interface CommandOptions {
   name?: string
+  /**
+   * Where a refusal goes when nobody else takes it.
+   *
+   * A command's failure is a value in its state, and a screen that shows it
+   * needs nothing more. But a command started and not awaited — a fire and
+   * forget save, a log, a background sync — used to fail into an unhandled
+   * rejection or, worse, into silence. With a handler here (or a standing one
+   * set by `onCommandFailure`) the refusal is always told to somebody.
+   */
+  onError?: (error: unknown, command: string) => void
   /** 'drop' (default) protects the world from double submits; 'restart' abandons the older answer. */
   whileRunning?: WhileRunning
   /**
@@ -40,6 +50,22 @@ export interface Command<A extends unknown[], T> {
   readonly error: Readable<unknown>
   /** Forget the last outcome; an answer still in flight is then ignored. */
   reset(): void
+}
+
+/**
+ * The standing handler for refusals nobody else takes: the engine has one, and
+ * commands are the other half of the same promise — nothing fails silently.
+ */
+let standing: ((error: unknown, command: string) => void) | undefined
+
+export function onCommandFailure(
+  handler: ((error: unknown, command: string) => void) | undefined,
+): () => void {
+  const before = standing
+  standing = handler
+  return () => {
+    standing = before
+  }
 }
 
 export function command<A extends unknown[], T>(
@@ -82,6 +108,12 @@ export function command<A extends unknown[], T>(
         throw error
       }
     })()
+    const told = options.onError ?? standing
+    if (told !== undefined) {
+      // Told once, here — and this also marks the rejection as handled, so a
+      // command nobody awaited does not surface as an unhandled rejection.
+      promise.catch((error: unknown) => told(error, name))
+    }
     inFlight = { generation: mine, promise }
     return promise
   }

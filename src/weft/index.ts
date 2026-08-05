@@ -27,7 +27,7 @@ export type {
   Engine,
 } from './core/graph/graph.ts'
 
-export { command } from './core/graph/command.ts'
+export { command, onCommandFailure } from './core/graph/command.ts'
 export type { Command, CommandOptions, CommandState, WhileRunning } from './core/graph/command.ts'
 
 export { family } from './core/graph/family.ts'
