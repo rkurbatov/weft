@@ -59,7 +59,7 @@ export { journal } from './core/graph/journal.ts'
 export type { Journal } from './core/graph/journal.ts'
 
 export { projected } from './core/keep/project.ts'
-export { preserve } from './core/data/preserve.ts'
+export { onWholesale, preserve } from './core/data/preserve.ts'
 export type { ProjectionSpec } from './core/keep/project.ts'
 export { laneDrop, lanePlace, laneAppend, laneFind } from './core/data/arrange.ts'
 export type { Lanes } from './core/data/arrange.ts'

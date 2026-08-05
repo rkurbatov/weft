@@ -8,17 +8,65 @@
 // Hence its own place at the bottom, where everything may reach for it and it
 // reaches for nothing.
 
-export function preserve<T>(prev: T, next: T): T {
+/**
+ * How large a collection may be before it is left alone.
+ *
+ * Keeping identity costs a walk of everything: for a map of ten thousand rows,
+ * every recompute compares ten thousand entries to save the few that changed.
+ * Past this size the new value is handed back whole — a screen that needs
+ * per-row stability over a collection this big should hold a table, where a
+ * change is a change of one row, not a map in a cell.
+ *
+ * Announced rather than silent: `onWholesale` hears about it, the same way the
+ * planner's decisions are heard.
+ */
+export const PRESERVE_LIMIT = 4096
+
+/** For a caller that knows its own collection: pass a limit of its own. */
+
+const wholesale = new Set<(size: number) => void>()
+
+/** Told when a collection was too large to keep piece by piece. */
+export function onWholesale(listener: (size: number) => void): () => void {
+  wholesale.add(listener)
+  return () => wholesale.delete(listener)
+}
+
+let warned = false
+
+const tooBig = (size: number, limit: number): boolean => {
+  if (size <= limit) return false
+  if (wholesale.size > 0) {
+    for (const listener of wholesale) listener(size)
+    return true
+  }
+  // Nobody is listening, and a decision nobody hears is the same as no
+  // decision. Said once per run, not per call: a screen redrawing sixty times
+  // a second must not be told sixty times a second.
+  if (!warned) {
+    warned = true
+    console.warn(
+      `weft: a collection of ${size} is past the ${limit} that identity is kept for, ` +
+        `so it is handed on whole and memoised screens over it will redraw. ` +
+        `Hold rows in a table rather than a map in a cell, raise the limit for this call, ` +
+        `or listen with onWholesale to decide for yourself.`,
+    )
+  }
+  return true
+}
+
+export function preserve<T>(prev: T, next: T, limit: number = PRESERVE_LIMIT): T {
   if (Object.is(prev, next)) return next
   if (typeof prev !== 'object' || typeof next !== 'object' || prev === null || next === null)
     return next
   if (prev instanceof Map || next instanceof Map) {
     if (!(prev instanceof Map) || !(next instanceof Map)) return next
+    if (tooBig((next as Map<unknown, unknown>).size, limit)) return next
     const merged = new Map<unknown, unknown>()
     let same = prev.size === next.size
     for (const [key, value] of next as Map<unknown, unknown>) {
       const kept = (prev as Map<unknown, unknown>).has(key)
-        ? preserve((prev as Map<unknown, unknown>).get(key), value)
+        ? preserve((prev as Map<unknown, unknown>).get(key), value, limit)
         : value
       merged.set(key, kept)
       if (!Object.is(kept, (prev as Map<unknown, unknown>).get(key))) same = false
@@ -27,13 +75,15 @@ export function preserve<T>(prev: T, next: T): T {
   }
   if (prev instanceof Set || next instanceof Set) {
     if (!(prev instanceof Set) || !(next instanceof Set)) return next
+    if (tooBig((next as Set<unknown>).size, limit)) return next
     if (prev.size === next.size && [...next].every(item => (prev as Set<unknown>).has(item)))
       return prev as T
     return next
   }
   if (Array.isArray(prev) || Array.isArray(next)) {
     if (!Array.isArray(prev) || !Array.isArray(next)) return next
-    const merged = next.map((item, i) => (i < prev.length ? preserve(prev[i], item) : item))
+    if (tooBig(next.length, limit)) return next
+    const merged = next.map((item, i) => (i < prev.length ? preserve(prev[i], item, limit) : item))
     return (
       merged.length === prev.length && merged.every((item, i) => Object.is(item, prev[i]))
         ? prev
@@ -46,7 +96,7 @@ export function preserve<T>(prev: T, next: T): T {
   const merged: Record<string, unknown> = {}
   let same = names.length === Object.keys(before).length
   for (const name of names) {
-    const kept = name in before ? preserve(before[name], after[name]) : after[name]
+    const kept = name in before ? preserve(before[name], after[name], limit) : after[name]
     merged[name] = kept
     if (!Object.is(kept, before[name])) same = false
   }
