@@ -2,31 +2,18 @@
 // it is written down before it is sent, carries an idempotency key so a repeat
 // is not a second purchase, and leaves the book only when the world confirms.
 
-import { cell, input } from '../graph/graph.ts'
+import { cell } from '../graph/graph.ts'
+import { book as openBook } from './book.ts'
+import type { Entry } from './book.ts'
+import { schedule } from './schedule.ts'
 import { owned } from '../graph/region.ts'
 import type { Readable } from '../graph/graph.ts'
-import { SAVING } from './keep.ts'
-import type { Saving } from './keep.ts'
 import type { Fault } from '../remote/remote.ts'
 import type { Store } from './store.ts'
-import { wallClock } from '../graph/time.ts'
 import type { Timers } from '../graph/time.ts'
+import type { Saving } from './keep.ts'
 
-export type EntryState = 'waiting' | 'sending' | 'stuck' | 'done'
-
-export interface Entry {
-  /** The idempotency key. The same one on every attempt, including after a reload. */
-  readonly id: string
-  readonly name: string
-  readonly args: unknown
-  /** When it was written down. */
-  readonly at: number
-  readonly attempts: number
-  readonly state: EntryState
-  readonly lastError?: string
-  /** When the world confirmed it — only on retained 'done' entries. */
-  readonly doneAt?: number
-}
+export type { Entry, EntryState } from './book.ts'
 
 export interface Handling {
   /** Put this on the request so a repeat is recognised as the same command. */
@@ -114,19 +101,6 @@ function randomId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
 }
 
-function mendBook(raw: unknown): Entry[] {
-  if (!Array.isArray(raw)) return []
-  // A run that died mid-flight left entries marked as sending; the world may or
-  // may not have taken them, which is exactly what the idempotency key is for.
-  // The store parted with a clone that nobody else holds, so the entries are
-  // set right in place rather than copied.
-  const entries = raw as Entry[]
-  for (const entry of entries) {
-    if (entry.state === 'sending') (entry as { state: EntryState }).state = 'waiting'
-  }
-  return entries
-}
-
 export function outbox(options: OutboxOptions): Outbox {
   const {
     key,
@@ -145,80 +119,24 @@ export function outbox(options: OutboxOptions): Outbox {
       error instanceof Error && (error.name === 'Unknown' || error.name === 'UnknownOutcome')
         ? 'unknown'
         : 'transient')
-  const retryCap = options.retryCap ?? retry * 32
   const now = options.now ?? Date.now
-  const timers = options.timers ?? wallClock
   const newId = options.newId ?? randomId
 
-  const entries = input<readonly Entry[]>([], { name: `${key}.entries` })
-  const saving = input<Saving>(SAVING, { name: `${key}.saving` })
+  const clock = schedule({
+    retry,
+    cap: options.retryCap ?? retry * 32,
+    ...(options.timers === undefined ? {} : { timers: options.timers }),
+    ...(options.paused === undefined ? {} : { paused: options.paused }),
+  })
+  const pages = openBook(key, store, () => {
+    if (!clock.held()) void pump()
+  })
+  const { entries, saving } = pages
   const waiting = new Map<
     string,
     { resolve: () => void; reject: (error: unknown) => void; promise?: Promise<void> }
   >()
-  let held = options.paused ?? false
-  let timer: unknown = null
   let sending = false
-  let lifted = false
-
-  // One writer for the book. Versions coalesce while one is in flight: the disk
-  // always ends on the latest book, and no write is ever lost between two.
-  let pendingBook: readonly Entry[] | undefined
-  let writing = false
-  function drainBook(): void {
-    if (writing || pendingBook === undefined) return
-    const book = pendingBook
-    pendingBook = undefined
-    writing = true
-    store.write(key, book).then(
-      () => {
-        writing = false
-        saving.set(SAVING)
-        drainBook()
-      },
-      (error: unknown) => {
-        writing = false
-        const reason = error instanceof Error ? `${error.name}: ${error.message}` : String(error)
-        saving.set({ ok: false, reason })
-        drainBook()
-      },
-    )
-  }
-
-  function write(next: readonly Entry[]): void {
-    entries.set(next)
-    // Before the old book is lifted, writing would bury it; the lift merges and
-    // writes the whole of it instead.
-    if (!lifted) return
-    pendingBook = next
-    drainBook()
-  }
-
-  function replace(id: string, change: (entry: Entry) => Entry): void {
-    write(entries.peek().map(entry => (entry.id === id ? change(entry) : entry)))
-  }
-
-  function remove(id: string): void {
-    write(entries.peek().filter(entry => entry.id !== id))
-  }
-
-  function backoff(attempt: number): number {
-    return Math.min(retry * 2 ** Math.max(0, attempt - 1), retryCap)
-  }
-
-  function cancelTimer(): void {
-    if (timer === null) return
-    timers.clear(timer)
-    timer = null
-  }
-
-  function later(delay: number): void {
-    cancelTimer()
-    timer = timers.set(() => {
-      timer = null
-      void pump()
-    }, delay)
-  }
 
   function settle(id: string, error?: unknown): void {
     const waiter = waiting.get(id)
@@ -228,9 +146,14 @@ export function outbox(options: OutboxOptions): Outbox {
     else waiter.reject(error)
   }
 
+  /** Try the head again after a wait: the only thing that touches the clock. */
+  function retryLater(delay: number): void {
+    clock.after(delay, () => void pump())
+  }
+
   /** Send the head of the book, one at a time: order is part of the promise. */
   async function pump(): Promise<void> {
-    if (sending || held || !lifted) return
+    if (sending || clock.held() || !pages.lifted()) return
     const head = entries.peek().find(entry => entry.state !== 'stuck' && entry.state !== 'done')
     if (head === undefined) return
 
@@ -241,7 +164,7 @@ export function outbox(options: OutboxOptions): Outbox {
         state: 'stuck',
         lastError: `no handler for "${head.name}"`,
       }
-      replace(head.id, () => stuckEntry)
+      pages.replace(head.id, () => stuckEntry)
       onStuck?.(stuckEntry)
       settle(head.id, new Error(stuckEntry.lastError))
       void pump()
@@ -250,14 +173,14 @@ export function outbox(options: OutboxOptions): Outbox {
 
     sending = true
     const attempt = head.attempts + 1
-    replace(head.id, entry => ({ ...entry, state: 'sending', attempts: attempt }))
+    pages.replace(head.id, entry => ({ ...entry, state: 'sending', attempts: attempt }))
     try {
       await (handler as (args: unknown, handling: Handling) => Promise<void>)(head.args, {
         key: head.id,
         attempt,
       })
-      if (retain) replace(head.id, entry => ({ ...entry, state: 'done', doneAt: now() }))
-      else remove(head.id)
+      if (retain) pages.replace(head.id, entry => ({ ...entry, state: 'done', doneAt: now() }))
+      else pages.remove(head.id)
       settle(head.id)
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
@@ -265,7 +188,7 @@ export function outbox(options: OutboxOptions): Outbox {
       if (fault === 'permanent' || fault === 'rejected') {
         // The world meaningfully said no; repeating will not change it. The
         // entry leaves at once — through a door with a trace, never silently.
-        remove(head.id)
+        pages.remove(head.id)
         onRefused?.({ ...head, attempts: attempt, state: 'stuck', lastError: message })
         settle(head.id, error)
       } else if (fault === 'unknown') {
@@ -273,56 +196,34 @@ export function outbox(options: OutboxOptions): Outbox {
         // the idempotency key is for — so the entry is repeated as a matter of
         // course and the poison count is not touched: a blinking network must
         // not bury a living entry.
-        replace(head.id, entry => ({
+        pages.replace(head.id, entry => ({
           ...entry,
           state: 'waiting',
           attempts: head.attempts,
           lastError: message,
         }))
-        later(backoff(head.attempts + 1))
+        retryLater(clock.backoff(head.attempts + 1))
       } else if (attempt >= maxAttempts) {
         const stuckEntry: Entry = { ...head, attempts: attempt, state: 'stuck', lastError: message }
-        replace(head.id, () => stuckEntry)
+        pages.replace(head.id, () => stuckEntry)
         onStuck?.(stuckEntry)
         settle(head.id, error)
       } else {
-        replace(head.id, entry => ({ ...entry, state: 'waiting', lastError: message }))
-        later(backoff(attempt))
+        pages.replace(head.id, entry => ({ ...entry, state: 'waiting', lastError: message }))
+        retryLater(clock.backoff(attempt))
       }
     } finally {
       sending = false
     }
-    if (timer === null) void pump()
+    if (!clock.waiting()) void pump()
   }
-
-  // Whatever a previous run left behind is owed to the world. It is lifted
-  // first, and nothing is sent until it is: order is part of the promise, and
-  // what was written down earlier goes out earlier.
-  const ready = store
-    .read(key)
-    .then(raw => mendBook(raw))
-    .catch((error: unknown) => {
-      // The disk did not answer: nothing to lift, and the book is not landing.
-      const reason = error instanceof Error ? `${error.name}: ${error.message}` : String(error)
-      saving.set({ ok: false, reason })
-      return [] as Entry[]
-    })
-    .then(book => {
-      const newborn = entries.peek()
-      lifted = true
-      if (book.length > 0 || newborn.length > 0) write([...book, ...newborn])
-      if (!held) void pump()
-    })
 
   // A region taking this outbox down holds the book: entries stay written,
   // nothing more is sent, no timer stays on the clock.
-  owned(() => {
-    held = true
-    cancelTimer()
-  })
+  owned(() => clock.hold())
 
   return {
-    ready,
+    ready: pages.ready,
     saving,
     entries,
     active: cell<readonly Entry[]>(() => entries.get().filter(entry => entry.state !== 'stuck'), {
@@ -356,7 +257,7 @@ export function outbox(options: OutboxOptions): Outbox {
       }
       const entry: Entry = { id, name, args, at: now(), attempts: 0, state: 'waiting' }
       // Written down before it is sent: a death between the two loses nothing.
-      write([...entries.peek(), entry])
+      pages.write([...entries.peek(), entry])
       let arm: { resolve: () => void; reject: (error: unknown) => void } | undefined
       const done = new Promise<void>((resolve, reject) => {
         arm = { resolve, reject }
@@ -374,7 +275,7 @@ export function outbox(options: OutboxOptions): Outbox {
       const kept = book.filter(
         entry => entry.state !== 'done' || entry.doneAt === undefined || entry.doneAt > before,
       )
-      if (kept.length !== book.length) write(kept)
+      if (kept.length !== book.length) pages.write(kept)
     },
 
     note(name, args) {
@@ -389,12 +290,12 @@ export function outbox(options: OutboxOptions): Outbox {
         state: 'done',
         doneAt: now(),
       }
-      write([...entries.peek(), entry])
+      pages.write([...entries.peek(), entry])
       return { id }
     },
 
     again(id) {
-      replace(id, entry =>
+      pages.replace(id, entry =>
         entry.state === 'stuck' ? { ...entry, state: 'waiting', attempts: 0 } : entry,
       )
       void pump()
@@ -402,23 +303,22 @@ export function outbox(options: OutboxOptions): Outbox {
 
     forget(id) {
       const entry = entries.peek().find(one => one.id === id)
-      remove(id)
+      pages.remove(id)
       if (entry !== undefined) onDiscarded?.({ ...entry, lastError: 'discarded by hand' })
       settle(id, new Error(`discarded by hand: ${id}`))
     },
 
     pause() {
-      held = true
-      cancelTimer()
+      clock.hold()
     },
 
     resume() {
-      held = false
+      clock.release()
       void pump()
     },
 
     get paused() {
-      return held
+      return clock.held()
     },
   }
 }
