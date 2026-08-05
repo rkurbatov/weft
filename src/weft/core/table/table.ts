@@ -8,7 +8,9 @@
 import { cell, input } from '../graph/graph.ts'
 import type { Cell, Equal, Watchable } from '../graph/graph.ts'
 import { family } from '../graph/family.ts'
-import { TREE_SPAN, planFold } from './plan.ts'
+import { planFold, TREE_WORTH_IT } from './plan.ts'
+import type { FoldTraits } from './plan.ts'
+import { carrierFor } from './carriers/index.ts'
 
 import type { Key } from '../data/key.ts'
 
@@ -193,122 +195,61 @@ export function follow<R>(feed: Feed<R>, on: Follower<R>): () => void {
 }
 
 function foldOver<R, A>(feed: Feed<R>, spec: FoldSpec<R, A>, name: string): Cell<A> {
-  const plan = planFold(name, {
+  // The rows a carrier is built over: the feed, seen as little as a carrier
+  // needs to see it.
+  const rows = {
+    each: feed.each.bind(feed),
+    keyOf: feed.keyOf.bind(feed),
+    count: feed.count.bind(feed),
+  }
+  const traits = (): FoldTraits => ({
     size: feed.count(),
     hasSub: spec.sub !== undefined,
     hasJoin: spec.join !== undefined,
     ...(spec.carrier === undefined ? {} : { forced: spec.carrier }),
   })
-  // The carriers answer the same; what differs is who pays for one edit.
-  return plan.carrier === 'tree' ? foldByTree(feed, spec, name) : foldByAcc(feed, spec, name)
-}
 
-/** Running accumulator (or honest recount when the operation cannot undo). */
-function foldByAcc<R, A>(feed: Feed<R>, spec: FoldSpec<R, A>, name: string): Cell<A> {
-  let acc = spec.zero
-  const recount = (): void => {
-    acc = spec.zero
-    feed.each(row => {
-      acc = spec.add(acc, row)
-    })
-  }
-  const ensure = follow(feed, {
-    first: recount,
-    apply(changes) {
-      const sub = spec.sub
-      if (sub === undefined) {
-        recount()
-        return
-      }
-      for (const c of changes) {
-        if (c.prev !== undefined) acc = sub(acc, c.prev)
-        if (c.next !== undefined) acc = spec.add(acc, c.next)
-      }
-    },
-    resync: recount,
-  })
-  return cell(
-    () => {
-      ensure()
-      return acc
-    },
-    { name, equal: spec.equal ?? Object.is },
-  )
-}
+  let plan = planFold(name, traits())
+  let carrier = carrierFor<R, A>(plan.carrier, spec)
 
-/**
- * A flat tree of block partials: rows take slots in a plain array, an edit
- * dirties one block, a read recounts dirty blocks and joins the partials.
- * For operations without an inverse — min, max — over big collections: one
- * edit costs one block, not the collection. No cells per row: the deltas feed
- * the array directly, the graph sees one answer.
- */
-function foldByTree<R, A>(feed: Feed<R>, spec: FoldSpec<R, A>, name: string): Cell<A> {
-  const span = TREE_SPAN
-  let rows: (R | undefined)[] = []
-  let slots = new Map<Key, number>()
-  let partials: A[] = []
-  let dirty = new Set<number>()
-
-  const rebuild = (): void => {
-    rows = []
-    slots = new Map()
-    feed.each(row => {
-      slots.set(feed.keyOf(row), rows.length)
-      rows.push(row)
-    })
-    partials = []
-    dirty = new Set()
-    for (let b = 0; b * span < rows.length; b++) dirty.add(b)
+  /**
+   * Re-plan as the collection grows. The choice was made once, when the fold
+   * was built and the collection was often empty; a table that fills up
+   * afterwards deserves the carrier it would have been given at its present
+   * size. The check itself is a comparison against the thresholds, not a
+   * planning run, and a swap costs one rebuild — so a collection sitting on a
+   * threshold is kept from swapping back and forth by asking for a clear
+   * margin before it goes back down.
+   */
+  const replan = (): void => {
+    if (spec.carrier !== undefined && spec.carrier !== 'auto') return
+    const size = feed.count()
+    const grew = plan.carrier !== 'tree' && size >= TREE_WORTH_IT
+    const shrank = plan.carrier === 'tree' && size < TREE_WORTH_IT / 2
+    if (!grew && !shrank) return
+    const next = planFold(name, traits())
+    if (next.carrier === plan.carrier) return
+    plan = next
+    carrier = carrierFor<R, A>(next.carrier, spec)
+    carrier.rebuild(rows)
   }
 
   const ensure = follow(feed, {
-    first: rebuild,
+    first: () => carrier.rebuild(rows),
     apply(changes) {
-      for (const c of changes) {
-        const at = slots.get(c.key)
-        if (c.next === undefined) {
-          // A hole, not a shift: positions hold, the block recounts around it.
-          if (at !== undefined) {
-            rows[at] = undefined
-            slots.delete(c.key)
-            dirty.add(Math.floor(at / span))
-          }
-        } else if (at === undefined) {
-          slots.set(c.key, rows.length)
-          rows.push(c.next)
-          dirty.add(Math.floor((rows.length - 1) / span))
-        } else {
-          rows[at] = c.next
-          dirty.add(Math.floor(at / span))
-        }
-      }
+      carrier.feed(changes, rows)
+      replan()
     },
-    resync: rebuild,
+    resync: () => {
+      carrier.rebuild(rows)
+      replan()
+    },
   })
-
-  const answer = (): A => {
-    for (const b of dirty) {
-      let part = spec.zero
-      const first = b * span
-      const last = Math.min(first + span, rows.length)
-      for (let i = first; i < last; i++) {
-        const row = rows[i]
-        if (row !== undefined) part = spec.add(part, row)
-      }
-      partials[b] = part
-    }
-    dirty.clear()
-    const join = spec.join as (a: A, b: A) => A // the plan grants 'tree' only with a join
-    let whole = spec.zero
-    for (let b = 0; b * span < rows.length; b++) whole = join(whole, partials[b] as A)
-    return whole
-  }
 
   return cell(
     () => {
       ensure()
-      return answer()
+      return carrier.answer()
     },
     { name, equal: spec.equal ?? Object.is },
   )
