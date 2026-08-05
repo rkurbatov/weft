@@ -38,11 +38,27 @@ export const passesFilter = (node: FilterNode, row: Row): boolean =>
   isExpr(node.test) ? truthy(node.test, row) : node.test(row) === true
 
 /** The equi-key a row stands under, for one side of a join. */
+/**
+ * The value a row is matched on, or `undefined` when it has none.
+ *
+ * A row with nothing in a key field does not join — not with the other side,
+ * and not with the other rows that also have nothing. Two absences are not the
+ * same value; every relational algebra says so, and the version that spelled
+ * the absence as a key matched them all with each other.
+ */
 export const onKeyOf = (
   pairs: ReadonlyArray<{ left: string; right: string }>,
   side: 'left' | 'right',
   row: Row,
-): string => JSON.stringify(pairs.map(p => row[p[side]] ?? null))
+): string | undefined => {
+  const parts: unknown[] = []
+  for (const pair of pairs) {
+    const value = row[pair[side]]
+    if (value === null || value === undefined) return undefined
+    parts.push(value)
+  }
+  return JSON.stringify(parts)
+}
 
 /** The merged row of a pair; the phantom of a keeping row stands with null. */
 export const mergedRow = (node: JoinNode, left: Row, right: Row | null): Row => ({

@@ -571,4 +571,56 @@ describe('the relational layer', () => {
     assert.equal((live.row(301).peek() as Row)['offset'], 300 * 50 + 90)
     rows.dispose()
   })
+
+  describe('a row with nothing in its key field', () => {
+    test('joins nobody — and least of all the other rows that also have nothing', () => {
+      const orders = feed('orders')
+      const clients = feed('clients')
+      const live = living(
+        join(source('orders', ['id']), source('clients', ['id']), {
+          as: 'c',
+          on: [{ left: 'client', right: 'code' }],
+        }),
+        { orders, clients },
+      )
+      until(subscribe(live.all, () => {}))
+
+      orders.put(
+        { id: 1, client: null } as unknown as Row,
+        { id: 2, client: null } as unknown as Row,
+      )
+      clients.put({ id: 10, code: null } as unknown as Row)
+      assert.equal(live.size.peek(), 0, 'no pairs at all: an absence is not a value')
+
+      // And the moment a real key appears, the row joins like any other.
+      orders.put({ id: 1, client: 7 } as unknown as Row)
+      clients.put({ id: 11, code: 7 } as unknown as Row)
+      assert.equal(live.size.peek(), 1)
+    })
+
+    test('stands alone in a keeping join, rather than pairing with its like', () => {
+      const orders = feed('orders')
+      const clients = feed('clients')
+      const live = living(
+        join(source('orders', ['id']), source('clients', ['id']), {
+          as: 'c',
+          on: [{ left: 'client', right: 'code' }],
+          keeping: true,
+        }),
+        { orders, clients },
+      )
+      until(subscribe(live.all, () => {}))
+
+      orders.put(
+        { id: 1, client: null } as unknown as Row,
+        { id: 2, client: null } as unknown as Row,
+      )
+      clients.put({ id: 10, code: null } as unknown as Row)
+      assert.equal(live.size.peek(), 2, 'both stand alone')
+      assert.deepEqual(
+        live.all.peek().map(r => r['c']),
+        [null, null],
+      )
+    })
+  })
 })

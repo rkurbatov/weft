@@ -123,6 +123,8 @@ export function recount(
       const rightByOn = new Map<string, Row[]>()
       for (const row of right.values()) {
         const at = onKeyOf(node.on, 'right', row)
+        // Nothing in a key field: this row is nobody's partner.
+        if (at === undefined) continue
         const held = rightByOn.get(at)
         if (held === undefined) rightByOn.set(at, [row])
         else held.push(row)
@@ -130,7 +132,8 @@ export function recount(
       const out = new Map<Key, Row>()
       for (const leftRow of left.values()) {
         let matched = 0
-        for (const rightRow of rightByOn.get(onKeyOf(node.on, 'left', leftRow)) ?? []) {
+        const at = onKeyOf(node.on, 'left', leftRow)
+        for (const rightRow of (at === undefined ? undefined : rightByOn.get(at)) ?? []) {
           const pair = mergedRow(node, leftRow, rightRow)
           if (!passesResidual(node, pair)) continue
           matched++

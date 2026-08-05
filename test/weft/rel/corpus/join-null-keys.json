@@ -1,0 +1,169 @@
+{
+  "name": "join-null-keys",
+  "note": "A row with nothing in its key field joins nobody — not the other side, and not the other rows that also have nothing. Two absences are not one value.",
+  "tree": {
+    "prim": "join",
+    "left": {
+      "prim": "source",
+      "source": "orders",
+      "key": ["id"]
+    },
+    "right": {
+      "prim": "source",
+      "source": "clients",
+      "key": ["id"]
+    },
+    "as": "c",
+    "on": [
+      {
+        "left": "client",
+        "right": "code"
+      }
+    ],
+    "keeping": true
+  },
+  "steps": [
+    {
+      "source": "orders",
+      "put": [
+        {
+          "id": 1,
+          "client": 5,
+          "sum": 20
+        },
+        {
+          "id": 2,
+          "client": null,
+          "sum": 7
+        },
+        {
+          "id": 3,
+          "client": null,
+          "sum": 9
+        }
+      ],
+      "expect": [
+        {
+          "id": 1,
+          "client": 5,
+          "sum": 20,
+          "c": null
+        },
+        {
+          "id": 2,
+          "client": null,
+          "sum": 7,
+          "c": null
+        },
+        {
+          "id": 3,
+          "client": null,
+          "sum": 9,
+          "c": null
+        }
+      ]
+    },
+    {
+      "source": "clients",
+      "put": [
+        {
+          "id": 100,
+          "code": null,
+          "tier": "gold"
+        }
+      ],
+      "expect": [
+        {
+          "id": 1,
+          "client": 5,
+          "sum": 20,
+          "c": null
+        },
+        {
+          "id": 2,
+          "client": null,
+          "sum": 7,
+          "c": null
+        },
+        {
+          "id": 3,
+          "client": null,
+          "sum": 9,
+          "c": null
+        }
+      ]
+    },
+    {
+      "source": "clients",
+      "put": [
+        {
+          "id": 101,
+          "code": 5,
+          "tier": "plain"
+        }
+      ],
+      "expect": [
+        {
+          "id": 1,
+          "client": 5,
+          "sum": 20,
+          "c": {
+            "id": 101,
+            "code": 5,
+            "tier": "plain"
+          }
+        },
+        {
+          "id": 2,
+          "client": null,
+          "sum": 7,
+          "c": null
+        },
+        {
+          "id": 3,
+          "client": null,
+          "sum": 9,
+          "c": null
+        }
+      ]
+    },
+    {
+      "source": "orders",
+      "put": [
+        {
+          "id": 2,
+          "client": 5,
+          "sum": 7
+        }
+      ],
+      "expect": [
+        {
+          "id": 1,
+          "client": 5,
+          "sum": 20,
+          "c": {
+            "id": 101,
+            "code": 5,
+            "tier": "plain"
+          }
+        },
+        {
+          "id": 2,
+          "client": 5,
+          "sum": 7,
+          "c": {
+            "id": 101,
+            "code": 5,
+            "tier": "plain"
+          }
+        },
+        {
+          "id": 3,
+          "client": null,
+          "sum": 9,
+          "c": null
+        }
+      ]
+    }
+  ]
+}

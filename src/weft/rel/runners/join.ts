@@ -41,7 +41,10 @@ export function joinRunner(node: JoinNode, make: Make): Runner {
   /** Everything one left row stands for right now: its pairs, or its phantom. */
   const outsOf = (leftRow: Row): Map<Key, Row> => {
     const out = new Map<Key, Row>()
-    for (const rightRow of rightByOn.get(onKeyOf(node.on, 'left', leftRow))?.values() ?? []) {
+    // A row with nothing in a key field matches nobody — including the other
+    // rows that also have nothing. With `keeping` it still stands alone below.
+    const at = onKeyOf(node.on, 'left', leftRow)
+    for (const rightRow of (at === undefined ? undefined : rightByOn.get(at))?.values() ?? []) {
       const pair = mergedRow(node, leftRow, rightRow)
       if (!passesResidual(node, pair)) continue
       out.set(keyOfRow(node, pair), pair)
@@ -56,10 +59,13 @@ export function joinRunner(node: JoinNode, make: Make): Runner {
   const applyLeft = (out: Map<Key, Change<Row>>, change: Change<Row>): void => {
     const before = change.prev === undefined ? new Map<Key, Row>() : outsOf(change.prev)
     if (change.prev !== undefined) {
-      cut(leftByOn, onKeyOf(node.on, 'left', change.prev), change.key)
+      const was = onKeyOf(node.on, 'left', change.prev)
+      if (was !== undefined) cut(leftByOn, was, change.key)
     }
     if (change.next !== undefined) {
-      put(leftByOn, onKeyOf(node.on, 'left', change.next), change.key, change.next)
+      const now = onKeyOf(node.on, 'left', change.next)
+      // Not indexed at all when it has no key: an absence is not a bucket.
+      if (now !== undefined) put(leftByOn, now, change.key, change.next)
     }
     const after = change.next === undefined ? new Map<Key, Row>() : outsOf(change.next)
     diffInto(out, before, after)
@@ -70,17 +76,21 @@ export function joinRunner(node: JoinNode, make: Make): Runner {
     const touched = new Map<Key, Row>()
     for (const side of [change.prev, change.next]) {
       if (side === undefined) continue
-      for (const [key, row] of leftByOn.get(onKeyOf(node.on, 'right', side)) ?? []) {
+      const at = onKeyOf(node.on, 'right', side)
+      if (at === undefined) continue
+      for (const [key, row] of leftByOn.get(at) ?? []) {
         touched.set(key, row)
       }
     }
     const before = new Map<Key, Map<Key, Row>>()
     for (const [key, row] of touched) before.set(key, outsOf(row))
     if (change.prev !== undefined) {
-      cut(rightByOn, onKeyOf(node.on, 'right', change.prev), change.key)
+      const was = onKeyOf(node.on, 'right', change.prev)
+      if (was !== undefined) cut(rightByOn, was, change.key)
     }
     if (change.next !== undefined) {
-      put(rightByOn, onKeyOf(node.on, 'right', change.next), change.key, change.next)
+      const now = onKeyOf(node.on, 'right', change.next)
+      if (now !== undefined) put(rightByOn, now, change.key, change.next)
     }
     for (const [key, row] of touched) {
       diffInto(out, before.get(key) as Map<Key, Row>, outsOf(row))
@@ -107,10 +117,12 @@ export function joinRunner(node: JoinNode, make: Make): Runner {
       leftByOn.clear()
       rightByOn.clear()
       for (const row of left.rebuild(sources).values()) {
-        put(leftByOn, onKeyOf(node.on, 'left', row), leftKeyOf(row), row)
+        const at = onKeyOf(node.on, 'left', row)
+        if (at !== undefined) put(leftByOn, at, leftKeyOf(row), row)
       }
       for (const row of right.rebuild(sources).values()) {
-        put(rightByOn, onKeyOf(node.on, 'right', row), rightKeyOf(row), row)
+        const at = onKeyOf(node.on, 'right', row)
+        if (at !== undefined) put(rightByOn, at, rightKeyOf(row), row)
       }
       return recount(node, sources)
     },
