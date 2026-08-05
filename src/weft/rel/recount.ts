@@ -120,7 +120,7 @@ export function recount(
     case 'join': {
       const left = recount(node.left, sources)
       const right = recount(node.right, sources)
-      const rightByOn = new Map<string, Row[]>()
+      const rightByOn = new Map<string | number, Row[]>()
       for (const row of right.values()) {
         const at = onKeyOf(node.on, 'right', row)
         // Nothing in a key field: this row is nobody's partner.

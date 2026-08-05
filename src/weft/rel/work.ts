@@ -50,14 +50,25 @@ export const onKeyOf = (
   pairs: ReadonlyArray<{ left: string; right: string }>,
   side: 'left' | 'right',
   row: Row,
-): string | undefined => {
-  const parts: unknown[] = []
+): string | number | undefined => {
+  // One field is the common case by far, and its value is already a key: no
+  // string is built at all. Several are joined with their lengths in front,
+  // which is unambiguous without escaping — `1:a2:bc` cannot be read two ways.
+  // This runs once per row per batch, so serialising here was paid for on
+  // every edit of every joined table.
+  if (pairs.length === 1) {
+    const only = row[pairs[0]?.[side] as string]
+    if (only === null || only === undefined) return undefined
+    return typeof only === 'number' || typeof only === 'string' ? only : String(only)
+  }
+  let key = ''
   for (const pair of pairs) {
     const value = row[pair[side]]
     if (value === null || value === undefined) return undefined
-    parts.push(value)
+    const part = String(value)
+    key += `${part.length}:${part}`
   }
-  return JSON.stringify(parts)
+  return key
 }
 
 /** The merged row of a pair; the phantom of a keeping row stands with null. */

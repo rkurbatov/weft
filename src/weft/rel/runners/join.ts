@@ -11,9 +11,9 @@ import type { JoinNode } from '../node.ts'
 import { diffInto } from './runner.ts'
 import type { Make, Runner } from './runner.ts'
 
-type OnIndex = Map<string, Map<Key, Row>>
+type OnIndex = Map<string | number, Map<Key, Row>>
 
-const put = (index: OnIndex, at: string, key: Key, row: Row): void => {
+const put = (index: OnIndex, at: string | number, key: Key, row: Row): void => {
   let held = index.get(at)
   if (held === undefined) {
     held = new Map()
@@ -22,7 +22,7 @@ const put = (index: OnIndex, at: string, key: Key, row: Row): void => {
   held.set(key, row)
 }
 
-const cut = (index: OnIndex, at: string, key: Key): void => {
+const cut = (index: OnIndex, at: string | number, key: Key): void => {
   const held = index.get(at)
   if (held === undefined) return
   held.delete(key)
