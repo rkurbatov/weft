@@ -1,11 +1,20 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
-import { derived, port, subscribe } from '#graph'
+import {
+  attachProbe,
+  derived,
+  owned,
+  port,
+  quietly,
+  region,
+  regionName,
+  subscribe,
+  watch,
+} from '#graph'
 import { outbox } from '#keep'
-import { region } from '#graph'
 import { memoryStore } from '#keep'
 import { source } from '#remote'
-import { held, wakings, world } from '#testkit'
+import { held, until, wakings, world } from '#testkit'
 
 describe('a region owns what is born inside it', () => {
   test('lets go of its watchers and cells in one move', () => {
@@ -95,5 +104,70 @@ describe('a region owns what is born inside it', () => {
   test('nest, and so do their names', () => {
     const box = held(region('app', () => region('board', () => derived(() => 1, { name: 'size' }))))
     assert.equal(box.value.value.name, 'app.board.size')
+  })
+})
+
+describe('the small words around a region', () => {
+  test('owned registers a teardown with the region that is being built', () => {
+    const gone: string[] = []
+    const module = region('module', () => {
+      owned(() => gone.push('mine'))
+      return 1
+    })
+
+    assert.deepEqual(gone, [])
+    module.dispose()
+    assert.deepEqual(gone, ['mine'])
+  })
+
+  test('outside a region, owned has nobody to register with, and says nothing', () => {
+    // Not an error on purpose: a module that can be built inside a region or on
+    // its own should not have to ask which it is.
+    assert.doesNotThrow(() => {
+      owned(() => {})
+    })
+  })
+
+  test('a name says where a node was born, nested regions and all', () => {
+    let inner = ''
+    const outer = region('page', () => {
+      region('panel', () => {
+        inner = regionName() ?? ''
+        return 0
+      })
+      return 0
+    })
+
+    assert.equal(inner, 'page.panel', 'the path, not the last step')
+    assert.equal(regionName(), undefined, 'and outside, no region at all')
+    outer.dispose()
+  })
+
+  test('quietly hides a tick from the instruments, not from the graph', () => {
+    // What it is for: an instrument writing into the graph — a journal keeping
+    // its own tail, a panel counting renders — must not appear in its own
+    // record. The graph itself notices the write like any other.
+    const seats = port(1, { name: 'seats' })
+    const seen: number[] = []
+    const ticks: string[] = []
+    until(
+      watch(() => {
+        seen.push(seats.get())
+      }),
+    )
+    attachProbe({ tick: summary => ticks.push(summary.writes.map(w => w.node).join()) })
+    until(() => {
+      attachProbe(null)
+    })
+
+    seats.set(2)
+    assert.deepEqual(seen, [1, 2])
+    assert.deepEqual(ticks, ['seats'], 'an ordinary write shows up')
+
+    quietly(() => {
+      seats.set(3)
+    })
+    assert.deepEqual(seen, [1, 2, 3], 'the graph recomputed as always')
+    assert.deepEqual(ticks, ['seats'], 'and the instruments saw nothing of it')
   })
 })

@@ -4,7 +4,7 @@
 
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
-import { batch, derived, port, subscribe, trace } from '#graph'
+import { batch, derived, port, subscribe, trace, wallClock } from '#graph'
 import { attachProbe } from '#graph'
 import type { TickSummary } from '#graph'
 import { journal } from '#graph'
@@ -149,5 +149,26 @@ describe('waves and the journal', () => {
     const idle = trace(raw)
     assert.equal(idle.kind, 'input')
     assert.equal(idle.value, 3)
+  })
+})
+
+describe('the clock the library uses when nobody hands it one', () => {
+  test('wall clock: a job set runs, a job cleared does not', async () => {
+    const ran: string[] = []
+    const kept = wallClock.set(() => ran.push('kept'), 1)
+    const dropped = wallClock.set(() => ran.push('dropped'), 1)
+    wallClock.clear(dropped)
+
+    await new Promise(resolve => setTimeout(resolve, 20))
+    assert.deepEqual(ran, ['kept'])
+    wallClock.clear(kept)
+  })
+
+  test('a job scheduled for later has not run yet', async () => {
+    const ran: string[] = []
+    const later = wallClock.set(() => ran.push('later'), 10_000)
+    await new Promise(resolve => setTimeout(resolve, 20))
+    assert.deepEqual(ran, [], 'ten seconds is ten seconds, even in a test')
+    wallClock.clear(later)
   })
 })

@@ -3,11 +3,11 @@
 
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
-import { port } from '#weft'
-import { laid, cell, notes, sends, truth, will } from '#loom'
+import { owned, port, subscribe } from '#weft'
+import { cell, laid, notes, region, sends, truth, truthBy, will } from '#loom'
 import type { Note } from '#weft'
 import type { Channel as Wire } from '#weft'
-import { wait } from '#testkit'
+import { settle, wait, world } from '#testkit'
 
 describe('the Loom dialect', () => {
   test('truth reads plain; flight, fault and asked stand beside as adjectives', async () => {
@@ -195,7 +195,6 @@ describe('the Loom dialect', () => {
     assert.equal(carried.role.peek(), 'inline')
 
     const tab = kanbanMirror(carried.channel)
-    const { subscribe } = await import('#weft')
     const warm = subscribe(tab.state.cards, () => {})
     await tab.actions.load()
     await new Promise(resolve => setTimeout(resolve, 5))
@@ -209,7 +208,6 @@ describe('the Loom dialect', () => {
     const { carry, offer } = await import('#loom')
     const { link } = await import('#weft')
     const { atOnce } = await import('#weft')
-    const { subscribe } = await import('#weft')
     const { heldOf } = await import('#weft')
 
     // A lock of our own: first asker holds, the next in line takes over.
@@ -296,5 +294,63 @@ describe('the Loom dialect', () => {
     }
     assert.equal(after.rows.size, before.rows.size)
     assert.equal(after.lanes[0]?.items[0], 'c1999', 'and the move itself landed')
+  })
+})
+
+describe('truth by key, and a module that can be put down', () => {
+  test('each key is its own truth, asked once and let go together', async () => {
+    const clock = world()
+    const asked: number[] = []
+    const detail = truthBy(
+      (id: number) => {
+        asked.push(id)
+        return Promise.resolve({ id, title: `task ${String(id)}` })
+      },
+      { name: 'detail', timers: clock.timers, empty: { id: 0, title: '' } },
+    )
+
+    const stopSeven = subscribe(detail(7), () => {})
+    const stopNine = subscribe(detail(9), () => {})
+    await settle(3)
+
+    assert.deepEqual(asked.toSorted(), [7, 9], 'one question per key')
+    assert.equal(detail(7).peek().title, 'task 7')
+    assert.equal(detail(9).peek().title, 'task 9')
+
+    // The same key twice is the same truth, not a second question.
+    const again = subscribe(detail(7), () => {})
+    await settle(2)
+    assert.deepEqual(asked.toSorted(), [7, 9])
+
+    stopSeven()
+    stopNine()
+    again()
+  })
+
+  test('a module built in a region goes down with it, feed and all', async () => {
+    const clock = world()
+    let asks = 0
+    const module = region('screen', () => {
+      const board = truth(
+        () => {
+          asks++
+          return Promise.resolve(['a'])
+        },
+        { name: 'board', poll: 100, timers: clock.timers, empty: [] },
+      )
+      const stop = subscribe(board, () => {})
+      owned(stop)
+      return board
+    })
+
+    await settle(3)
+    await clock.advance(250)
+    const asked = asks
+    assert.ok(asked > 1, 'it polled while it lived')
+
+    module.dispose()
+    await clock.advance(500)
+    await settle(2)
+    assert.equal(asks, asked, 'and asked nothing after')
   })
 })

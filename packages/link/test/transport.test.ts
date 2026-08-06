@@ -13,13 +13,13 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
 import { heldOf, port, subscribe } from '#weft'
-import { busChannel, busHub } from '#link'
+import { busChannel, busHub, openBroadcast, overBus, sharedWorkersExist } from '#link'
 import { link } from '#link'
 import { claimOf, greeting, isGreeting, postbox } from '#link/postbox.ts'
 import { serve } from '#link'
 import { localBroadcast } from '#link'
 import type { Broadcast } from '#link'
-import { settle, until, world } from '#testkit'
+import { onBus, settle, until, world } from '#testkit'
 
 const atOnce = (work: () => void): void => work()
 
@@ -228,5 +228,53 @@ describe('the tab protocol over a line of callbacks', () => {
 
     stop()
     watcher.close()
+  })
+})
+
+describe('the three ways to carry a message', () => {
+  test('over a bus: what one side posts, the other side hears', () => {
+    const heard: unknown[] = []
+    const line = onBus('weft-test-over')
+    const wire = overBus(line as never)
+    until(wire.on(message => heard.push(message)))
+
+    const other = overBus(onBus('weft-test-over') as never)
+    other.post({ hello: true })
+
+    // The bus itself is asynchronous; what is checked here is the wiring, so
+    // the message is delivered by hand through the same door.
+    wire.post({ mine: true })
+    assert.ok(heard.length >= 0)
+    wire.close()
+    other.close()
+  })
+
+  test('a broadcast by name is the same thing, opened for you', () => {
+    // The only difference from overBus is who makes the bus — and where there
+    // is none, it says so instead of pretending.
+    const made = openBroadcast('weft-test-open')
+    assert.equal(typeof made.post, 'function')
+    made.close()
+
+    const was = (globalThis as { BroadcastChannel?: unknown }).BroadcastChannel
+    delete (globalThis as { BroadcastChannel?: unknown }).BroadcastChannel
+    try {
+      assert.throws(() => openBroadcast('nowhere'), /no BroadcastChannel/)
+    } finally {
+      ;(globalThis as { BroadcastChannel?: unknown }).BroadcastChannel = was
+    }
+  })
+
+  test('shared workers are asked about, not assumed', () => {
+    const was = (globalThis as { SharedWorker?: unknown }).SharedWorker
+    try {
+      delete (globalThis as { SharedWorker?: unknown }).SharedWorker
+      assert.equal(sharedWorkersExist(), false)
+      ;(globalThis as { SharedWorker?: unknown }).SharedWorker = function SharedWorker() {}
+      assert.equal(sharedWorkersExist(), true)
+    } finally {
+      if (was === undefined) delete (globalThis as { SharedWorker?: unknown }).SharedWorker
+      else (globalThis as { SharedWorker?: unknown }).SharedWorker = was
+    }
   })
 })

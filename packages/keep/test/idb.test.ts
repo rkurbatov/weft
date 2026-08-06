@@ -2,7 +2,7 @@
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { IDBFactory } from 'fake-indexeddb'
-import { idbStore } from '#keep'
+import { idbStore, webStore } from '#keep'
 
 describe('the browser database, and the shelf that picks it', () => {
   /** Each test gets a database world of its own. */
@@ -97,6 +97,48 @@ describe('the browser database, and the shelf that picks it', () => {
     } finally {
       if (previous === undefined) delete (globalThis as { indexedDB?: unknown }).indexedDB
       else (globalThis as { indexedDB?: unknown }).indexedDB = previous
+    }
+  })
+})
+
+describe('the shelf a browser offers', () => {
+  test('web storage keeps values across two openings of the same area', async () => {
+    const box = new Map<string, string>()
+    const fake = {
+      getItem: (k: string) => box.get(k) ?? null,
+      setItem: (k: string, v: string) => box.set(k, v),
+      removeItem: (k: string) => box.delete(k),
+      key: (i: number) => [...box.keys()][i] ?? null,
+      get length() {
+        return box.size
+      },
+      clear: () => box.clear(),
+    }
+    const was = (globalThis as { localStorage?: unknown }).localStorage
+    ;(globalThis as { localStorage?: unknown }).localStorage = fake
+    try {
+      const store = webStore('local')
+      await store.write('draft', { title: 'unsent' })
+      assert.deepEqual(await webStore('local').read('draft'), { title: 'unsent' })
+      assert.deepEqual(await store.keys(''), ['draft'])
+
+      await store.remove('draft')
+      assert.equal(await store.read('draft'), undefined)
+    } finally {
+      if (was === undefined) delete (globalThis as { localStorage?: unknown }).localStorage
+      else (globalThis as { localStorage?: unknown }).localStorage = was
+    }
+  })
+
+  test('where there is no such storage, it is memory rather than a crash', async () => {
+    const was = (globalThis as { localStorage?: unknown }).localStorage
+    delete (globalThis as { localStorage?: unknown }).localStorage
+    try {
+      const store = webStore('local')
+      await store.write('k', 1)
+      assert.equal(await store.read('k'), 1, 'a disk that forgets is still a disk')
+    } finally {
+      if (was !== undefined) (globalThis as { localStorage?: unknown }).localStorage = was
     }
   })
 })

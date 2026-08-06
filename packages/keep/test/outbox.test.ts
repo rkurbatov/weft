@@ -1,7 +1,7 @@
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
-import { derived, subscribe } from '#graph'
-import { outbox } from '#keep'
+import { derived, port, subscribe } from '#graph'
+import { outbox, projected } from '#keep'
 import { memoryStore } from '#keep'
 import type { Note, Handler } from '#keep'
 import { settle, until, world } from '#testkit'
@@ -483,5 +483,84 @@ describe('the outbox', () => {
     for (const n of [1, 2, 3]) box.send('step', { n }, { lane: 'one' })
     await clock.advance(1)
     assert.deepEqual(sent, ['1', '2', '3'])
+  })
+})
+
+describe('the projection of what is owed over what the server said', () => {
+  interface Board {
+    cards: Record<string, { id: string; lane: string }>
+  }
+
+  const server = (lane: string): Board => ({ cards: { a: { id: 'a', lane } } })
+
+  test('unsent notes are laid over the truth, and lift as they leave', async () => {
+    const clock = world()
+    let refusing = false
+    const truth = port<Board>(server('todo'), { name: 'truth' })
+    const box = outbox({
+      key: 'k',
+      store: memoryStore(),
+      handlers: {
+        move: () => (refusing ? Promise.reject(new Error('no')) : Promise.resolve()),
+      },
+      classify: () => 'permanent' as const,
+      timers: clock.timers,
+      now: clock.now,
+    })
+    await box.ready
+
+    const shown = projected(truth, box.entries, {
+      apply: {
+        move: (state: Board, op: { id: string; lane: string }) => ({
+          cards: { ...state.cards, [op.id]: { id: op.id, lane: op.lane } },
+        }),
+      },
+    })
+    until(subscribe(shown, () => {}))
+
+    assert.equal(shown.peek().cards['a']?.lane, 'todo')
+
+    box.send('move', { id: 'a', lane: 'done' })
+    assert.equal(shown.peek().cards['a']?.lane, 'done', 'shown on the strength of the note')
+
+    // Confirmed: the note leaves, and the server now says the same thing.
+    truth.set(server('done'))
+    await clock.advance(1)
+    assert.equal(box.owed.peek(), 0)
+    assert.equal(shown.peek().cards['a']?.lane, 'done')
+
+    // Refused: the note leaves too, and what it showed goes with it.
+    refusing = true
+    box.send('move', { id: 'a', lane: 'todo' })
+    assert.equal(shown.peek().cards['a']?.lane, 'todo')
+    await clock.advance(1)
+    assert.equal(shown.peek().cards['a']?.lane, 'done', 'back to what the server says')
+  })
+
+  test('a stuck note shows nothing: it is owed, not believed', async () => {
+    const clock = world()
+    const truth = port<Board>(server('todo'), { name: 'truth' })
+    const box = outbox({
+      key: 'k',
+      store: memoryStore(),
+      handlers: { move: () => Promise.reject(new Error('no')) },
+      classify: () => 'permanent' as const,
+      timers: clock.timers,
+      now: clock.now,
+    })
+    await box.ready
+
+    const shown = projected(truth, box.entries, {
+      apply: {
+        move: (state: Board, op: { id: string; lane: string }) => ({
+          cards: { ...state.cards, [op.id]: { id: op.id, lane: op.lane } },
+        }),
+      },
+    })
+    until(subscribe(shown, () => {}))
+
+    box.send('move', { id: 'a', lane: 'done' }, { key: 'stuck-one' })
+    await clock.advance(1)
+    assert.equal(shown.peek().cards['a']?.lane, 'todo')
   })
 })

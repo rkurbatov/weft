@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
 import { port, subscribe, watch } from '#graph'
-import { table } from '#table'
+import { alike, table } from '#table'
 import type { SourceTable } from '#table'
 import { hasIds, held, until } from '#testkit'
 
@@ -337,5 +337,26 @@ describe('tables', () => {
     floor.set(18)
     assert.equal(above.size.peek(), 2)
     assert.equal(told, 2) // one wake for the change, not one per row dropped
+  })
+})
+
+describe('sameness by value', () => {
+  test('what alike counts as the same row', () => {
+    assert.equal(alike({ id: 1, title: 'a' }, { id: 1, title: 'a' }), true)
+    assert.equal(alike({ id: 1, title: 'a' }, { id: 1, title: 'b' }), false)
+    assert.equal(alike([1, 2, 3], [1, 2, 3]), true)
+    assert.equal(alike([1, 2], [1, 2, 3]), false)
+    assert.equal(alike(new Date(5), new Date(5)), true, 'dates by their moment')
+    assert.equal(alike(new Map([['a', 1]]), new Map([['a', 1]])), true)
+    assert.equal(alike(new Set([1, 2]), new Set([2, 1])), true, 'a set has no order to differ in')
+  })
+
+  test('deep enough for the shapes rows are made of, and no deeper', () => {
+    assert.equal(alike({ at: { by: { id: 1 } } }, { at: { by: { id: 1 } } }), true)
+    // A function is not a value that survives a worker boundary, so two of
+    // them are the same only when they are the same one.
+    const fn = (): void => {}
+    assert.equal(alike({ fn }, { fn }), true)
+    assert.equal(alike({ fn }, { fn: (): void => {} }), false)
   })
 })

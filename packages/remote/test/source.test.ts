@@ -1,7 +1,7 @@
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { derived, subscribe } from '#graph'
-import { source } from '#remote'
+import { arrivalOf, source } from '#remote'
 import { settle, until, world } from '#testkit'
 
 describe('sources', () => {
@@ -370,5 +370,57 @@ describe('sources', () => {
     // And when it is served out, the ask goes as planned.
     await clock.advance(2000)
     assert.equal(asked, 3)
+  })
+})
+
+describe('waiting for the first answer', () => {
+  test('arrival settles when something lands, and is already settled after', async () => {
+    const clock = world()
+    let answer: (value: string) => void = () => {}
+    const feed = source(
+      () =>
+        new Promise<string>(resolve => {
+          answer = resolve
+        }),
+      { name: 'slow', timers: clock.timers, now: clock.now },
+    )
+    until(subscribe(feed.state, () => {}))
+
+    let landed = false
+    void arrivalOf(feed).then(() => {
+      landed = true
+    })
+    await settle(2)
+    assert.equal(landed, false, 'nothing has arrived')
+
+    answer('here')
+    await settle(3)
+    assert.equal(landed, true)
+
+    // Asked again after the fact, it is settled at once — a screen mounting
+    // later must not wait for an arrival that already happened.
+    let second = false
+    void arrivalOf(feed).then(() => {
+      second = true
+    })
+    await settle(2)
+    assert.equal(second, true)
+  })
+
+  test('a refusal counts as an arrival: the waiting is over either way', async () => {
+    const clock = world()
+    const feed = source(() => Promise.reject(new Error('no')), {
+      name: 'sour',
+      timers: clock.timers,
+      now: clock.now,
+    })
+    until(subscribe(feed.state, () => {}))
+
+    let over = false
+    void arrivalOf(feed).then(() => {
+      over = true
+    })
+    await settle(3)
+    assert.equal(over, true, 'what a screen waits for is an answer, not a good one')
   })
 })

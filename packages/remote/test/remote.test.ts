@@ -1,6 +1,16 @@
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
-import { EMPTY, arrived, firstOf, heldOf, loading, refused, together } from '#remote'
+import {
+  EMPTY,
+  ageOf,
+  arrived,
+  firstOf,
+  heldOf,
+  isFresh,
+  loading,
+  refused,
+  together,
+} from '#remote'
 import type { Remote } from '#remote'
 
 describe('the shape of an answer from elsewhere', () => {
@@ -68,5 +78,22 @@ describe('the shape of an answer from elsewhere', () => {
     assert.equal(done.kind, 'failed')
 
     assert.equal(firstOf<string>().kind, 'empty')
+  })
+})
+
+describe('how old an answer is', () => {
+  test('age is measured from when it landed, and freshness against a limit', () => {
+    const at = 1_000
+    const held = arrived('answer', at)
+
+    assert.equal(ageOf(held, at + 250), 250)
+    assert.equal(isFresh(held, 500, at + 250), true)
+    assert.equal(isFresh(held, 500, at + 501), false, 'past the limit it is not fresh')
+    assert.equal(isFresh(held, Infinity, at + 10_000), true, 'no limit, no staleness')
+  })
+
+  test('nothing held has no age at all', () => {
+    assert.equal(ageOf(EMPTY, 1_000), undefined)
+    assert.equal(isFresh(EMPTY, 500, 1_000), false, 'and nothing is not fresh')
   })
 })

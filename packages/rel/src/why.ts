@@ -14,6 +14,18 @@ import { oracle } from './oracle.ts'
 import { groupOf } from './work.ts'
 import { recomposeKey } from './inner.ts'
 
+/**
+ * A key taken back apart into the values it was made of.
+ *
+ * The mirror of keyOfRow, and it has to stay one: a single key path gives the
+ * value itself, several give a JSON array. Written here once rather than
+ * spelled out at each case, so that the two sides cannot drift apart — which
+ * is the sort of drift no type would catch.
+ */
+function keyValues(node: RelNode, key: Key): unknown[] {
+  return keyPaths(node).length === 1 ? [key as unknown] : (JSON.parse(key as string) as unknown[])
+}
+
 export function whyRow(
   node: RelNode,
   key: Key,
@@ -27,7 +39,7 @@ export function whyRow(
     case 'scan':
       return whyRow(node.input, key, sources)
     case 'join': {
-      const values = JSON.parse(key as string) as unknown[]
+      const values = keyValues(node, key)
       const split = keyPaths(node.left).length
       const leftWhy = whyRow(node.left, recomposeKey(node.left, values.slice(0, split)), sources)
       const rightValues = values.slice(split)
@@ -41,7 +53,7 @@ export function whyRow(
     case 'expand': {
       // The nested rows are not source rows of their own: the whole expanded
       // row came from its parent, so the parent's provenance is the answer.
-      const values = JSON.parse(key as string) as unknown[]
+      const values = keyValues(node, key)
       const split = keyPaths(node.input).length
       return whyRow(node.input, recomposeKey(node.input, values.slice(0, split)), sources)
     }

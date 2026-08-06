@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
 import { subscribe } from '#weft'
-import { byEach, feed, fold, listsBy, shape } from '#loom'
+import { byEach, cell, feed, fold, keyedBy, list, listsBy, shape } from '#loom'
 import { hasIds, until } from '#testkit'
+import type { ListView } from '#loom'
 
 describe('the shape of an answer', () => {
   interface Game {
@@ -145,5 +146,55 @@ describe('shelves taken from the data', () => {
     until(subscribe(board.weight, () => {}))
     tickets.take(ticket(1, 'open', 3, 10), ticket(2, 'done', 5, 20), ticket(3, 'open', 1, 30))
     assert.equal(board.weight.peek(), 8)
+  })
+})
+
+describe('a single list, and keys stated by hand', () => {
+  interface Row {
+    id: number
+    at: number
+    lane: string
+  }
+
+  test('a window moves with the cell that says where it starts', () => {
+    const rows = feed<Row>({ name: 'rows', key: r => r.id })
+    const from = cell(0)
+    const board = shape(
+      { page: list(rows, { order: 'at', window: { from, size: 2 } }) },
+      { name: 'paged' },
+    )
+    until(subscribe(board.page.rows, () => {}))
+    until(subscribe(board.page.size, () => {}))
+
+    rows.take(
+      { id: 1, at: 10, lane: 'a' },
+      { id: 2, at: 20, lane: 'a' },
+      { id: 3, at: 30, lane: 'b' },
+    )
+
+    hasIds(board.page.rows, [1, 2], 'the first window')
+    assert.equal(board.page.size.peek(), 3, 'and the whole length, not the window')
+
+    from.set(1)
+    hasIds(board.page.rows, [2, 3], 'the window moved, the list did not')
+    assert.equal(board.page.place(3), 2, 'and a row knows where it stands')
+  })
+
+  test('a key computed out of the air is stated by hand', () => {
+    // Nothing to learn from `key`, so the fields are named — and then the
+    // shelves work as if they had been learnt.
+    const rows = keyedBy(
+      feed<Row>({ name: 'rows', key: r => `${r.lane}/${String(r.id)}`.toUpperCase() }),
+      'id',
+    )
+    const board = shape({ byLane: listsBy(rows, 'lane', { order: 'at' }) }, { name: 'stated' })
+    const shelf = (lane: string): ListView<Row> =>
+      (board.byLane as Record<string, ListView<Row>>)[lane] as ListView<Row>
+    until(subscribe(shelf('a').size, () => {}))
+    until(subscribe(shelf('b').size, () => {}))
+
+    rows.take({ id: 1, at: 10, lane: 'a' }, { id: 2, at: 20, lane: 'b' })
+    assert.equal(shelf('a').size.peek(), 1)
+    assert.equal(shelf('b').size.peek(), 1)
   })
 })

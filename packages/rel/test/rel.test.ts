@@ -6,9 +6,32 @@ import { subscribe } from '#weft'
 import { table } from '#weft'
 import type { SourceTable } from '#weft'
 import type { Key } from '#weft'
-import { and, canonExpr, cmp, evalExpr, field, lit, math } from '#rel'
+import {
+  agg,
+  and,
+  canonExpr,
+  checkNode,
+  cmp,
+  evalExpr,
+  expand,
+  field,
+  filter,
+  join,
+  keyOfRow,
+  keyPaths,
+  lit,
+  math,
+  oracle,
+  param,
+  paramsOfNode,
+  pure,
+  scan,
+  some,
+  source,
+  union,
+  whyRow,
+} from '#rel'
 import type { Row } from '#rel'
-import { agg, checkNode, expand, filter, join, pure, oracle, scan, source, union } from '#rel'
 import { relate } from '#rel'
 import { CROWDED_KEY } from '#rel/runners/join.ts'
 import { onNotice } from '#data'
@@ -679,5 +702,107 @@ describe('the relational layer', () => {
 
     orders.put(...Array.from({ length: 500 }, (_, i) => ({ id: i, client: i }) as unknown as Row))
     assert.deepEqual(heard, [])
+  })
+
+  describe('why a row is here', () => {
+    test('a joined row names both sources it came from', () => {
+      const orders = feed('orders')
+      const clients = feed('clients')
+      const tree = join(source('orders', ['id']), source('clients', ['id']), {
+        as: 'c',
+        on: [{ left: 'client', right: 'id' }],
+      })
+      const live = living(tree, { orders, clients })
+      until(subscribe(live.all, () => {}))
+
+      orders.put({ id: 1, client: 7 } as unknown as Row)
+      clients.put({ id: 7, tier: 'gold' } as unknown as Row)
+
+      const shown = live.all.peek()[0]
+      assert.ok(shown !== undefined)
+      // The key of a row of this relation, taken the way the relation takes it.
+      const from = live.why(keyOfRow(tree, shown))
+      assert.deepEqual(
+        from.map(one => one.source).toSorted(),
+        ['clients', 'orders'],
+        'both halves are named, and the descent happens when asked',
+      )
+    })
+
+    test('a grouped row names every row that went into it', () => {
+      const sales = feed('sales')
+      const live = living(
+        agg(source('sales', ['id']), { by: ['shop'], folds: { n: { fold: 'count' } } }),
+        { sales },
+      )
+      until(subscribe(live.all, () => {}))
+
+      sales.put(
+        { id: 1, shop: 'a' } as unknown as Row,
+        { id: 2, shop: 'a' } as unknown as Row,
+        { id: 3, shop: 'b' } as unknown as Row,
+      )
+
+      const shelf = live.all.peek().find(r => r['shop'] === 'a')
+      assert.ok(shelf !== undefined)
+      const from = live.why('a')
+      assert.deepEqual(
+        from.map(one => one.key).toSorted(),
+        [1, 2],
+        'the two sales of that shop, not the third',
+      )
+    })
+  })
+
+  describe('what a tree says about itself', () => {
+    test('key paths follow the tree, not the tables under it', () => {
+      const orders = source('orders', ['id'])
+      const clients = source('clients', ['id'])
+
+      assert.deepEqual(keyPaths(orders), [['id']])
+
+      const joined = join(orders, clients, { as: 'c', on: [{ left: 'client', right: 'id' }] })
+      assert.deepEqual(
+        joined ? keyPaths(joined) : [],
+        [['id'], ['c', 'id']],
+        'both halves, and where each lives',
+      )
+
+      const grouped = agg(orders, { by: ['shop'], folds: { n: { fold: 'count' } } })
+      assert.deepEqual(keyPaths(grouped), [['shop']], 'a group is keyed by what it grouped on')
+    })
+
+    test('the parameters of a tree are found wherever they stand', () => {
+      const plain = filter(source('orders', ['id']), cmp('>', field('sum'), lit(10)))
+      assert.deepEqual([...paramsOfNode(plain)], [], 'a tree of constants asks for nothing')
+
+      const asked = filter(source('orders', ['id']), cmp('>', field('sum'), param('floor')))
+      assert.deepEqual([...paramsOfNode(asked)], ['floor'])
+
+      const deeper = agg(asked, { by: ['shop'], folds: { n: { fold: 'count' } } })
+      assert.deepEqual([...paramsOfNode(deeper)], ['floor'], 'found under a group too')
+    })
+
+    test('why, asked of the tree itself rather than through a relation', () => {
+      const tree = source('orders', ['id'])
+      const rows = new Map([[1, { id: 1 } as Row]])
+      assert.deepEqual(whyRow(tree, 1, { orders: rows }), [{ source: 'orders', key: 1 }])
+    })
+
+    test('some: the part gave something rather than nothing', () => {
+      // Not "there exists a row satisfying it", which the name suggests to
+      // everyone who reads it first: the part is evaluated once and the answer
+      // is whether it came back with anything at all. Worth knowing before
+      // reaching for it — and worth a better name one day.
+      const present = some(field('note'))
+      assert.equal(evalExpr(present, { note: 'anything' } as unknown as Row), true)
+      assert.equal(evalExpr(present, { note: null } as unknown as Row), false)
+      assert.equal(evalExpr(present, {} as unknown as Row), false, 'absent counts as nothing')
+      assert.equal(
+        evalExpr(present, { note: '' } as unknown as Row),
+        true,
+        'empty is still something',
+      )
+    })
   })
 })
