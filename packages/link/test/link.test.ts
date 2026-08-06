@@ -6,7 +6,7 @@ import { atOnce } from '#link'
 import { overWire, wirePair } from '#link'
 import { link, Unknown } from '#link'
 import { serve } from '#link'
-import { settle, until as after } from '#testkit'
+import { settle, until } from '#testkit'
 
 describe('the wire', () => {
   /** A little world on the graph's side, with a source that knows who wants it. */
@@ -43,11 +43,11 @@ describe('the wire', () => {
   test('a mirrored cell shows what the other side holds, and follows it', async () => {
     const { surface, count } = world()
     const wire = wirePair()
-    after(serve(surface, wire.graph, { schedule: atOnce }))
+    until(serve(surface, wire.graph, { schedule: atOnce }))
     const seen = link(wire.watcher)
 
     const mirror = seen.derived<number>('count')
-    after(subscribe(mirror, () => {}))
+    until(subscribe(mirror, () => {}))
     await settle()
     assert.equal(mirror.peek().value, 1)
 
@@ -59,7 +59,7 @@ describe('the wire', () => {
   test('nothing is known until somebody watches', async () => {
     const { surface } = world()
     const wire = wirePair()
-    after(serve(surface, wire.graph, { schedule: atOnce }))
+    until(serve(surface, wire.graph, { schedule: atOnce }))
     const seen = link(wire.watcher)
 
     const mirror = seen.derived<number>('count')
@@ -71,10 +71,10 @@ describe('the wire', () => {
   test('demand crosses the boundary: the source wakes and sleeps with the watcher', async () => {
     const { surface, awake } = world()
     const wire = wirePair()
-    after(serve(surface, wire.graph, { schedule: atOnce }))
+    until(serve(surface, wire.graph, { schedule: atOnce }))
     const seen = link(wire.watcher)
 
-    const stop = after(subscribe(seen.derived<number>('doubled'), () => {}))
+    const stop = until(subscribe(seen.derived<number>('doubled'), () => {}))
     await settle()
     assert.deepEqual(awake, ['start'])
 
@@ -87,7 +87,7 @@ describe('the wire', () => {
     const { surface, count } = world()
     const wire = wirePair()
     let held: Array<() => void> = []
-    after(
+    until(
       serve(surface, wire.graph, {
         schedule: work => {
           held.push(work)
@@ -99,7 +99,7 @@ describe('the wire', () => {
     const seen = link(wire.watcher)
 
     const mirror = seen.derived<number>('count')
-    after(subscribe(mirror, () => {}))
+    until(subscribe(mirror, () => {}))
     count.set(2)
     count.set(3)
     count.set(4)
@@ -120,11 +120,11 @@ describe('the wire', () => {
   test('a family is watched by name and key', async () => {
     const { surface } = world()
     const wire = wirePair()
-    after(serve(surface, wire.graph, { schedule: atOnce }))
+    until(serve(surface, wire.graph, { schedule: atOnce }))
     const seen = link(wire.watcher)
 
     const mirror = seen.derived<{ id: number; title: string }>('row', 1)
-    after(subscribe(mirror, () => {}))
+    until(subscribe(mirror, () => {}))
     await settle()
     assert.deepEqual(mirror.peek().value, { id: 1, title: 'one' })
   })
@@ -132,7 +132,7 @@ describe('the wire', () => {
   test('a command runs on the other side and its answer comes back', async () => {
     const { surface, count } = world()
     const wire = wirePair()
-    after(serve(surface, wire.graph, { schedule: atOnce }))
+    until(serve(surface, wire.graph, { schedule: atOnce }))
     const seen = link(wire.watcher)
 
     const add = seen.command<[number], number>('add')
@@ -146,11 +146,11 @@ describe('the wire', () => {
   test('asking for a cell the other side does not have says so', async () => {
     const { surface } = world()
     const wire = wirePair()
-    after(serve(surface, wire.graph, { schedule: atOnce }))
+    until(serve(surface, wire.graph, { schedule: atOnce }))
     const seen = link(wire.watcher)
 
     const mirror = seen.derived<number>('nonesuch')
-    after(subscribe(mirror, () => {}))
+    until(subscribe(mirror, () => {}))
     await settle()
     assert.equal(mirror.peek().kind, 'failed') // told apart from "nothing yet"
   })
@@ -159,7 +159,7 @@ describe('the wire', () => {
     const bad = port<unknown>(() => 'a function cannot be cloned')
     const wire = wirePair()
     const complaints: string[] = []
-    after(
+    until(
       serve({ cells: { bad } }, wire.graph, {
         schedule: atOnce,
         onUnsendable: (_cell, error) => complaints.push(String(error).slice(0, 20)),
@@ -167,7 +167,7 @@ describe('the wire', () => {
     )
     const seen = link(wire.watcher)
 
-    after(subscribe(seen.derived('bad'), () => {}))
+    until(subscribe(seen.derived('bad'), () => {}))
     await settle()
     assert.equal(complaints.length, 1)
   })
@@ -175,11 +175,11 @@ describe('the wire', () => {
   test('the same over a real port, with real cloning', async () => {
     const { surface, count } = world()
     const ports = new MessageChannel()
-    after(serve(surface, overWire(ports.port1 as never), { schedule: atOnce }))
+    until(serve(surface, overWire(ports.port1 as never), { schedule: atOnce }))
     const seen = link(overWire(ports.port2 as never))
 
     const mirror = seen.derived<number>('doubled')
-    after(subscribe(mirror, () => {}))
+    until(subscribe(mirror, () => {}))
     await settle()
     assert.equal(mirror.peek().value, 2)
 
@@ -196,7 +196,7 @@ describe('the wire', () => {
 
   test('unknown messages are ignored rather than fatal', () => {
     const wire = wirePair()
-    after(serve({}, wire.graph, { schedule: atOnce }))
+    until(serve({}, wire.graph, { schedule: atOnce }))
     wire.watcher.send({ kind: 'nonsense' })
     wire.watcher.send(undefined)
     wire.watcher.send(42)
@@ -205,11 +205,11 @@ describe('the wire', () => {
   test('a mirrored value keeps its shape through the wire', async () => {
     const rows = port([{ id: 1, tags: ['a', 'b'], at: new Date(0) }])
     const wire = wirePair()
-    after(serve({ cells: { rows } }, wire.graph, { schedule: atOnce }))
+    until(serve({ cells: { rows } }, wire.graph, { schedule: atOnce }))
     const seen = link(wire.watcher)
 
     const mirror = seen.derived<Array<{ id: number; tags: string[]; at: Date }>>('rows')
-    after(subscribe(mirror, () => {}))
+    until(subscribe(mirror, () => {}))
     await settle()
     const value = mirror.peek().value as Array<{ id: number; tags: string[]; at: Date }>
     assert.deepEqual(value[0]?.tags, ['a', 'b'])
@@ -221,7 +221,7 @@ describe('the wire', () => {
     const wire = wirePair()
     const asked: unknown[] = []
     wire.graph.listen(message => asked.push(message))
-    after(serve(surface, wire.graph, { schedule: atOnce }))
+    until(serve(surface, wire.graph, { schedule: atOnce }))
     const seen = link(wire.watcher)
 
     const first = subscribe(seen.derived<number>('count'), () => {})
@@ -240,11 +240,11 @@ describe('the wire', () => {
   test('a mirror forgets what it knew when the last watcher goes', async () => {
     const { surface } = world()
     const wire = wirePair()
-    after(serve(surface, wire.graph, { schedule: atOnce }))
+    until(serve(surface, wire.graph, { schedule: atOnce }))
     const seen = link(wire.watcher)
 
     const mirror = seen.derived<number>('count')
-    const stop = after(subscribe(mirror, () => {}))
+    const stop = until(subscribe(mirror, () => {}))
     await settle()
     assert.equal(mirror.peek().kind, 'value')
     stop()
@@ -286,7 +286,7 @@ describe('the wire', () => {
     const bad = port<unknown>(() => 'a function cannot be cloned')
     const wire = wirePair()
     const complaints: string[] = []
-    after(
+    until(
       serve({ cells: { good, bad } }, wire.graph, {
         schedule: atOnce,
         onUnsendable: name => complaints.push(name),
@@ -295,8 +295,8 @@ describe('the wire', () => {
     const seen = link(wire.watcher)
 
     const mirror = seen.derived<number>('good')
-    after(subscribe(mirror, () => {}))
-    after(subscribe(seen.derived('bad'), () => {}))
+    until(subscribe(mirror, () => {}))
+    until(subscribe(seen.derived('bad'), () => {}))
     await settle()
     assert.equal(mirror.peek().value, 1)
     assert.deepEqual(complaints, ['bad'])
@@ -312,10 +312,10 @@ describe('the wire', () => {
   test('closing the link lets the graph go: unwatch for every mirror still watched', async () => {
     const { surface, awake } = world()
     const wire = wirePair()
-    after(serve(surface, wire.graph, { schedule: atOnce }))
+    until(serve(surface, wire.graph, { schedule: atOnce }))
     const seen = link(wire.watcher)
 
-    after(subscribe(seen.derived<number>('count'), () => {}))
+    until(subscribe(seen.derived<number>('count'), () => {}))
     await settle()
     assert.deepEqual(awake, ['start'])
 
@@ -398,22 +398,21 @@ describe('the wire', () => {
     const rest = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms))
     const pair = wirePair()
     const feed = port(1, { name: 'n' })
-    after(serve({ cells: { n: feed } }, pair.graph, { schedule: atOnce }))
+    until(serve({ cells: { n: feed } }, pair.graph, { schedule: atOnce }))
     const wire = link(pair.watcher, { linger: 40 })
 
     const face = wire.derived<number>('n')
-    const stop = after(subscribe(face, () => {}))
+    const stop = until(subscribe(face, () => {}))
     assert.equal(wire.held(), 1)
     stop()
     assert.equal(wire.held(), 1) // idle, but lingering
     await rest(60)
     assert.equal(wire.held(), 0) // let go
 
-    const again = subscribe(face, () => {}) // the old handle looks again
+    until(subscribe(face, () => {})) // the old handle looks again
     assert.equal(wire.held(), 1) // the very same mirror re-registered
     await rest(5)
     assert.equal(heldOf(face.peek())?.value, 1) // and values flow to it again
-    again()
   })
 
   test('a channel that dies is announced, and what piled up is not thrown away', async () => {
@@ -429,14 +428,14 @@ describe('the wire', () => {
     }
 
     const broken: unknown[] = []
-    after(
+    until(
       serve({ cells: { count } }, breakable, {
         schedule: atOnce,
         onBroken: error => broken.push(error),
       }),
     )
     const seen = link(wire.watcher)
-    after(subscribe(seen.derived<number>('count'), () => {}))
+    until(subscribe(seen.derived<number>('count'), () => {}))
     await settle()
 
     dead = true

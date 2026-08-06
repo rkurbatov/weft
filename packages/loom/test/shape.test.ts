@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
 import { subscribe } from '#weft'
 import { byEach, feed, fold, listsBy, shape } from '#loom'
-import { until } from '#testkit'
+import { hasIds, until } from '#testkit'
 
 describe('the shape of an answer', () => {
   interface Game {
@@ -113,11 +113,7 @@ describe('shelves taken from the data', () => {
     assert.equal(board.shelves.all.size.peek(), 3)
     assert.equal(board.shelves.open.size.peek(), 2)
     assert.equal(board.shelves.done.size.peek(), 1)
-    assert.deepEqual(
-      board.shelves.open.rows.peek().map(t => t.id),
-      [1, 3],
-      'ordered by the field named once',
-    )
+    hasIds(board.shelves.open.rows, [1, 3], 'ordered by the field named once')
 
     // The same shelf, asked for twice, is the same shelf.
     assert.equal(board.shelves.open, board.shelves.open)

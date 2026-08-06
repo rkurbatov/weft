@@ -15,7 +15,7 @@ import { leadOrFollow, webLocks } from '#link'
 import type { Lock } from '#link'
 import { link } from '#link'
 import { serve } from '#link'
-import { settle } from '#testkit'
+import { onBus, settle } from '#testkit'
 
 describe('tabs and leadership', () => {
   // A bus message takes a turn each way, and a hello-then-watch takes several.
@@ -31,31 +31,16 @@ describe('tabs and leadership', () => {
     }
   }
 
-  /** One bus per test, closed at the end so the process can exit. */
-  function busPair(name: string) {
-    const open = (): BroadcastChannel => new BroadcastChannel(name)
-    const buses: BroadcastChannel[] = []
-    return {
-      make: () => {
-        const bus = open()
-        buses.push(bus)
-        return bus as unknown as Parameters<typeof busHub>[1]
-      },
-      closeAll: () => {
-        for (const bus of buses) bus.close()
-      },
-    }
-  }
-
   test('two tabs watch one graph over the bus, each served on its own', async () => {
     const { surface, count } = scene()
-    const buses = busPair('weft-test-a')
-    const stopHub = busHub('weft-test-a', buses.make()).accept(channel =>
+    const bus = (): Parameters<typeof busHub>[1] =>
+      onBus('weft-test-a') as unknown as Parameters<typeof busHub>[1]
+    const stopHub = busHub('weft-test-a', bus()).accept(channel =>
       serve(surface, channel, { schedule: atOnce }),
     )
 
-    const first = link(busChannel('weft-test-a', buses.make()))
-    const second = link(busChannel('weft-test-a', buses.make()))
+    const first = link(busChannel('weft-test-a', bus()))
+    const second = link(busChannel('weft-test-a', bus()))
     const mirrorOne = first.derived<number>('count')
     const mirrorTwo = second.derived<number>('doubled')
     const stopOne = subscribe(mirrorOne, () => {})
@@ -75,18 +60,18 @@ describe('tabs and leadership', () => {
     first.close()
     second.close()
     stopHub()
-    buses.closeAll()
   })
 
   test('a command from one tab is seen by the other', async () => {
     const { surface } = scene()
-    const buses = busPair('weft-test-b')
-    const stopHub = busHub('weft-test-b', buses.make()).accept(channel =>
+    const bus = (): Parameters<typeof busHub>[1] =>
+      onBus('weft-test-b') as unknown as Parameters<typeof busHub>[1]
+    const stopHub = busHub('weft-test-b', bus()).accept(channel =>
       serve(surface, channel, { schedule: atOnce }),
     )
 
-    const writer = link(busChannel('weft-test-b', buses.make()))
-    const reader = link(busChannel('weft-test-b', buses.make()))
+    const writer = link(busChannel('weft-test-b', bus()))
+    const reader = link(busChannel('weft-test-b', bus()))
     const mirror = reader.derived<number>('count')
     const stop = subscribe(mirror, () => {})
     await settle(4)
@@ -99,7 +84,6 @@ describe('tabs and leadership', () => {
     writer.close()
     reader.close()
     stopHub()
-    buses.closeAll()
   })
 
   test('a watcher asks again when the graph announces itself', async () => {
@@ -324,16 +308,17 @@ describe('tabs and leadership', () => {
     })
     const silent = port(10)
     const surface = { cells: { talking, silent } }
-    const buses = busPair('weft-test-lease')
-    const stopHub = busHub('weft-test-lease', buses.make(), {
+    const bus = (): Parameters<typeof busHub>[1] =>
+      onBus('weft-test-lease') as unknown as Parameters<typeof busHub>[1]
+    const stopHub = busHub('weft-test-lease', bus(), {
       lease: 15_000,
       timers: clock.timers,
     }).accept(channel => serve(surface, channel, { schedule: atOnce }))
 
     const alive = link(
-      busChannel('weft-test-lease', buses.make(), { keepAlive: 5_000, timers: clock.timers }),
+      busChannel('weft-test-lease', bus(), { keepAlive: 5_000, timers: clock.timers }),
     )
-    const dead = link(busChannel('weft-test-lease', buses.make(), { keepAlive: false }))
+    const dead = link(busChannel('weft-test-lease', bus(), { keepAlive: false }))
     const aliveMirror = alive.derived<number>('silent')
     const deadMirror = dead.derived<number>('talking')
     const stopAlive = subscribe(aliveMirror, () => {})
@@ -365,7 +350,6 @@ describe('tabs and leadership', () => {
     alive.close()
     dead.close()
     stopHub()
-    buses.closeAll()
   })
 
   test('the shared-worker hub lets go of a tab that fell silent', async () => {

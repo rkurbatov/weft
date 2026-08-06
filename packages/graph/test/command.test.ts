@@ -2,7 +2,7 @@ import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { port, derived, subscribe, untracked } from '#graph'
 import { command, onCommandFailure } from '#graph'
-import { settle, world } from '#testkit'
+import { settle, until, world } from '#testkit'
 
 function deferred<T>() {
   let resolve!: (v: T) => void
@@ -18,7 +18,7 @@ test('start, await, observe: state walks idle -> running -> done', async () => {
   const gate = deferred<number>()
   const cmd = command(async () => gate.promise)
   const seen: string[] = []
-  const stop = subscribe(cmd.state, s => seen.push(s.kind))
+  until(subscribe(cmd.state, s => seen.push(s.kind)))
   assert.equal(cmd.state.peek().kind, 'idle')
   const answer = cmd.run()
   assert.equal(cmd.pending.peek(), true)
@@ -27,7 +27,6 @@ test('start, await, observe: state walks idle -> running -> done', async () => {
   assert.equal(cmd.pending.peek(), false)
   assert.equal(cmd.result.peek(), 7)
   assert.deepEqual(seen, ['running', 'done'])
-  stop()
 })
 
 test('failure is a state, not an unhandled throw at the edge', async () => {

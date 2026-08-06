@@ -73,10 +73,9 @@ describe('sources', () => {
     assert.equal(calls, 1) // still good
     second()
     await clock.advance(600)
-    const third = subscribe(feed.state, () => {})
+    until(subscribe(feed.state, () => {}))
     await settle()
     assert.equal(calls, 2) // gone off
-    third()
   })
 
   test('a value is kept through the next flight, so screens do not blank', async () => {
@@ -166,14 +165,13 @@ describe('sources', () => {
     // Everybody leaves mid-flight: the ask is broken off, its answer disowned.
     first()
     second()
-    const third = subscribe(feed.state, () => {})
+    until(subscribe(feed.state, () => {}))
     await settle()
     assert.equal(gates.length, 2) // a fresh ask for the fresh demand
     gates[0]?.('stale, cancelled')
     gates[1]?.('v')
     await settle()
     assert.equal(feed.state.peek().value, 'v')
-    third()
   })
 
   test('a forced refresh disowns the older answer', async () => {
@@ -319,12 +317,11 @@ describe('sources', () => {
     await clock.advance(1000)
     assert.equal(asked, 0)
 
-    const again = subscribe(feed.state, () => {})
+    until(subscribe(feed.state, () => {}))
     await clock.advance(299)
     assert.equal(asked, 0)
     await clock.advance(1)
     assert.equal(asked, 1) // the look survived the quiet: one question
-    again()
   })
 
   test('calm delays the first ask only; the pace ticks without it', async () => {

@@ -1,6 +1,7 @@
-// Disks a test can misbehave with: one that answers only when told to, and one
-// with a switch for refusing writes. Both used to be written out inside the
-// files that needed them.
+// A disk a test drives by hand: it answers only when told to, and refuses when
+// told to refuse. One gate is enough for both — a refusal is an answer that
+// happens to be a rejection — and a second, switch-driven disk turned out to
+// duplicate it without ever being used.
 
 import assert from 'node:assert/strict'
 import { cleanupWith } from './lifetime.ts'
@@ -62,44 +63,6 @@ export function slowStore(seed: Record<string, unknown> = {}): SlowStore {
         gates.shift()?.open()
         await settle()
       }
-    },
-  }
-}
-
-export interface BreakableStore {
-  readonly store: Store
-  /** Writes start refusing. Reads keep working: a full disk still reads. */
-  break(): void
-  mend(): void
-}
-
-/** A disk with a switch, for showing what a refusal to save looks like. */
-export function breakableStore(seed: Record<string, unknown> = {}): BreakableStore {
-  const cells = new Map<string, unknown>(Object.entries(seed))
-  let broken = false
-  return {
-    store: {
-      read: key => Promise.resolve(cells.has(key) ? structuredClone(cells.get(key)) : undefined),
-      write: (key, value) => {
-        if (broken) return Promise.reject(new Error('disk is broken'))
-        cells.set(key, structuredClone(value))
-        return Promise.resolve()
-      },
-      remove: key => {
-        if (broken) return Promise.reject(new Error('disk is broken'))
-        cells.delete(key)
-        return Promise.resolve()
-      },
-      keys: prefix =>
-        Promise.resolve(
-          [...cells.keys()].filter(key => prefix === undefined || key.startsWith(prefix)),
-        ),
-    },
-    break: () => {
-      broken = true
-    },
-    mend: () => {
-      broken = false
     },
   }
 }

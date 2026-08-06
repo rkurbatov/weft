@@ -2,6 +2,7 @@ import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { port, derived, subscribe } from '#graph'
 import { family } from '#graph'
+import { until } from '#testkit'
 
 describe('families of cells', () => {
   test('same key gives the same cell, different keys different cells', () => {
@@ -39,7 +40,7 @@ describe('families of cells', () => {
       return rows.get().get(id) ?? 0
     })
     const stopA = subscribe(item('a'), () => {})
-    const stopB = subscribe(item('b'), () => {})
+    until(subscribe(item('b'), () => {}))
     runs = 0
     rows.set(
       new Map([
@@ -53,7 +54,6 @@ describe('families of cells', () => {
     // and therefore did not wake its watcher.
     assert.equal(runs, 2)
     stopA()
-    stopB()
   })
 
   test('watched members do not wake on unrelated writes', () => {
@@ -67,7 +67,7 @@ describe('families of cells', () => {
     let wokeA = 0
     let wokeB = 0
     const stopA = subscribe(item('a'), () => wokeA++)
-    const stopB = subscribe(item('b'), () => wokeB++)
+    until(subscribe(item('b'), () => wokeB++))
     rows.set(
       new Map([
         ['a', 2],
@@ -77,12 +77,11 @@ describe('families of cells', () => {
     assert.equal(wokeA, 1)
     assert.equal(wokeB, 0)
     stopA()
-    stopB()
   })
 
   test('unwatched members are evicted past the ceiling, watched ones are kept', () => {
     const item = family((id: number) => id * 2, { max: 3 })
-    const stop = subscribe(item(1), () => {})
+    until(subscribe(item(1), () => {}))
     item(2)
     item(3)
     item(4)
@@ -90,7 +89,6 @@ describe('families of cells', () => {
     assert.equal(item(1).observed, true)
     assert.ok(item.size <= 4, `size ${item.size}`)
     assert.equal(item.has(1), true)
-    stop()
   })
 
   test('eviction is refused while somebody watches', () => {
@@ -135,13 +133,12 @@ describe('families of cells', () => {
 
   test('sweep drops the unwatched and counts them', () => {
     const item = family((id: number) => id)
-    const stop = subscribe(item(1), () => {})
+    until(subscribe(item(1), () => {}))
     item(2)
     item(3)
     assert.equal(item.sweep(), 2)
     assert.equal(item.size, 1)
     assert.equal(item.has(1), true)
-    stop()
   })
 
   test('a formula over a member depends on it', () => {
@@ -149,12 +146,11 @@ describe('families of cells', () => {
     const item = family((id: string) => rows.get().get(id) ?? 0)
     const doubled = derived(() => item('a').get() * 10)
     let seen = 0
-    const stop = subscribe(doubled, () => seen++)
+    until(subscribe(doubled, () => seen++))
     assert.equal(doubled.peek(), 20)
     rows.set(new Map([['a', 3]]))
     assert.equal(doubled.peek(), 30)
     assert.equal(seen, 1)
-    stop()
   })
 
   test('object keys need keyOf, and then behave like any other', () => {

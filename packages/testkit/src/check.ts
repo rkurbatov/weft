@@ -28,25 +28,6 @@ export function hasIds<R extends Keyed>(source: Rows<R>, expected: unknown[], wh
   )
 }
 
-/** The rows, by one field, in order. */
-export function hasField<R>(
-  source: Rows<R>,
-  field: keyof R,
-  expected: unknown[],
-  why?: string,
-): void {
-  assert.deepEqual(
-    rowsOf(source).map(row => row[field]),
-    expected,
-    why ?? `rows by ${String(field)}`,
-  )
-}
-
-/** How many rows, without saying which. */
-export function hasCount<R>(source: Rows<R>, expected: number, why?: string): void {
-  assert.equal(rowsOf(source).length, expected, why ?? 'row count')
-}
-
 /** What a cell holds right now, without waking anything. */
 export function holds<T>(cell: Peekable<T>, expected: T, why?: string): void {
   assert.deepEqual(cell.peek(), expected, why ?? 'held value')

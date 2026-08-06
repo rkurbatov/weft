@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { subscribe } from '#graph'
 import { query } from '#remote'
 import { heldOf } from '#remote'
-import { settle, world } from '#testkit'
+import { settle, until, world } from '#testkit'
 
 describe('parametric queries', () => {
   test('the same key hands back the same source: two screens share one request', async () => {
@@ -18,13 +18,11 @@ describe('parametric queries', () => {
     )
 
     assert.equal(user(7), user(7))
-    const first = subscribe(user(7).state, () => {})
-    const second = subscribe(user(7).state, () => {})
+    until(subscribe(user(7).state, () => {}))
+    until(subscribe(user(7).state, () => {}))
     await settle()
     assert.equal(calls, 1)
     assert.equal(user(7).state.peek().value, 'user 7')
-    first()
-    second()
   })
 
   test('a screen moving to another key leaves nothing to race: cells are per key', async () => {
@@ -62,10 +60,9 @@ describe('parametric queries', () => {
       },
       { max: 100, retry: 100, jitter: () => 0, now: clock.now, timers: clock.timers },
     )
-    const stop = subscribe(user(5).state, () => {})
+    until(subscribe(user(5).state, () => {}))
     await settle()
     assert.equal(user(5).state.peek().kind, 'failed')
-    stop()
   })
 
   test('the ceiling drops the coldest unwatched member, never a watched one', async () => {

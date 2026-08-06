@@ -7,9 +7,9 @@
 
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
-import { BroadcastChannel } from 'node:worker_threads'
 import { busChannel, busHub, heldOf, port, memoryStore, serve, subscribe, within } from '#weft'
 import { link } from '#link'
+import { onBus, settle, until } from '#testkit'
 
 describe('sessions apart', () => {
   const settle = async (turns = 4): Promise<void> => {
@@ -80,15 +80,8 @@ describe('sessions apart', () => {
   })
 
   test("a station serving one household refuses another's tab by name", async () => {
-    // Buses are opened here and closed here: a bus nobody closes keeps the
-    // process alive, and a hanging run looks exactly like a broken one.
-    const buses: Array<{ close(): void }> = []
-    const bus = (): Parameters<typeof busHub>[1] => {
-      const line = new BroadcastChannel('station')
-      line.unref?.()
-      buses.push(line)
-      return line as unknown as Parameters<typeof busHub>[1]
-    }
+    const bus = (): Parameters<typeof busHub>[1] =>
+      onBus('station') as unknown as Parameters<typeof busHub>[1]
     const seats = port(3, { name: 'seats' })
     const hub = busHub('station', bus(), { admit: claim => claim === 'ann', lease: false })
     const stopServing = hub.accept(channel =>
@@ -125,6 +118,5 @@ describe('sessions apart', () => {
     hers.close()
     his.close()
     stopServing()
-    for (const line of buses) line.close()
   })
 })

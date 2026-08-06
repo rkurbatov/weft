@@ -1,6 +1,7 @@
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { port, derived, watch, subscribe, batch, untracked } from '#graph'
+import { until } from '#testkit'
 
 describe('the cell graph', () => {
   test('formula reads its inputs without declaring them', () => {
@@ -27,12 +28,11 @@ describe('the cell graph', () => {
     const a = port(1)
     const parity = derived(() => a.get() % 2)
     let seen = 0
-    const stop = subscribe(parity, () => seen++)
+    until(subscribe(parity, () => seen++))
     a.set(3) // parity unchanged
     assert.equal(seen, 0)
     a.set(4) // parity changed
     assert.equal(seen, 1)
-    stop()
   })
 
   test('diamond: one write, one downstream run', () => {
@@ -44,26 +44,26 @@ describe('the cell graph', () => {
       runs++
       return left.get() + right.get()
     })
-    const stop = subscribe(total, () => {})
+    until(subscribe(total, () => {}))
     assert.equal(total.peek(), 5)
     assert.equal(runs, 1)
     a.set(2)
     assert.equal(total.peek(), 10)
     assert.equal(runs, 2)
-    stop()
   })
 
   test('no glitches: downstream never sees a half-updated picture', () => {
     const a = port(1)
     const double = derived(() => a.get() * 2)
     const seen: string[] = []
-    const stop = watch(() => {
-      seen.push(`${a.get()}:${double.get()}`)
-    })
+    until(
+      watch(() => {
+        seen.push(`${a.get()}:${double.get()}`)
+      }),
+    )
     a.set(2)
     a.set(3)
     assert.deepEqual(seen, ['1:2', '2:4', '3:6'])
-    stop()
   })
 
   test('dependencies are dynamic: the untaken branch is not a dependency', () => {
@@ -75,7 +75,7 @@ describe('the cell graph', () => {
       runs++
       return useLeft.get() ? left.get() : right.get()
     })
-    const stop = subscribe(pick, () => {})
+    until(subscribe(pick, () => {}))
     assert.equal(pick.peek(), 'L')
     assert.equal(runs, 1)
     right.set('R2') // not read on this branch
@@ -83,7 +83,6 @@ describe('the cell graph', () => {
     left.set('L2')
     assert.equal(pick.peek(), 'L2')
     assert.equal(runs, 2)
-    stop()
   })
 
   test('batch: writers settle before watchers run', () => {
@@ -91,26 +90,26 @@ describe('the cell graph', () => {
     const b = port(1)
     const sum = derived(() => a.get() + b.get())
     const seen: number[] = []
-    const stop = subscribe(sum, v => seen.push(v))
+    until(subscribe(sum, v => seen.push(v)))
     batch(() => {
       a.set(10)
       b.set(10)
     })
     assert.deepEqual(seen, [20])
-    stop()
   })
 
   test('watcher writing a cell settles in the same round', () => {
     const source = port(1)
     const mirror = port(0)
-    const stop = watch(() => {
-      const v = source.get()
-      untracked(() => mirror.set(v * 10))
-    })
+    until(
+      watch(() => {
+        const v = source.get()
+        untracked(() => mirror.set(v * 10))
+      }),
+    )
     assert.equal(mirror.peek(), 10)
     source.set(4)
     assert.equal(mirror.peek(), 40)
-    stop()
   })
 
   test('dispose stops the watcher', () => {

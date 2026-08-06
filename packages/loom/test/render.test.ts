@@ -2,7 +2,7 @@
 // StrictMode — the values keep flowing after the double mount, and a Map
 // change is not gated away.
 
-import { test } from 'node:test'
+import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 
@@ -16,50 +16,52 @@ import { port } from '#weft'
 const { createRoot } = await import('react-dom/client')
 type Root = ReturnType<typeof createRoot>
 
-function mount(node: ReactNode): { el: HTMLElement; unmount: () => void } {
-  const el = document.createElement('div')
-  document.body.append(el)
-  let root: Root
-  act(() => {
-    root = createRoot(el)
-    root.render(node)
+describe('the dialect under a render', () => {
+  function mount(node: ReactNode): { el: HTMLElement; unmount: () => void } {
+    const el = document.createElement('div')
+    document.body.append(el)
+    let root: Root
+    act(() => {
+      root = createRoot(el)
+      root.render(node)
+    })
+    return {
+      el,
+      unmount: () => {
+        act(() => root.unmount())
+        el.remove()
+      },
+    }
+  }
+
+  test('useLive under StrictMode: values keep flowing after the double mount, Maps included', async () => {
+    const { useLive } = await import('#loom/react')
+    const rows = port<ReadonlyMap<string, number>>(new Map([['a', 1]]), { name: 'rows' })
+    const label = port('cold', { name: 'label' })
+
+    function Live(): ReactNode {
+      const live = useLive(() => ({
+        label: label.get(),
+        total: [...rows.get().values()].reduce((s, n) => s + n, 0),
+      }))
+      return h('b', null, `${live.label}:${live.total}`)
+    }
+
+    const shown = mount(h(StrictMode, null, h(Live)))
+    assert.equal(shown.el.textContent, 'cold:1')
+
+    act(() => label.set('warm')) // after StrictMode's mount-unmount-mount
+    assert.equal(shown.el.textContent, 'warm:1') // the screen did not freeze
+
+    act(() =>
+      rows.set(
+        new Map([
+          ['a', 1],
+          ['b', 2],
+        ]),
+      ),
+    ) // a Map change must not be gated
+    assert.equal(shown.el.textContent, 'warm:3')
+    shown.unmount()
   })
-  return {
-    el,
-    unmount: () => {
-      act(() => root.unmount())
-      el.remove()
-    },
-  }
-}
-
-test('useLive under StrictMode: values keep flowing after the double mount, Maps included', async () => {
-  const { useLive } = await import('#loom/react')
-  const rows = port<ReadonlyMap<string, number>>(new Map([['a', 1]]), { name: 'rows' })
-  const label = port('cold', { name: 'label' })
-
-  function Live(): ReactNode {
-    const live = useLive(() => ({
-      label: label.get(),
-      total: [...rows.get().values()].reduce((s, n) => s + n, 0),
-    }))
-    return h('b', null, `${live.label}:${live.total}`)
-  }
-
-  const shown = mount(h(StrictMode, null, h(Live)))
-  assert.equal(shown.el.textContent, 'cold:1')
-
-  act(() => label.set('warm')) // after StrictMode's mount-unmount-mount
-  assert.equal(shown.el.textContent, 'warm:1') // the screen did not freeze
-
-  act(() =>
-    rows.set(
-      new Map([
-        ['a', 1],
-        ['b', 2],
-      ]),
-    ),
-  ) // a Map change must not be gated
-  assert.equal(shown.el.textContent, 'warm:3')
-  shown.unmount()
 })

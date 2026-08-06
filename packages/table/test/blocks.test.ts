@@ -4,6 +4,7 @@ import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { blocks, derived, port, watch } from '#weft'
 import type { Port } from '#weft'
+import { until } from '#testkit'
 
 describe('block trees', () => {
   /** A line of numbers as cells, plus a count of how many were read. */
@@ -65,7 +66,7 @@ describe('block trees', () => {
     const { source, tree } = sums(4096, 32)
     const total = derived(() => tree.range('c', 0, 4095), { name: 'total' })
     const answer: number[] = []
-    const stop = watch(() => answer.push(total.get()))
+    until(watch(() => answer.push(total.get())))
     const first = answer.at(-1) as number
     assert.equal(first, (4096 * 4097) / 2)
 
@@ -76,7 +77,6 @@ describe('block trees', () => {
     assert.equal(answer.at(-1), first + 999)
     // Level 0 block of 32 is the only one re-read; the levels above join partials.
     assert.equal(source.reads(), 32)
-    stop()
   })
 
   test('nobody watching, nobody working: partials are built on demand only', () => {

@@ -9,6 +9,7 @@ import { attachProbe } from '#graph'
 import type { TickSummary } from '#graph'
 import { journal } from '#graph'
 import type { Port } from '#weft'
+import { until } from '#testkit'
 
 describe('waves and the journal', () => {
   test('the red dot: a wave dies on equality and the summary names the place', () => {
@@ -122,11 +123,10 @@ describe('waves and the journal', () => {
     attachProbe(null)
     const raw = port(1, { name: 'raw' })
     const twice = derived(() => raw.get() * 2, { name: 'twice' })
-    const stop = subscribe(twice, () => {})
+    until(subscribe(twice, () => {}))
     raw.set(21)
     assert.equal(twice.peek(), 42)
     assert.equal(seen.length, 0)
-    stop()
   })
 
   test('trace looks without touching: value, reads, readers, honest staleness', () => {
