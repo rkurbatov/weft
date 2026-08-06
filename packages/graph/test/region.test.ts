@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
-import { derived, port, subscribe } from '#graph/graph.ts'
-import { outbox } from '#keep/outbox.ts'
-import { region } from '#graph/region.ts'
-import { memoryStore } from '#keep/store.ts'
-import { source } from '#remote/source.ts'
+import { derived, port, subscribe } from '#graph'
+import { outbox } from '#keep'
+import { region } from '#graph'
+import { memoryStore } from '#keep'
+import { source } from '#remote'
 import { held, wakings, world } from '#testkit'
 
 describe('a region owns what is born inside it', () => {

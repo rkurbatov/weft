@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { EMPTY, arrived, firstOf, heldOf, loading, refused, together } from '#remote/remote.ts'
-import type { Remote } from '#remote/remote.ts'
+import { EMPTY, arrived, firstOf, heldOf, loading, refused, together } from '#remote'
+import type { Remote } from '#remote'
 
 const value = <T>(v: T, at: number): Remote<T> => arrived(v, at)
 const flight = <T>(previous: Remote<T>, since = 50): Remote<T> => loading(previous, since)

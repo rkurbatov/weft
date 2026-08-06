@@ -4,10 +4,10 @@
 
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
-import { batch, derived, port, subscribe, trace } from '#graph/graph.ts'
-import { attachProbe } from '#graph/graph.ts'
-import type { TickSummary } from '#graph/ticks.ts'
-import { journal } from '#graph/journal.ts'
+import { batch, derived, port, subscribe, trace } from '#graph'
+import { attachProbe } from '#graph'
+import type { TickSummary } from '#graph'
+import { journal } from '#graph'
 import type { Port } from '#weft'
 
 describe('waves and the journal', () => {

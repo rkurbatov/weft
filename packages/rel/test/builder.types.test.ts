@@ -1,3 +1,5 @@
+// Beside the code because it reaches for `RowOf` — an internal way of asking
+// what row type a chain arrived at, which the library does not offer.
 // What the chain's types promise, proven by compiling.
 //
 // This one lives beside the code rather than in `test/`, because it reaches
@@ -9,8 +11,8 @@
 // Everything here is proven at compile time; the bodies run as no-ops.
 
 import { describe, test } from 'node:test'
-import { from } from './builder.ts'
-import type { RowOf } from './builder.ts'
+import { from } from '../src/builder.ts'
+import type { RowOf } from '../src/builder.ts'
 
 interface Order {
   id: number

@@ -1,7 +1,7 @@
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
-import { port, derived, subscribe } from '#graph/graph.ts'
-import { family } from '#graph/family.ts'
+import { port, derived, subscribe } from '#graph'
+import { family } from '#graph'
 
 describe('families of cells', () => {
   test('same key gives the same cell, different keys different cells', () => {

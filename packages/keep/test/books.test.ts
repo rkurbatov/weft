@@ -1,3 +1,5 @@
+// Beside the code because it tests the two halves the outbox is made of —
+// the writing down and the schedule — and neither is offered separately.
 // The book and the schedule, each on its own.
 //
 // The point of splitting them out of the outbox is exactly this: a book can be
@@ -7,9 +9,9 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
 import { book } from '#keep/book.ts'
-import type { Note } from '#keep/book.ts'
+import type { Note } from '#keep'
 import { schedule } from '#keep/schedule.ts'
-import { memoryStore } from '#keep/store.ts'
+import { memoryStore } from '#keep'
 import { settle, slowStore, world } from '#testkit'
 
 const entry = (id: string, name = 'move'): Note => ({

@@ -1,8 +1,8 @@
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
-import { derived, port, subscribe } from '#graph/graph.ts'
-import { source } from '#remote/source.ts'
-import { reconcile } from '#remote/reconcile.ts'
+import { derived, port, subscribe } from '#graph'
+import { source } from '#remote'
+import { reconcile } from '#remote'
 import { settle, until, world } from '#testkit'
 
 describe('reconciling the world', () => {

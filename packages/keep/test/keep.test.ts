@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
-import { port, subscribe } from '#graph/graph.ts'
-import { keepInput, keepSource } from '#keep/keep.ts'
-import { memoryStore } from '#keep/store.ts'
-import { source } from '#remote/source.ts'
-import type { Dropped } from '#keep/keep.ts'
+import { port, subscribe } from '#graph'
+import { keepInput, keepSource } from '#keep'
+import { memoryStore } from '#keep'
+import { source } from '#remote'
+import type { Dropped } from '#keep'
 import { settle, slowStore, world } from '#testkit'
 
 describe('keeping things on disk', () => {

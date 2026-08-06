@@ -1,7 +1,7 @@
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
-import { derived, subscribe } from '#graph/graph.ts'
-import { source } from '#remote/source.ts'
+import { derived, subscribe } from '#graph'
+import { source } from '#remote'
 import { settle, until, world } from '#testkit'
 
 describe('sources', () => {

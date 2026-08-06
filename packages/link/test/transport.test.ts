@@ -1,3 +1,5 @@
+// Beside the code because it tests addressing under the protocol: envelopes,
+// greetings and claims, which the door has no reason to expose.
 // The protocol over a transport made of two functions.
 //
 // The point of the split: `bus.ts` is who is served and for how long,
@@ -11,12 +13,12 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
 import { heldOf, port, subscribe } from '#weft'
-import { busChannel, busHub } from '#link/bus.ts'
-import { link } from '#link/link.ts'
+import { busChannel, busHub } from '#link'
+import { link } from '#link'
 import { claimOf, greeting, isGreeting, postbox } from '#link/postbox.ts'
-import { serve } from '#link/serve.ts'
-import { localBroadcast } from '#link/transport.ts'
-import type { Broadcast } from '#link/transport.ts'
+import { serve } from '#link'
+import { localBroadcast } from '#link'
+import type { Broadcast } from '#link'
 import { settle, until, world } from '#testkit'
 
 const atOnce = (work: () => void): void => work()

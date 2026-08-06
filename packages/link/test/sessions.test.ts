@@ -9,7 +9,7 @@ import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
 import { BroadcastChannel } from 'node:worker_threads'
 import { busChannel, busHub, heldOf, port, memoryStore, serve, subscribe, within } from '#weft'
-import { link } from '#link/link.ts'
+import { link } from '#link'
 
 describe('sessions apart', () => {
   const settle = async (turns = 4): Promise<void> => {

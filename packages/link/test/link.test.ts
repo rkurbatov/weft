@@ -1,11 +1,11 @@
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { MessageChannel } from 'node:worker_threads'
-import { derived, port, subscribe } from '#graph/graph.ts'
-import { atOnce } from '#link/channel.ts'
-import { overWire, wirePair } from '#link/wires.ts'
-import { link, Unknown } from '#link/link.ts'
-import { serve } from '#link/serve.ts'
+import { derived, port, subscribe } from '#graph'
+import { atOnce } from '#link'
+import { overWire, wirePair } from '#link'
+import { link, Unknown } from '#link'
+import { serve } from '#link'
 import { settle, until as after } from '#testkit'
 
 describe('the wire', () => {

@@ -1,3 +1,5 @@
+// Beside the code because it tests the machinery the door hides on purpose:
+// thresholds, the traits a plan is made from, and the carriers themselves.
 // The planner and the carriers, tested beside the code they belong to: they
 // are the library's own machinery — thresholds, traits, the choice between
 // implementations — and an application never names them. What a fold answers,
@@ -12,14 +14,14 @@
 
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
-import { carrierFor, runningCarrier, treeCarrier } from './carriers/index.ts'
-import type { FoldCarrier, FoldWork, Rows } from './carriers/index.ts'
-import { planFold, TREE_SPAN, TREE_WORTH_IT } from './plan.ts'
-import { onNotice } from '#data/notice.ts'
-import type { Plan } from './plan.ts'
-import { subscribe, watch } from '#graph/graph.ts'
-import { table } from './table.ts'
-import type { Change } from './table.ts'
+import { carrierFor, runningCarrier, treeCarrier } from '../src/carriers/index.ts'
+import type { FoldCarrier, FoldWork, Rows } from '../src/carriers/index.ts'
+import { planFold, TREE_SPAN, TREE_WORTH_IT } from '../src/plan.ts'
+import { onNotice } from '#data'
+import type { Plan } from '../src/plan.ts'
+import { subscribe, watch } from '#graph'
+import { table } from '../src/table.ts'
+import type { Change } from '../src/table.ts'
 import { held, until } from '#testkit'
 
 interface Row {

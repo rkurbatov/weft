@@ -59,6 +59,26 @@ async function sources(dir: string, found: string[] = []): Promise<string[]> {
   return found
 }
 
+/** The same walk, but for tests: they have rules of their own. */
+async function testFiles(dir: string, found: string[] = []): Promise<string[]> {
+  for (const entry of await readdir(dir, { withFileTypes: true })) {
+    const path = join(dir, entry.name)
+    if (entry.isDirectory()) await testFiles(path, found)
+    else if (path.endsWith('.test.ts')) found.push(path)
+  }
+  return found
+}
+
+/** Aliases a package offers besides its main door, taken from package.json. */
+async function extraDoors(): Promise<Set<string>> {
+  const manifest = JSON.parse(await readFile('package.json', 'utf8')) as {
+    imports: Record<string, string>
+  }
+  return new Set(
+    Object.keys(manifest.imports).filter(name => name.includes('/') && !name.endsWith('*')),
+  )
+}
+
 interface Reach {
   from: string
   mine: Package
@@ -130,5 +150,25 @@ describe('the packages', () => {
       const index = await readFile(`packages/${name}/src/index.ts`, 'utf8').catch(() => '')
       assert.ok(index.includes('export'), `${name} has no surface`)
     }
+  })
+
+  test('a package test may look inside its own package, never inside another', async () => {
+    // Tests live with what they test, and a test of a package is allowed the
+    // inside of that package — thresholds, internal types, the halves a door
+    // hides on purpose. What it may not do is reach into a neighbour: for a
+    // neighbour there is a door, and if the door is not enough, the door is
+    // wrong.
+    const wrong: string[] = []
+    const doors = await extraDoors()
+    for (const path of await testFiles('packages')) {
+      const mine = owner(path)
+      const text = await readFile(path, 'utf8')
+      for (const match of text.matchAll(/from '(#(\w+)\/[^']+)'/g)) {
+        const spec = match[1] ?? ''
+        if (match[2] === mine || doors.has(spec)) continue
+        wrong.push(`${path} -> ${spec}`)
+      }
+    }
+    assert.deepEqual(wrong, [], 'reach the neighbour by its door')
   })
 })

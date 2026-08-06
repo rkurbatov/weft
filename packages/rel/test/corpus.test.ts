@@ -12,10 +12,10 @@ import { join as joinPath } from 'node:path'
 import { describe, test } from 'node:test'
 import { subscribe, table } from '#weft'
 import type { Key, SourceTable } from '#weft'
-import { keyOfRow, oracle } from '#rel/node.ts'
-import type { RelNode, SourceNode } from '#rel/node.ts'
-import { relate } from '#rel/live.ts'
-import type { Row } from '#rel/expr.ts'
+import { keyOfRow, oracle } from '#rel'
+import type { RelNode, SourceNode } from '#rel'
+import { relate } from '#rel'
+import type { Row } from '#rel'
 
 describe('the cross-corpus scenarios', () => {
   interface Scenario {
@@ -50,6 +50,8 @@ describe('the cross-corpus scenarios', () => {
     }
   }
 
+  // The scenarios live beside this test and belong to the layer, not to the
+  // test: they are its contract with any future second implementation.
   const here = joinPath(import.meta.dirname, 'corpus')
 
   for (const file of readdirSync(here).toSorted()) {

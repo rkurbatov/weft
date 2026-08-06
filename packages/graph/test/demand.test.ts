@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { port, derived, watch, subscribe, untracked } from '#graph/graph.ts'
-import { family } from '#graph/family.ts'
+import { port, derived, watch, subscribe, untracked } from '#graph'
+import { family } from '#graph'
 
 function tracked() {
   const log: string[] = []

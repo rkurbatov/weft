@@ -15,7 +15,7 @@ import {
   relate as relateDoor,
 } from '#rel'
 import type { Row } from '#rel'
-import { source } from '#rel/node.ts'
+import { source } from '#rel'
 
 describe('the query builder', () => {
   interface Order {

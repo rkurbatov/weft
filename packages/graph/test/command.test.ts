@@ -1,7 +1,7 @@
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
-import { port, derived, subscribe, untracked } from '#graph/graph.ts'
-import { command, onCommandFailure } from '#graph/command.ts'
+import { port, derived, subscribe, untracked } from '#graph'
+import { command, onCommandFailure } from '#graph'
 import { settle, world } from '#testkit'
 
 function deferred<T>() {

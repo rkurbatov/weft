@@ -3,13 +3,13 @@
 
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
-import { port } from '#graph/graph.ts'
-import { projected } from '#keep/project.ts'
-import { PRESERVE_LIMIT, preserve } from '#data/preserve.ts'
-import { forgetNotices, onNotice } from '#data/notice.ts'
-import { laneDrop, laneFind, lanePlace } from '#data/arrange.ts'
-import type { Lanes } from '#data/arrange.ts'
-import type { Note } from '#keep/outbox.ts'
+import { port } from '#graph'
+import { projected } from '#keep'
+import { PRESERVE_LIMIT, preserve } from '#data'
+import { forgetNotices, onNotice } from '#data'
+import { laneDrop, laneFind, lanePlace } from '#data'
+import type { Lanes } from '#data'
+import type { Note } from '#keep'
 
 const entry = (name: string, args: unknown, state: Note['state'] = 'waiting'): Note => ({
   id: `${name}-${JSON.stringify(args)}`,

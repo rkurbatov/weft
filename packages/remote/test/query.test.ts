@@ -1,8 +1,8 @@
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
-import { subscribe } from '#graph/graph.ts'
-import { query } from '#remote/query.ts'
-import { heldOf } from '#remote/remote.ts'
+import { subscribe } from '#graph'
+import { query } from '#remote'
+import { heldOf } from '#remote'
 import { settle, world } from '#testkit'
 
 describe('parametric queries', () => {

@@ -1,26 +1,17 @@
+// Beside the code because it checks the layer's internal thresholds — when a
+// join is called crowded — along with everything the door does offer.
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
 import { subscribe } from '#weft'
 import { table } from '#weft'
 import type { SourceTable } from '#weft'
 import type { Key } from '#weft'
-import { and, canonExpr, cmp, evalExpr, field, lit, math } from '#rel/expr.ts'
-import type { Row } from '#rel/expr.ts'
-import {
-  agg,
-  checkNode,
-  expand,
-  filter,
-  join,
-  pure,
-  oracle,
-  scan,
-  source,
-  union,
-} from '#rel/node.ts'
-import { relate } from '#rel/live.ts'
+import { and, canonExpr, cmp, evalExpr, field, lit, math } from '#rel'
+import type { Row } from '#rel'
+import { agg, checkNode, expand, filter, join, pure, oracle, scan, source, union } from '#rel'
+import { relate } from '#rel'
 import { CROWDED_KEY } from '#rel/runners/join.ts'
-import { onNotice } from '#data/notice.ts'
+import { onNotice } from '#data'
 import { held as owned, until } from '#testkit'
 
 describe('the relational layer', () => {

@@ -1,9 +1,9 @@
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
-import { derived, subscribe } from '#graph/graph.ts'
-import { outbox } from '#keep/outbox.ts'
-import { memoryStore } from '#keep/store.ts'
-import type { Note, Handler } from '#keep/outbox.ts'
+import { derived, subscribe } from '#graph'
+import { outbox } from '#keep'
+import { memoryStore } from '#keep'
+import type { Note, Handler } from '#keep'
 import { settle, until, world } from '#testkit'
 
 describe('the outbox', () => {

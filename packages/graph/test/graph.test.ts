@@ -1,6 +1,6 @@
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
-import { port, derived, watch, subscribe, batch, untracked } from '#graph/graph.ts'
+import { port, derived, watch, subscribe, batch, untracked } from '#graph'
 
 describe('the cell graph', () => {
   test('formula reads its inputs without declaring them', () => {

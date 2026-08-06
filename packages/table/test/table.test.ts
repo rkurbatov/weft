@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
-import { port, subscribe, watch } from '#graph/graph.ts'
-import { table } from '#table/table.ts'
-import type { SourceTable } from '#table/table.ts'
+import { port, subscribe, watch } from '#graph'
+import { table } from '#table'
+import type { SourceTable } from '#table'
 import { hasIds, held, until } from '#testkit'
 
 describe('tables', () => {
