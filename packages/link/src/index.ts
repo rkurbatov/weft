@@ -15,5 +15,5 @@ export { sharedWorkerHub, sharedWorkerChannel, sharedWorkersExist } from './shar
 export type { SharedScope } from './shared.ts'
 export { leadOrFollow, webLocks } from './lead.ts'
 export type { Lock, LeadOptions } from './lead.ts'
-export { atOnce, every, perFrame } from './channel.ts'
-export type { Channel, Schedule, ToGraph, ToWatcher } from './channel.ts'
+export { atOnce, every, hurried, perFrame } from './channel.ts'
+export type { Channel, Hurried, Schedule, ToGraph, ToWatcher } from './channel.ts'

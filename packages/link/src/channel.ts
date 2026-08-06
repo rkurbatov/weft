@@ -34,8 +34,25 @@ export type ToWatcher =
   /** The station will not serve this watcher: not its session. */
   | { readonly kind: 'refused'; readonly why: string }
 
-/** What to do with work that must not happen more than once a frame. */
-export type Schedule = (work: () => void) => void
+/**
+ * What to do with work that must not happen more oftener than it should.
+ *
+ * A plain function is the whole of it. A schedule that can also be hurried
+ * carries `now`: whoever knows a value is the last one — a finished run, a
+ * closing tab — calls it and the wait is over. Schedules without it are simply
+ * never in a hurry, and callers check before asking.
+ */
+export interface Hurried {
+  (work: () => void): void
+  /** Do what is owed at once, and start the next interval from here. */
+  now(): void
+}
+
+export type Schedule = ((work: () => void) => void) | Hurried
+
+/** Can this schedule be hurried? */
+export const hurried = (schedule: Schedule): schedule is Hurried =>
+  typeof (schedule as Hurried).now === 'function'
 
 /**
  * Once a frame in the foreground — and still soon in the background, where the
@@ -79,17 +96,11 @@ export const atOnce: Schedule = work => work()
  * Background tabs keep the same guard as `perFrame`: a timer, not a frame, so
  * a leading tab goes on serving the others after the person switches away.
  */
-export function every(ms: number, timers: Timers = wallClock): Schedule {
+export function every(ms: number, timers: Timers = wallClock): Hurried {
   let waiting: (() => void) | null = null
   let timer: unknown = null
 
-  return work => {
-    // Inside an interval: remember the newest work and let the timer do it.
-    if (timer !== null) {
-      waiting = work
-      return
-    }
-    work()
+  const start = (): void => {
     timer = timers.set(function done() {
       timer = null
       const owed = waiting
@@ -99,7 +110,38 @@ export function every(ms: number, timers: Timers = wallClock): Schedule {
       // so a storm of writes settles into one flush per interval rather than
       // two in a row at the boundary.
       owed()
-      timer = timers.set(done, ms)
+      start()
     }, ms)
   }
+
+  const schedule = ((work: () => void) => {
+    // Inside an interval: remember the newest work and let the timer do it.
+    if (timer !== null) {
+      waiting = work
+      return
+    }
+    work()
+    start()
+  }) as Hurried
+
+  schedule.now = () => {
+    const owed = waiting
+    waiting = null
+    if (timer !== null) {
+      timers.clear(timer)
+      timer = null
+    }
+    if (owed === null) {
+      // Nothing was owed, so nothing was sent, so there is nothing to wait
+      // after: an idle pace hurried is not an event, and the next write goes
+      // at once as it would have anyway.
+      return
+    }
+    owed()
+    // The next interval starts from here, not from whenever the old one would
+    // have ended: what was just sent is the new beginning.
+    start()
+  }
+
+  return schedule
 }

@@ -1,72 +1,58 @@
-// The engine's own side: a state module that lives where the graph lives.
+// The engine: a state module that lives wherever it is put.
 //
-// This is the thing the order is about (З-1). Everything here is ordinary
-// weft — ports, derived cells, a family — and none of it knows whether it runs
-// in a worker, in a leading tab, or in the page itself. What decides that is
-// one line in main.tsx.
-//
-// The work is deliberately slow and deliberately demand-driven: it recomputes
-// only when somebody is looking at its answer. The tick counter is how the
-// page proves it — a number that climbs while a panel is open and stops dead
-// when it closes.
+// Ordinary weft — a port for what is typed, a port for how big the log is,
+// and one derived answer that does the searching. Nothing here knows about
+// workers, wires or panels, and that is the point of the page: the same file
+// runs in a worker or on the main thread without a character changing.
 
-import { cell, family } from '#loom'
+import { cell } from '#loom'
 import type { Port, Watchable } from '#loom'
-import { corpus, countMatching, histogram } from '../engine-common/corpus.ts'
-import type { Entry } from '../engine-common/corpus.ts'
+import { logLines, search } from '../engine-common/corpus.ts'
+import type { Line } from '../engine-common/corpus.ts'
+
+export interface Found {
+  /** The first fifty matching lines — what a screen can actually show. */
+  readonly lines: readonly Line[]
+  /** How many matched altogether. */
+  readonly total: number
+  /** How long this search took, in milliseconds. */
+  readonly ms: number
+  /** How many lines were searched through. */
+  readonly of: number
+}
 
 export interface Engine {
-  /** What the panels type in. */
+  /** What the panel typed. */
   readonly needle: Port<string>
-  /** How much made-up corpus to work over. */
+  /** How many lines of made-up log to search. */
   readonly size: Port<number>
-  /** How many entries match — the expensive answer. */
-  readonly matches: Watchable<number>
-  /** The same work as a shape, so a panel can draw it. */
-  readonly shape: Watchable<readonly number[]>
-  /** One answer per bucket, asked for separately: a family of the same work. */
-  readonly bucket: (at: number) => Watchable<number>
-  /** How many times the work has actually run since this engine was built. */
-  readonly ticks: Watchable<number>
+  /** The answer. Recomputed only while somebody is looking at it. */
+  readonly found: Watchable<Found>
+  /** How many searches have actually run since this engine started. */
+  readonly searches: Watchable<number>
 }
 
 export function engine(): Engine {
-  const needle = cell('')
-  const size = cell(20_000)
+  const needle = cell('', { name: 'needle' })
+  const size = cell(200_000, { name: 'size' })
 
-  // The corpus itself is derived: changing the size builds another one, and
-  // nobody has to remember to rebuild anything.
-  const body = cell<Entry[]>(() => corpus(size.get()), { name: 'corpus' })
+  // The log is derived too: change the size and another one is built, with
+  // nobody having to remember to rebuild anything.
+  const log = cell<Line[]>(() => logLines(size.get()), { name: 'log' })
 
-  // The tick counter is written from inside the formulas below. Writing from a
-  // formula is normally a sin — here the counter is instrumentation, it feeds
-  // nothing, and nothing reads it inside the graph.
-  const ticked = cell(0, { name: 'ticks' })
-  const tick = (): void => {
-    ticked.set(ticked.peek() + 1)
-  }
+  // Instrumentation, written from inside the formula on purpose: it feeds
+  // nothing in the graph and nothing in the graph reads it.
+  const ran = cell(0, { name: 'searches' })
 
-  const matches = cell(
+  const found = cell<Found>(
     () => {
-      const answer = countMatching(body.get(), needle.get())
-      tick()
-      return answer
+      const lines = log.get()
+      const answer = search(lines, needle.get())
+      ran.set(ran.peek() + 1)
+      return { lines: answer.found, total: answer.total, ms: answer.ms, of: lines.length }
     },
-    { name: 'matches' },
+    { name: 'found' },
   )
 
-  const shape = cell<readonly number[]>(
-    () => {
-      const answer = histogram(body.get(), needle.get())
-      tick()
-      return answer
-    },
-    { name: 'shape' },
-  )
-
-  // A family: one answer per bucket, each asked for on its own. A panel that
-  // shows three bars keeps three of them alive and no more.
-  const bucket = family((at: number) => shape.get()[at] ?? 0, { name: 'bucket', max: 64 })
-
-  return { needle, size, matches, shape, bucket, ticks: ticked }
+  return { needle, size, found, searches: ran }
 }

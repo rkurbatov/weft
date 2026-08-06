@@ -1,24 +1,29 @@
-// Where the engine lives is one decision, made here and nowhere else.
+// Where the engine lives, and how it is replaced.
 //
-// A Worker is already a wire — it posts messages and listens for them — so it
-// goes straight into `overWire` with no casting. Swap these five lines for a
-// direct `engine()` call and the panel above does not change by a character:
-// that is the claim this page exists to test.
+// A Worker is already a wire — it posts and it listens — so it goes into
+// `overWire` with no casting. Swap these lines for a direct `engine()` call
+// and the panel does not change by a character.
+//
+// The station sits in a cell, and the panel reads the station from that cell
+// rather than being handed one. That is what makes the kill button work: a
+// new worker is a new value, so everything that reads through the cell
+// recomputes and re-subscribes by the ordinary rules. Handed in as a prop
+// instead, a screen keeps watching the mirrors of a worker that no longer
+// exists — which looks exactly like "it stopped working".
 
-import { useState } from 'react'
 import type { ReactNode } from 'react'
-import { adopt, overWire } from '#loom'
+import { adopt, cell, overWire } from '#loom'
 import type { Adopted } from '#loom'
 import { mount } from '#demo/mount.tsx'
 import { App } from './App.tsx'
 import './engine.css'
 
-interface Running {
+interface Station {
   readonly engine: Adopted
   readonly stop: () => void
 }
 
-function start(): Running {
+function start(): Station {
   const worker = new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' })
   const engine = adopt(overWire(worker))
   return {
@@ -32,23 +37,18 @@ function start(): Running {
 
 // Module state, not effect state: the world outlives a tab's renders, and the
 // double mount of strict mode must not raise a second worker.
-let running = start()
+export const station = cell<Station>(start(), { name: 'station' })
+
+/** Kill the worker, raise another, and tell it what the panel already knows. */
+export function replace(pattern: string): void {
+  station.peek().stop()
+  const fresh = start()
+  fresh.engine.write('needle', pattern)
+  station.set(fresh)
+}
 
 function Root(): ReactNode {
-  const [, redraw] = useState(0)
-  return (
-    <App
-      engine={running.engine}
-      restart={pattern => {
-        running.stop()
-        running = start()
-        // The new engine starts empty, as a new engine would. What the panel
-        // knows, it says again — the same write it would make on any keystroke.
-        running.engine.write('needle', pattern)
-        redraw(n => n + 1)
-      }}
-    />
-  )
+  return <App />
 }
 
 mount(<Root />)

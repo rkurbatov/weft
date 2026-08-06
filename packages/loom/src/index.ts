@@ -5,11 +5,11 @@
 // Words the dialect has no better name for, passed through under their own.
 // An application written in the dialect should not have to reach past it for
 // a family or a wire — reaching past is how two vocabularies start.
-export { family, overWire, wirePair } from '#weft'
+export { every, family, hurried, overWire, wirePair } from '#weft'
 // `Port` is the language's word for the one kind of cell that is written to,
 // and a station has to name those: `cell(value)` makes one, and this is what
 // it is called.
-export type { Family, Port, Watchable, Wire, WirePair } from '#weft'
+export type { Family, Hurried, Port, Schedule, Watchable, Wire, WirePair } from '#weft'
 
 export { cell } from './cell.ts'
 export type { Cell } from './cell.ts'

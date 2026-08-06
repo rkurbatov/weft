@@ -8,7 +8,7 @@
 
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
-import { every, link, serve } from '#link'
+import { atOnce, every, hurried, link, serve } from '#link'
 import { heldOf, port, subscribe, wirePair } from '#weft'
 import { settle, until, world } from '#testkit'
 
@@ -84,5 +84,58 @@ describe('every: a pace the wire keeps', () => {
       `the panel woke ${String(landed - before)} times, not a hundred`,
     )
     assert.equal(heldOf(mirror.peek())?.value, 99, 'and the last value is the one it holds')
+  })
+})
+
+describe('and a pace that can be hurried', () => {
+  test('now() sends what is owed at once, ahead of the interval', async () => {
+    const clock = world()
+    const seen: number[] = []
+    const schedule = every(100, clock.timers)
+
+    schedule(() => seen.push(1))
+    for (let i = 2; i <= 5; i++) schedule(() => seen.push(i))
+    assert.deepEqual(seen, [1], 'the rest is waiting out the interval')
+
+    // The finish of a long run: it must not sit in a queue behind a pace made
+    // for progress reports.
+    schedule.now()
+    assert.deepEqual(seen, [1, 5], 'the last one went immediately')
+  })
+
+  test('the interval starts again from the hurry, not from where it was', async () => {
+    const clock = world()
+    let flushes = 0
+    const schedule = every(100, clock.timers)
+
+    schedule(() => flushes++)
+    schedule(() => flushes++)
+    await clock.advance(60)
+    schedule.now()
+    assert.equal(flushes, 2)
+
+    // Forty milliseconds would have been left of the old interval; they are
+    // not: what was just sent is the new beginning.
+    schedule(() => flushes++)
+    await clock.advance(60)
+    assert.equal(flushes, 2, 'still inside the fresh interval')
+    await clock.advance(60)
+    assert.equal(flushes, 3)
+  })
+
+  test('hurrying an idle pace is not an event', async () => {
+    const clock = world()
+    let flushes = 0
+    const schedule = every(100, clock.timers)
+
+    schedule.now()
+    assert.equal(flushes, 0, 'nothing was owed, so nothing happened')
+    schedule(() => flushes++)
+    assert.equal(flushes, 1)
+  })
+
+  test('a schedule can say whether it can be hurried at all', () => {
+    assert.equal(hurried(every(100)), true)
+    assert.equal(hurried(atOnce), false, 'nothing to hurry: it never waits')
   })
 })

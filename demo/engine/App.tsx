@@ -1,113 +1,120 @@
-// The panel: a mirror of an engine that lives somewhere else.
+// The panel: a search box over a log that lives in another thread.
 //
-// Everything shown here is read the same way whether the engine runs in this
-// tab or in a worker — that is the whole point of the page. The numbers on
-// screen are the evidence: engine ticks climb only while a panel watches, and
-// panel wakings show what actually crossed the wire.
+// Every read goes through the station cell rather than through a prop, so
+// replacing the worker is seen here the way any other change is seen. What a
+// visitor should be able to tell without reading code:
+//   — typing searches two hundred thousand lines and the box never stutters,
+//     because the searching happens elsewhere;
+//   — hiding the results stops the searching altogether;
+//   — killing the worker loses nothing: the panel asks again by itself.
 
 import { useState } from 'react'
 import type { ReactNode } from 'react'
 import { useLive } from '#loom/react'
-import type { Adopted } from '#loom'
+import { replace, station } from './main.tsx'
+import type { Found } from './state.ts'
 
-interface Props {
-  readonly engine: Adopted
-  /** Raise a new worker, and tell it what this panel already knows. */
-  readonly restart: (pattern: string) => void
-}
+/** The results, and the only thing on this page that watches the engine. */
+function Results({ needle }: { needle: string }): ReactNode {
+  const found = useLive(() => station.get().engine.view<Found>('found').get())
 
-/** One number, named. */
-function Count({ label, value }: { label: string; value: number | string }): ReactNode {
+  if (needle === '') {
+    return (
+      <p className="dim">
+        Type something above — try <code>declined</code>, <code>[db]</code> or <code>slow</code>.
+      </p>
+    )
+  }
+  if (found === undefined) return <p className="dim">asking the worker…</p>
+  if (found.total === 0) return <p className="dim">Nothing matched “{needle}”.</p>
+
   return (
-    <span className="count">
-      <b>{value}</b> {label}
-    </span>
+    <>
+      <p className="summary">
+        <b>{found.total.toLocaleString('en')}</b> matching lines out of{' '}
+        {found.of.toLocaleString('en')}, searched in <b>{found.ms.toFixed(0)} ms</b>
+        {found.total > found.lines.length ? ' — first fifty shown' : ''}
+      </p>
+      <ol className="lines">
+        {found.lines.map(line => (
+          <li key={line.id}>
+            <span className="no">{line.id}</span>
+            {line.text}
+          </li>
+        ))}
+      </ol>
+    </>
   )
 }
 
-/** A panel that watches the engine. Mounting it is demand; unmounting is not. */
-function Matches({ engine }: { engine: Adopted }): ReactNode {
-  const shown = useLive(() => engine.view<number>('matches').get())
-  return (
-    <p>
-      matches: <b>{shown ?? '—'}</b>
-    </p>
-  )
-}
-
-/** A second watcher of the same work, drawn as bars. */
-function Shape({ engine }: { engine: Adopted }): ReactNode {
-  const bars = useLive(() => engine.view<readonly number[]>('shape').get()) ?? []
-  const most = Math.max(1, ...bars)
-  return (
-    <div className="bars">
-      {bars.map((value, at) => (
-        <i
-          // The index is the identity here: a bucket is its position, and the
-          // tenth bucket stays the tenth however its count changes.
-          key={`bucket-${String(at)}`}
-          style={{ height: `${String(Math.round((value / most) * 100))}%` }}
-          title={String(value)}
-        />
-      ))}
-    </div>
-  )
-}
-
-export function App({ engine, restart }: Props): ReactNode {
-  const [watching, setWatching] = useState(true)
-  const ticks = useLive(() => engine.view<number>('ticks').get())
-  // Typed here, sent over the wire, echoed back when the engine has it. The
-  // field shows what was typed rather than waiting for the echo: a round trip
-  // is short, but it is not zero, and a field that lags a keystroke behind is
-  // the oldest bug in remote state.
+export function App(): ReactNode {
   const [typed, setTyped] = useState('')
-  const echoed = useLive(() => engine.view<string>('needle').get())
+  const [showing, setShowing] = useState(true)
+  const searches = useLive(() => station.get().engine.view<number>('searches').get())
+  const sent = useLive(() => station.get().engine.view<number>('sent').get())
+  const echoed = useLive(() => station.get().engine.view<string>('needle').get())
 
   return (
     <main className="engine">
-      <h1>An engine behind a wire</h1>
+      <h1>Searching a log that lives in another thread</h1>
       <p className="story">
-        The state module — corpus, pattern, the counting itself — lives on the other side of a
-        worker. This panel holds nothing but mirrors. Close the panel and the engine stops working:
-        no demand, no work. Kill the worker and the mirrors ask again by themselves, without a line
-        of code here noticing.
+        Two hundred thousand lines of made-up service log are held by a worker, and so is the search
+        over them. This page holds nothing but a mirror of the answer. Type below: the box never
+        stutters, because nothing here is doing the searching.
       </p>
 
       <div className="row">
-        <label>
-          pattern{' '}
+        <label className="grow">
+          find lines containing{' '}
           <input
             value={typed}
+            autoFocus
             onChange={event => {
               setTyped(event.target.value)
-              engine.write('needle', event.target.value)
+              station.peek().engine.write('needle', event.target.value)
             }}
-            placeholder="try: alpha"
+            placeholder="declined"
           />
         </label>
-        <button type="button" onClick={() => setWatching(open => !open)}>
-          {watching ? 'close the panel' : 'open the panel'}
+      </div>
+
+      <div className="row numbers">
+        <span>
+          the worker is searching for <b>{echoed === undefined ? '—' : `“${echoed}”`}</b>
+        </span>
+        <span>
+          it has run <b>{searches ?? '—'}</b> searches
+        </span>
+        <span>
+          and the wire carried <b>{sent ?? '—'}</b> packets
+        </span>
+      </div>
+
+      <div className="row">
+        <button type="button" onClick={() => setShowing(open => !open)}>
+          {showing ? 'hide the results' : 'show the results'}
         </button>
-        <button type="button" onClick={() => restart(typed)}>
+        <button type="button" onClick={() => replace(typed)}>
           kill the worker
         </button>
       </div>
 
-      <div className="row numbers">
-        <Count label="engine ticks" value={ticks ?? '—'} />
-        <Count label="watching" value={watching ? 'yes' : 'no'} />
-        <Count label="engine has" value={echoed === undefined ? '—' : `"${echoed}"`} />
+      <div className="results">
+        {showing ? (
+          <Results needle={typed} />
+        ) : (
+          <p className="dim">
+            Results hidden — and the worker has stopped searching. Type anything: the counter above
+            will not move until you show them again. Nothing asked for, nothing computed.
+          </p>
+        )}
       </div>
 
-      {watching ? (
-        <div className="panel">
-          <Matches engine={engine} />
-          <Shape engine={engine} />
-        </div>
-      ) : (
-        <p className="dim">The panel is closed. The ticks above should stand still.</p>
-      )}
+      <p className="story small">
+        Killing the worker raises a new one with an empty head: the search counter goes back to
+        zero, the panel says the pattern again, and the results return on their own — without
+        touching the buttons. There is no reconnect code and no error handling on this page.
+      </p>
     </main>
   )
 }
