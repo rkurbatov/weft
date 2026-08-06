@@ -360,3 +360,44 @@ describe('sameness by value', () => {
     assert.equal(alike({ fn }, { fn: (): void => {} }), false)
   })
 })
+
+describe('buffers are compared like everything else', () => {
+  test('typed arrays are compared by value, and quickly', () => {
+    const a = new Float64Array(1_000_000).map((_, i) => i)
+    const b = a.slice()
+    const other = a.slice()
+    other[999_999] = -1
+
+    const started = performance.now()
+    assert.equal(alike(a, b), true, 'same numbers, different buffer: the same value')
+    assert.equal(alike(a, other), false, 'one number apart, at the far end')
+    const spent = performance.now() - started
+
+    // Through Object.keys this took the better part of a second per
+    // comparison, on every write; the plain loop takes five milliseconds.
+    assert.ok(spent < 100, `comparing twice took ${spent.toFixed(0)}ms`)
+  })
+
+  test('no threshold: a big buffer answers like a small one', () => {
+    const small = new Uint8Array([1, 2, 3])
+    const big = new Uint8Array(200_000).fill(7)
+    assert.equal(alike(small, small.slice()), true)
+    assert.equal(alike(big, big.slice()), true, 'the same answer, whatever the size')
+  })
+
+  test('kind and length count, not just the numbers', () => {
+    assert.equal(alike(new Uint8Array([1, 2]), new Uint8Array([1, 2])), true)
+    assert.equal(alike(new Uint8Array([1, 2]), new Uint8Array([1, 2, 3])), false)
+    assert.equal(
+      alike(new Uint8Array([1, 2]), new Int8Array([1, 2])),
+      false,
+      'the same bytes read as another kind are another value',
+    )
+  })
+
+  test('a buffer and a view of one are both handled', () => {
+    const bytes = new Uint8Array([1, 2, 3, 4]).buffer
+    assert.equal(alike(bytes, bytes.slice(0)), true, 'two buffers, same bytes')
+    assert.equal(alike(new DataView(bytes), new DataView(bytes.slice(0))), true)
+  })
+})

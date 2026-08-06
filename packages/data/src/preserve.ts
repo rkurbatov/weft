@@ -41,8 +41,23 @@ const tooBig = (size: number, limit: number): boolean => {
   return true
 }
 
+/** Anything backed by a buffer: a million numbers are not a million fields. */
+const isBulk = (value: object): boolean => ArrayBuffer.isView(value) || value instanceof ArrayBuffer
+
 export function preserve<T>(prev: T, next: T, limit: number = PRESERVE_LIMIT): T {
   if (Object.is(prev, next)) return next
+  // Bulk data is handed on as it is. Not for speed — comparing it is cheap —
+  // but because there is nothing inside a buffer whose identity could be kept:
+  // it holds numbers, not objects, and the only identity it has is its own.
+  if (
+    typeof prev === 'object' &&
+    prev !== null &&
+    typeof next === 'object' &&
+    next !== null &&
+    (isBulk(prev) || isBulk(next))
+  ) {
+    return next
+  }
   if (typeof prev !== 'object' || typeof next !== 'object' || prev === null || next === null)
     return next
   if (prev instanceof Map || next instanceof Map) {

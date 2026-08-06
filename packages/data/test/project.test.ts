@@ -176,3 +176,27 @@ describe('arranging by hand', () => {
     assert.deepEqual(laneAppend(lanes, 'b', 'todo')['todo'], ['a', 'b'])
   })
 })
+
+describe('bulk data through preserve', () => {
+  test('a typed array is handed on whole', () => {
+    const before = new Float64Array(1_000_000).map((_, i) => i)
+    const after = before.slice()
+
+    const started = performance.now()
+    const kept = preserve(before, after)
+    const spent = performance.now() - started
+
+    // There is nothing inside a buffer whose identity could be kept, so the
+    // new one is the answer — and arriving at that answer costs nothing.
+    assert.equal(kept, after)
+    assert.ok(spent < 50, `preserving took ${spent.toFixed(0)}ms`)
+  })
+
+  test('a buffer inside an object does not cost the object its identity', () => {
+    const bulk = new Float64Array(100_000)
+    const before = { hist: bulk, at: 1 }
+    const after = { hist: bulk, at: 1 }
+    const kept = preserve(before, after)
+    assert.equal(kept, before, 'nothing changed, so nothing was replaced')
+  })
+})
