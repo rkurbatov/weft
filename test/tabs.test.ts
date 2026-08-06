@@ -11,7 +11,7 @@
 
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
-import { adopt, offer, sends, truth, will } from '#loom'
+import { adopt, cell, offer, sends, truth, will } from '#loom'
 import { memoryStore, subscribe, wirePair } from '#weft'
 import { settle, until, world } from '#testkit'
 
@@ -132,5 +132,135 @@ describe('two tabs, one state', () => {
     await settle(3)
     // A mirror nobody looks at forgets: unknown is honest, stale is not.
     assert.equal(shown.peek(), undefined)
+  })
+})
+
+describe('replacing the station under a running panel', () => {
+  test('a station kept in a port is replaced, and the screen follows', async () => {
+    const clock = world()
+    const first = fakeServer()
+    const second = fakeServer()
+
+    const raise = (
+      server: ReturnType<typeof fakeServer>,
+    ): { engine: ReturnType<typeof adopt>; stop: () => void } => {
+      const wire = wirePair()
+      const held = station(server, clock)
+      const stopOffer = offer({ views: { board: held.board } }, wire.graph)
+      const engine = adopt(wire.watcher)
+      return {
+        engine,
+        stop: () => {
+          engine.close()
+          stopOffer()
+        },
+      }
+    }
+
+    // The station lives in a cell, as the demo's does — that is what makes the
+    // replacement an ordinary change rather than something React has to be
+    // told about.
+    const held = cell(raise(first))
+    until(() => held.peek().stop())
+
+    // What a screen does: read through the cell, so a new station is followed.
+    const shown = cell(() => held.get().engine.view<Task[]>('board').get())
+    until(subscribe(shown, () => {}))
+    await settle(3)
+    assert.deepEqual(
+      shown.peek()?.map(t => t.lane),
+      ['todo'],
+    )
+
+    // The second server's board differs, so following is visible.
+    await second.move({ id: 'a', lane: 'done' })
+
+    held.peek().stop()
+    held.set(raise(second))
+    await settle(4)
+
+    assert.deepEqual(
+      shown.peek()?.map(t => t.lane),
+      ['done'],
+      'the screen watches the new station, not the mirrors of the dead one',
+    )
+  })
+
+  test('and a station held outside the graph strands the screen', async () => {
+    const clock = world()
+    const first = fakeServer()
+    const second = fakeServer()
+    await second.move({ id: 'a', lane: 'done' })
+
+    const raise = (server: ReturnType<typeof fakeServer>): ReturnType<typeof adopt> => {
+      const wire = wirePair()
+      const held = station(server, clock)
+      until(offer({ views: { board: held.board } }, wire.graph))
+      const engine = adopt(wire.watcher)
+      until(engine.close)
+      return engine
+    }
+
+    // The mistake, kept as a test: the station in a plain variable, read once
+    // when the screen cell was built. Nothing tells the graph it changed.
+    let engine = raise(first)
+    const shown = cell(() => engine.view<Task[]>('board').get())
+    until(subscribe(shown, () => {}))
+    await settle(3)
+
+    engine = raise(second)
+    await settle(4)
+
+    assert.deepEqual(
+      shown.peek()?.map(t => t.lane),
+      ['todo'],
+      'still the old board: this is what "it just stopped working" looks like',
+    )
+  })
+})
+
+describe('a screen handed a station as a prop', () => {
+  test('does not follow when the station is replaced — the trap this demo fell into', async () => {
+    const clock = world()
+    const first = fakeServer()
+    const second = fakeServer()
+    await second.move({ id: 'a', lane: 'done' })
+
+    const raise = (server: ReturnType<typeof fakeServer>): ReturnType<typeof adopt> => {
+      const wire = wirePair()
+      const held = station(server, clock)
+      until(offer({ views: { board: held.board } }, wire.graph))
+      const engine = adopt(wire.watcher)
+      until(engine.close)
+      return engine
+    }
+
+    const inCell = cell(raise(first))
+
+    // Two screens over the same replacement. One reads the station through the
+    // cell, as a screen should; the other was handed the station once, the way
+    // a React prop hands it — and a prop changing is not something the graph
+    // can see.
+    const following = cell(() => inCell.get().view<Task[]>('board').get())
+    const handed = ((engine: ReturnType<typeof adopt>) =>
+      cell(() => engine.view<Task[]>('board').get()))(inCell.peek())
+
+    until(subscribe(following, () => {}))
+    until(subscribe(handed, () => {}))
+    await settle(3)
+
+    inCell.set(raise(second))
+    await settle(4)
+
+    assert.deepEqual(
+      following.peek()?.map(t => t.lane),
+      ['done'],
+      'read through the cell: follows',
+    )
+    assert.deepEqual(
+      handed.peek()?.map(t => t.lane),
+      ['todo'],
+      'handed in once: still watching the dead station, and nothing will ever wake it',
+    )
   })
 })

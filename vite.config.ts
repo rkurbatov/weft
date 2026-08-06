@@ -3,7 +3,7 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 
-// One config, six pages: the menu, the two spreadsheets, the sheet across windows, and the rail. The library is
+// One config, seven pages: the menu, the two spreadsheets, the sheet across windows, and the rail. The library is
 // reached through the package's own subpath imports (#weft), the same way the
 // tests reach it — no alias to keep in step with tsconfig.
 export default defineConfig({
@@ -24,6 +24,7 @@ export default defineConfig({
         kanbanClassic: resolve(import.meta.dirname, 'demo/kanban-classic/index.html'),
         kanbanWeft: resolve(import.meta.dirname, 'demo/kanban-weft/index.html'),
         kanbanTabs: resolve(import.meta.dirname, 'demo/kanban-tabs/index.html'),
+        engine: resolve(import.meta.dirname, 'demo/engine/index.html'),
       },
     },
   },

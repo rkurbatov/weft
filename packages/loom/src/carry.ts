@@ -6,7 +6,7 @@
 // mirrors.
 
 import { derived, port } from '#weft'
-import type { Port, Watchable } from '#weft'
+import type { Watchable } from '#weft'
 import { heldOf } from '#weft'
 import { preserve } from '#weft'
 import { journal } from '#weft'
@@ -22,7 +22,14 @@ import { subscribe } from '#weft'
 
 export interface Offering {
   views?: Readonly<Record<string, Watchable<unknown>>>
-  facts?: Readonly<Record<string, Port<never>>>
+  /**
+   * What the other side may write into.
+   *
+   * The least a thing must be to be written into, not `Port<never>`: a port of
+   * strings is not a port of nevers, and asking for one made every station in
+   * the world cast its own ports. Found by writing a station.
+   */
+  facts?: Readonly<Record<string, { set(value: never): void }>>
   acts?: Readonly<Record<string, (...args: never[]) => unknown>>
 }
 
@@ -48,9 +55,7 @@ export function offer(handles: Offering, channel: Channel, options: OfferOptions
   const stop = serve(
     {
       cells,
-      ...(handles.facts === undefined
-        ? {}
-        : { facts: handles.facts as Readonly<Record<string, { set(value: never): void }>> }),
+      ...(handles.facts === undefined ? {} : { facts: handles.facts }),
       ...(handles.acts === undefined ? {} : { commands: handles.acts }),
     },
     channel,

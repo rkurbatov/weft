@@ -1,0 +1,83 @@
+/* Plain on purpose: what the page has to show is a search that stays smooth. */
+.engine {
+  max-width: 52rem;
+  margin: 2rem auto;
+  padding: 0 1rem;
+  font:
+    15px/1.5 system-ui,
+    sans-serif;
+}
+.engine h1 {
+  font-size: 1.4rem;
+}
+.engine .story {
+  color: #444;
+}
+.engine .story.small {
+  font-size: 13px;
+  color: #666;
+  margin-top: 24px;
+}
+.engine .row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin: 12px 0;
+  flex-wrap: wrap;
+}
+.engine .row .grow {
+  flex: 1;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.engine input {
+  flex: 1;
+  padding: 8px 10px;
+  font: inherit;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+}
+.engine button {
+  padding: 8px 12px;
+  font: inherit;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+}
+.engine .numbers {
+  color: #444;
+  font-variant-numeric: tabular-nums;
+  gap: 24px;
+}
+.engine .results {
+  min-height: 320px;
+  border-top: 1px solid #eee;
+  padding-top: 12px;
+}
+.engine .summary {
+  color: #444;
+}
+.engine .lines {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-family: ui-monospace, monospace;
+  font-size: 13px;
+}
+.engine .lines li {
+  padding: 3px 0;
+  border-bottom: 1px solid #f4f4f4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.engine .lines .no {
+  display: inline-block;
+  width: 4.5rem;
+  color: #aaa;
+}
+.engine .dim {
+  color: #888;
+}
