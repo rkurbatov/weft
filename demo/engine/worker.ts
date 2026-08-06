@@ -25,6 +25,7 @@ offer(
     // would be write-only — the panel would have nothing to read back.
     views: {
       found: held.found,
+      corpusBytes: held.corpusBytes,
       steps: held.steps,
       abandoned: held.abandoned,
       needle: held.needle,

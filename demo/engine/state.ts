@@ -11,7 +11,7 @@
 import { cell, truthBy } from '#loom'
 import type { Port, Watchable } from '#loom'
 import { logLines, searching } from '../engine-common/corpus.ts'
-import type { Line, Progress } from '../engine-common/corpus.ts'
+import type { Line, Log, Progress } from '../engine-common/corpus.ts'
 
 export interface Found {
   /** The first fifty matching lines — what a screen can actually show. */
@@ -32,6 +32,8 @@ export interface Engine {
   /** The answer, growing while the run goes on. */
   readonly found: Watchable<Found>
   /** How many chunks have been published since this engine started. */
+  /** How much memory the corpus itself takes, in bytes. */
+  readonly corpusBytes: Watchable<number>
   readonly steps: Watchable<number>
   /** How many runs were called off before finishing. */
   readonly abandoned: Watchable<number>
@@ -51,8 +53,9 @@ const shown = (step: Progress, of: number): Found => ({
 
 export function engine(): Engine {
   const needle = cell('', { name: 'needle' })
-  const size = cell(200_000, { name: 'size' })
-  const log = cell<Line[]>(() => logLines(size.get()), { name: 'log' })
+  const size = cell(2_000_000, { name: 'size' })
+  const log = cell<Log>(() => logLines(size.get()), { name: 'log' })
+  const corpusBytes = cell(() => log.get().size, { name: 'corpusBytes' })
 
   // Instrumentation: written from inside the run, read by nothing in the graph.
   const steps = cell(0, { name: 'steps' })
@@ -64,8 +67,8 @@ export function engine(): Engine {
   // a second one written by hand.
   const runFor = truthBy<string, Found>(
     async (asked, { signal, soFar }) => {
-      const lines = log.peek()
-      const run = searching(lines, asked)
+      const held = log.peek()
+      const run = searching(held, asked)
 
       let step = run.next()
       while (step.done === false) {
@@ -74,10 +77,10 @@ export function engine(): Engine {
         // `soFar` would land nowhere anyway.
         if (signal.aborted) {
           abandoned.set(abandoned.peek() + 1)
-          return shown(step.value, lines.length)
+          return shown(step.value, held.length)
         }
         steps.set(steps.peek() + 1)
-        soFar(shown(step.value, lines.length))
+        soFar(shown(step.value, held.length))
         // Give the event loop a turn, so the tab stays alive and the abort
         // has a chance to arrive. Awaiting in a loop is the point here: this
         // loop is the long run, and yielding between chunks is what makes it
@@ -87,7 +90,7 @@ export function engine(): Engine {
         step = run.next()
       }
       steps.set(steps.peek() + 1)
-      return shown(step.value, lines.length)
+      return shown(step.value, held.length)
     },
     { name: 'found', empty: EMPTY },
   )
@@ -95,5 +98,5 @@ export function engine(): Engine {
   // What the panel watches: the run for whatever is typed right now.
   const found = cell(() => runFor(needle.get()).get(), { name: 'found' })
 
-  return { needle, size, found, steps, abandoned }
+  return { needle, size, found, corpusBytes, steps, abandoned }
 }

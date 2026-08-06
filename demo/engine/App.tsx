@@ -62,6 +62,7 @@ export function App(): ReactNode {
   const [typed, setTyped] = useState('')
   const [showing, setShowing] = useState(true)
   const steps = useLive(() => station.get().engine.view<number>('steps').get())
+  const corpusBytes = useLive(() => station.get().engine.view<number>('corpusBytes').get())
   const abandoned = useLive(() => station.get().engine.view<number>('abandoned').get())
   const sent = useLive(() => station.get().engine.view<number>('sent').get())
   const echoed = useLive(() => station.get().engine.view<string>('needle').get())
@@ -70,9 +71,19 @@ export function App(): ReactNode {
     <main className="engine">
       <h1>Searching a log that lives in another thread</h1>
       <p className="story">
-        Two hundred thousand lines of made-up service log are held by a worker, and so is the search
-        over them. This page holds nothing but a mirror of the answer. Type below: the box never
-        stutters, because nothing here is doing the searching.
+        Two million lines of made-up service log are searched by a worker, in chunks, and this page
+        holds nothing but a mirror of the answer. The log is one UTF-8 buffer with an index of line
+        offsets — the same lines as JavaScript strings would cost six hundred megabytes instead of a
+        hundred, and search three times slower. A line becomes a string only when it is shown. Plain
+        words are matched literally; anything with regex punctuation —{' '}
+        <code>payment (declined|accepted)</code>, <code>error \[db@</code> — is matched as a regular
+        expression.
+      </p>
+      <p className="story">
+        Two things to watch while you type. The result grows: the count is over the lines searched
+        so far, and it is a real count, not a spinner. And a run is <b>called off</b> when its
+        answer stops being wanted — you typed another letter, or you hid the results — so the
+        counter below climbs whenever you type faster than two million lines are searched.
       </p>
 
       <div className="row">
@@ -95,11 +106,14 @@ export function App(): ReactNode {
           the worker is searching for <b>{echoed === undefined ? '—' : `“${echoed}”`}</b>
         </span>
         <span>
-          it published <b>{steps ?? '—'}</b> chunks, and <b>{abandoned ?? '—'}</b> runs were called
-          off
+          it published <b>{steps ?? '—'}</b> chunks, and called off <b>{abandoned ?? '—'}</b> runs
         </span>
         <span>
           and the wire carried <b>{sent ?? '—'}</b> packets
+        </span>
+        <span>
+          the corpus itself is{' '}
+          <b>{corpusBytes === undefined ? '—' : `${(corpusBytes / 1024 / 1024).toFixed(0)} MB`}</b>
         </span>
       </div>
 
