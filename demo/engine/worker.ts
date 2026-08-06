@@ -25,7 +25,8 @@ offer(
     // would be write-only — the panel would have nothing to read back.
     views: {
       found: held.found,
-      searches: held.searches,
+      steps: held.steps,
+      abandoned: held.abandoned,
       needle: held.needle,
       size: held.size,
       // The pace made visible: how many packets the wire actually carried,

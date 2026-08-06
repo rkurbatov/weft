@@ -25,6 +25,18 @@
   margin: 12px 0;
   flex-wrap: wrap;
 }
+/* Numbers sit on their own line and wrap as a block: crammed into a flex row
+   beside the buttons they used to overlap them. */
+.engine .row.numbers {
+  display: block;
+  color: #555;
+  font-size: 0.95rem;
+  line-height: 1.6;
+}
+.engine .row.numbers span {
+  margin-right: 18px;
+  white-space: nowrap;
+}
 .engine .row .grow {
   flex: 1;
   display: flex;

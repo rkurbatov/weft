@@ -30,7 +30,7 @@ export interface Query<K, T> {
 }
 
 export function query<K, T>(
-  load: (key: K, asked: { signal: AbortSignal }) => Promise<T>,
+  load: (key: K, asked: { signal: AbortSignal; soFar: (value: T) => void }) => Promise<T>,
   options: QueryOptions<K>,
 ): Query<K, T> {
   const { keyOf, max, ...perSource } = options
@@ -69,7 +69,7 @@ export function query<K, T>(
       held.set(name, known)
       return known.feed
     }
-    const feed = source(asked => load(key, asked), {
+    const feed = source<T>(asked => load(key, asked), {
       ...perSource,
       name: `${perSource.name ?? 'query'}:${name}`,
     })

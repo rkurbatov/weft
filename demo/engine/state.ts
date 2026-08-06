@@ -1,58 +1,99 @@
 // The engine: a state module that lives wherever it is put.
 //
-// Ordinary weft — a port for what is typed, a port for how big the log is,
-// and one derived answer that does the searching. Nothing here knows about
-// workers, wires or panels, and that is the point of the page: the same file
+// Ordinary weft — ports for what the panel types, and a source that does the
+// searching. Nothing here knows about workers, wires or panels: the same file
 // runs in a worker or on the main thread without a character changing.
+//
+// The search is a long run, so it is a source with a body that reports as it
+// goes: every chunk publishes what it has, and the panel shows a real answer
+// over part of the log rather than a spinner over all of it.
 
-import { cell } from '#loom'
+import { cell, truthBy } from '#loom'
 import type { Port, Watchable } from '#loom'
-import { logLines, search } from '../engine-common/corpus.ts'
-import type { Line } from '../engine-common/corpus.ts'
+import { logLines, searching } from '../engine-common/corpus.ts'
+import type { Line, Progress } from '../engine-common/corpus.ts'
 
 export interface Found {
   /** The first fifty matching lines — what a screen can actually show. */
   readonly lines: readonly Line[]
-  /** How many matched altogether. */
+  /** How many matched among the lines looked at so far. */
   readonly total: number
-  /** How long this search took, in milliseconds. */
-  readonly ms: number
-  /** How many lines were searched through. */
+  /** How many lines have been looked at, out of how many there are. */
+  readonly seen: number
   readonly of: number
+  /** Whether this is the whole answer or a real answer over part of the log. */
+  readonly done: boolean
+  readonly ms: number
 }
 
 export interface Engine {
-  /** What the panel typed. */
   readonly needle: Port<string>
-  /** How many lines of made-up log to search. */
   readonly size: Port<number>
-  /** The answer. Recomputed only while somebody is looking at it. */
+  /** The answer, growing while the run goes on. */
   readonly found: Watchable<Found>
-  /** How many searches have actually run since this engine started. */
-  readonly searches: Watchable<number>
+  /** How many chunks have been published since this engine started. */
+  readonly steps: Watchable<number>
+  /** How many runs were called off before finishing. */
+  readonly abandoned: Watchable<number>
 }
+
+const EMPTY: Found = { lines: [], total: 0, seen: 0, of: 0, done: true, ms: 0 }
+
+/** A step of the run, said in the words the panel reads. */
+const shown = (step: Progress, of: number): Found => ({
+  lines: step.found,
+  total: step.total,
+  seen: step.seen,
+  of,
+  done: step.done,
+  ms: step.ms,
+})
 
 export function engine(): Engine {
   const needle = cell('', { name: 'needle' })
   const size = cell(200_000, { name: 'size' })
-
-  // The log is derived too: change the size and another one is built, with
-  // nobody having to remember to rebuild anything.
   const log = cell<Line[]>(() => logLines(size.get()), { name: 'log' })
 
-  // Instrumentation, written from inside the formula on purpose: it feeds
-  // nothing in the graph and nothing in the graph reads it.
-  const ran = cell(0, { name: 'searches' })
+  // Instrumentation: written from inside the run, read by nothing in the graph.
+  const steps = cell(0, { name: 'steps' })
+  const abandoned = cell(0, { name: 'abandoned' })
 
-  const found = cell<Found>(
-    () => {
-      const lines = log.get()
-      const answer = search(lines, needle.get())
-      ran.set(ran.peek() + 1)
-      return { lines: answer.found, total: answer.total, ms: answer.ms, of: lines.length }
+  // Keyed by the pattern, not by nothing: a source is asked once per key, so
+  // the key has to be the question. Typing changes the key, which is what
+  // calls the old run off — the same mechanism the order asks for, rather than
+  // a second one written by hand.
+  const runFor = truthBy<string, Found>(
+    async (asked, { signal, soFar }) => {
+      const lines = log.peek()
+      const run = searching(lines, asked)
+
+      let step = run.next()
+      while (step.done === false) {
+        // Between chunks: has anybody stopped caring? A run whose demand has
+        // left, or whose pattern has changed, is called off here — and its
+        // `soFar` would land nowhere anyway.
+        if (signal.aborted) {
+          abandoned.set(abandoned.peek() + 1)
+          return shown(step.value, lines.length)
+        }
+        steps.set(steps.peek() + 1)
+        soFar(shown(step.value, lines.length))
+        // Give the event loop a turn, so the tab stays alive and the abort
+        // has a chance to arrive. Awaiting in a loop is the point here: this
+        // loop is the long run, and yielding between chunks is what makes it
+        // interruptible at all.
+        // oxlint-disable-next-line no-await-in-loop
+        await new Promise(resolve => setTimeout(resolve, 0))
+        step = run.next()
+      }
+      steps.set(steps.peek() + 1)
+      return shown(step.value, lines.length)
     },
-    { name: 'found' },
+    { name: 'found', empty: EMPTY },
   )
 
-  return { needle, size, found, searches: ran }
+  // What the panel watches: the run for whatever is typed right now.
+  const found = cell(() => runFor(needle.get()).get(), { name: 'found' })
+
+  return { needle, size, found, steps, abandoned }
 }

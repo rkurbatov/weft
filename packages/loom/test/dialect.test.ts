@@ -7,7 +7,7 @@ import { owned, port, subscribe } from '#weft'
 import { cell, laid, notes, region, sends, truth, truthBy, will } from '#loom'
 import type { Note } from '#weft'
 import type { Channel as Wire } from '#weft'
-import { settle, wait, world } from '#testkit'
+import { settle, until, wait, world } from '#testkit'
 
 describe('the Loom dialect', () => {
   test('truth reads plain; flight, fault and asked stand beside as adjectives', async () => {
@@ -352,5 +352,50 @@ describe('truth by key, and a module that can be put down', () => {
     await clock.advance(500)
     await settle(2)
     assert.equal(asks, asked, 'and asked nothing after')
+  })
+})
+
+describe('a truth that reports as it goes', () => {
+  test('the panel sees the run grow, and the last value is the whole answer', async () => {
+    const clock = world()
+    let step: (() => void) | undefined
+    const found = truth<number>(
+      async ({ soFar }) => {
+        for (let i = 1; i <= 3; i++) {
+          soFar(i)
+          await new Promise<void>(resolve => {
+            step = resolve
+          })
+        }
+        return 99
+      },
+      { name: 'run', empty: 0, timers: clock.timers },
+    )
+
+    const seen: number[] = []
+    until(subscribe(found, value => seen.push(value)))
+    await settle(3)
+    assert.deepEqual(seen.at(-1), 1, 'a real answer over part of the work')
+
+    step?.()
+    await settle(3)
+    assert.deepEqual(seen.at(-1), 2)
+    step?.()
+    await settle(3)
+    step?.()
+    await settle(3)
+    assert.equal(seen.at(-1), 99, 'and the return is the finished one')
+  })
+
+  test('a body that ignores both handles works exactly as it did', async () => {
+    const clock = world()
+    const plain = truth(() => Promise.resolve('answer'), {
+      name: 'plain',
+      empty: '',
+      timers: clock.timers,
+    })
+    until(subscribe(plain, () => {}))
+    await settle(3)
+    assert.equal(plain.peek(), 'answer')
   })
 })

@@ -26,14 +26,25 @@ function Results({ needle }: { needle: string }): ReactNode {
     )
   }
   if (found === undefined) return <p className="dim">asking the worker…</p>
-  if (found.total === 0) return <p className="dim">Nothing matched “{needle}”.</p>
+  if (found.total === 0) {
+    // Nothing found *yet* is not nothing found: a run over part of the log is
+    // a real answer, and saying "no matches" while it goes on would be a lie.
+    return found.done ? (
+      <p className="dim">Nothing matched “{needle}”.</p>
+    ) : (
+      <p className="dim">
+        searching… {found.seen.toLocaleString('en')} of {found.of.toLocaleString('en')} lines
+      </p>
+    )
+  }
 
   return (
     <>
       <p className="summary">
-        <b>{found.total.toLocaleString('en')}</b> matching lines out of{' '}
-        {found.of.toLocaleString('en')}, searched in <b>{found.ms.toFixed(0)} ms</b>
-        {found.total > found.lines.length ? ' — first fifty shown' : ''}
+        <b>{found.total.toLocaleString('en')}</b> matching lines in{' '}
+        <b>{found.seen.toLocaleString('en')}</b> of {found.of.toLocaleString('en')} searched
+        {found.done ? '' : ' — still going'}, {found.ms.toFixed(0)} ms
+        {found.total > found.lines.length ? ', first fifty shown' : ''}
       </p>
       <ol className="lines">
         {found.lines.map(line => (
@@ -50,7 +61,8 @@ function Results({ needle }: { needle: string }): ReactNode {
 export function App(): ReactNode {
   const [typed, setTyped] = useState('')
   const [showing, setShowing] = useState(true)
-  const searches = useLive(() => station.get().engine.view<number>('searches').get())
+  const steps = useLive(() => station.get().engine.view<number>('steps').get())
+  const abandoned = useLive(() => station.get().engine.view<number>('abandoned').get())
   const sent = useLive(() => station.get().engine.view<number>('sent').get())
   const echoed = useLive(() => station.get().engine.view<string>('needle').get())
 
@@ -83,7 +95,8 @@ export function App(): ReactNode {
           the worker is searching for <b>{echoed === undefined ? '—' : `“${echoed}”`}</b>
         </span>
         <span>
-          it has run <b>{searches ?? '—'}</b> searches
+          it published <b>{steps ?? '—'}</b> chunks, and <b>{abandoned ?? '—'}</b> runs were called
+          off
         </span>
         <span>
           and the wire carried <b>{sent ?? '—'}</b> packets

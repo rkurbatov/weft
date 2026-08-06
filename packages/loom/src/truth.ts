@@ -82,12 +82,23 @@ function faceOf<T>(
   }
 }
 
-export function truth<T>(ask: () => Promise<T>, passport: TruthPassport<T>): Truth<T> {
+/**
+ * What the world says, asked for once and kept fresh by its passport.
+ *
+ * A long ask may report as it goes: the body is handed `soFar` beside the
+ * abort signal, and every value it puts down is a real answer — a count over
+ * part of a log is a count. Bodies that ignore both arguments are the common
+ * case and keep working exactly as before.
+ */
+export function truth<T>(
+  ask: (asked: { signal: AbortSignal; soFar: (value: T) => void }) => Promise<T>,
+  passport: TruthPassport<T>,
+): Truth<T> {
   const name = passport.name ?? 'truth'
   const feed = source<Carried<T>>(
-    async () => {
+    async ({ signal, soFar }) => {
       const askedAt = Date.now()
-      return { value: await ask(), askedAt }
+      return { value: await ask({ signal, soFar: value => soFar({ value, askedAt }) }), askedAt }
     },
     {
       name,
@@ -101,16 +112,25 @@ export function truth<T>(ask: () => Promise<T>, passport: TruthPassport<T>): Tru
   return faceOf(feed, passport.empty, () => feed.refresh(), name)
 }
 
-/** Keyed truth: the same door, a family behind it. */
+/**
+ * Keyed truth: the same door, a family behind it.
+ *
+ * The key is the question, so changing it calls the old run off — which is
+ * how a long run is cancelled without anybody writing cancellation. As with
+ * `truth`, the body may report as it goes.
+ */
 export function truthBy<K, T>(
-  ask: (key: K) => Promise<T>,
+  ask: (key: K, asked: { signal: AbortSignal; soFar: (value: T) => void }) => Promise<T>,
   passport: TruthPassport<T>,
 ): (key: K) => Truth<T> {
   const name = passport.name ?? 'truth'
   const family = query<K, Carried<T>>(
-    async (key: K) => {
+    async (key: K, { signal, soFar }) => {
       const askedAt = Date.now()
-      return { value: await ask(key), askedAt }
+      return {
+        value: await ask(key, { signal, soFar: value => soFar({ value, askedAt }) }),
+        askedAt,
+      }
     },
     {
       name,

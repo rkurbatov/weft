@@ -14,7 +14,7 @@ import type { Source, SourceOptions } from './shape.ts'
 export type { Source, SourceOptions }
 
 export function source<T>(
-  load: (asked: { signal: AbortSignal }) => Promise<T>,
+  load: (asked: { signal: AbortSignal; soFar: (value: T) => void }) => Promise<T>,
   options: SourceOptions = {},
 ): Source<T> {
   const name = options.name ?? 'source'
@@ -184,7 +184,28 @@ export function source<T>(
       }, timeout)
     }
     state.set(loading(state.peek(), now()))
-    void load({ signal: controller.signal })
+
+    /**
+     * What the work has so far.
+     *
+     * A long run — a histogram over a hundred megabytes — is not one answer at
+     * the end: every step of it is a real value, and a screen should be able to
+     * show it. So the body may put down what it has, as often as it likes, and
+     * the last one it puts down is simply the answer until the next.
+     *
+     * Nothing marks these as unfinished, on purpose. What "partial" means —
+     * where the work stopped, whether a budget ran out — is the application's
+     * own business, said inside its own value; the library only carries it.
+     * A run whose demand has left is disowned like any other: its `soFar` does
+     * nothing, so a body that keeps going for a moment cannot write into a
+     * question nobody asked.
+     */
+    const soFar = (value: T): void => {
+      if (mine !== generation) return
+      state.set(arrived(value, now()))
+    }
+
+    void load({ signal: controller.signal, soFar })
       .then(
         value => {
           if (mine !== generation) return
