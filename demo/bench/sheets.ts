@@ -10,10 +10,10 @@
 //   pnpm demo:bench --runs=7        more repetitions, median reported
 
 import { subscribe } from '#weft'
-import { key, sampleSheet, sizeOf } from './common/sample.ts'
-import type { Contents, SheetShape } from './common/sample.ts'
-import { createSheet as classic } from './spreadsheet/store.ts'
-import { createSheet as onWeft } from './spreadsheet-weft/sheet.ts'
+import { key, sampleSheet, sizeOf } from '#demo'
+import type { Contents, SheetShape } from '#demo'
+import { createSheet as classic } from '../spreadsheet/store.ts'
+import { createSheet as onWeft } from '../spreadsheet-weft/sheet.ts'
 
 interface Sheet {
   watch(at: string, told: () => void): () => void

@@ -1,5 +1,16 @@
-// React binding. Deliberately thin: the graph lives outside the tree,
-// React is one of its outputs.
+// The seam between the engine and React, and nothing above it.
+//
+// Everything here knows only the engine: a cell, a source, a command, a kept
+// row. It does not know that a dialect exists, and it never will — which is
+// what lets an application use React with the engine directly, without taking
+// Loom's words along with it.
+//
+// The other seam lives in the dialect, at '#loom/react': it knows the words of
+// an application and is written in terms of this one. Two seams, one below the
+// other, not two ways of doing the same thing.
+//
+// Deliberately thin: the graph lives outside the tree, React is one of its
+// outputs.
 
 import {
   useCallback,
@@ -79,7 +90,7 @@ export interface InputBinding {
 
 /** The two-way seam for a text field: the input's value in, keystrokes out.
  *  Spread it onto an <input>, <textarea> or <select> and be done. */
-export function useInputBinding(field: Port<string>): InputBinding {
+export function useField(field: Port<string>): InputBinding {
   const value = useCell(field)
   const ref = useRef(field)
   ref.current = field

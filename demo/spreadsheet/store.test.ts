@@ -5,8 +5,8 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { createSheet } from './store.ts'
 import { refsOf } from './depends.ts'
-import { refName } from '../common/address.ts'
-import { sampleSheet, key } from '../common/sample.ts'
+import { refName } from '#demo'
+import { sampleSheet, key } from '#demo'
 
 function small() {
   return createSheet(

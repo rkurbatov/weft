@@ -3,14 +3,13 @@
 // Close the leader and watch the lock hand the station to the next tab: the
 // book survives the succession, the screens never learn who carries them.
 
-import { StrictMode } from 'react'
 import type { ReactNode } from 'react'
-import { createRoot } from 'react-dom/client'
+import { mount } from '#demo/mount.tsx'
 import { perFrame } from '#weft'
 import { carry } from '#loom'
 import { useLive } from '#loom/react'
-import '../kanban-common/kanban.css'
-import { kanbanServer } from '../kanban-common/server.ts'
+import '#kanban/kanban.css'
+import { kanbanServer } from '#kanban'
 import { kanban } from '../kanban-weft/state.ts'
 import { kanbanMirror, serveKanban } from '../kanban-weft/mirror.ts'
 import { App } from '../kanban-weft/App.tsx'
@@ -80,8 +79,4 @@ function Carried(): ReactNode {
   )
 }
 
-createRoot(document.getElementById('root') as HTMLElement).render(
-  <StrictMode>
-    <Carried />
-  </StrictMode>,
-)
+mount(<Carried />)

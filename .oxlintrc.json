@@ -44,7 +44,7 @@
       }
     },
     {
-      "files": ["**/main.tsx"],
+      "files": ["**/main.tsx", "demo/common/mount.tsx"],
       "rules": {
         "import/no-unassigned-import": "off"
       }

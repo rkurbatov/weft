@@ -1,6 +1,6 @@
 // The running app: one server, one store, the bot, the first load.
 
-import { kanbanServer } from '../kanban-common/server.ts'
+import { kanbanServer } from '#kanban'
 import { boardLoad } from './actions.ts'
 import { makeStore } from './store.ts'
 

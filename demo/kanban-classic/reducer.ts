@@ -1,7 +1,7 @@
 // One reducer for the board: normalized byId maps, per-column id lists,
 // optimistic moves and deletes with hand-kept rollback bookkeeping.
 
-import type { Card } from '../kanban-common/types.ts'
+import type { Card } from '#kanban'
 import type { UnknownAction } from 'redux'
 import * as A from './actions.ts'
 import type { BoardAction } from './actions.ts'

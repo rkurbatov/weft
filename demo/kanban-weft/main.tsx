@@ -3,11 +3,10 @@
 // runs at import time of anything — the composition is a place, not a side
 // effect.
 
-import { StrictMode } from 'react'
-import { createRoot } from 'react-dom/client'
+import { mount } from '#demo/mount.tsx'
 import { region } from '#loom'
-import '../kanban-common/kanban.css'
-import { kanbanServer } from '../kanban-common/server.ts'
+import '#kanban/kanban.css'
+import { kanbanServer } from '#kanban'
 import { kanban } from './state.ts'
 import { App } from './App.tsx'
 
@@ -15,8 +14,4 @@ const server = kanbanServer()
 const board = region('kanban', () => kanban(server))
 server.startBot()
 
-createRoot(document.getElementById('root') as HTMLElement).render(
-  <StrictMode>
-    <App app={board.value} />
-  </StrictMode>,
-)
+mount(<App app={board.value} />)

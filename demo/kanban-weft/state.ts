@@ -5,8 +5,8 @@
 
 import { laid, cell, notes, sends, truth, will } from '#loom'
 import type { Refusal, Truth } from '#loom'
-import type { BoardSnapshot, Card, ColumnData } from '../kanban-common/types.ts'
-import type { KanbanServer } from '../kanban-common/server.ts'
+import type { BoardSnapshot, Card, ColumnData } from '#kanban'
+import type { KanbanServer } from '#kanban'
 import type { Watchable } from '#weft'
 
 type Move = { id: string; into: string; at: number }

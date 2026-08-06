@@ -4,7 +4,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { createSheet as classic } from '../spreadsheet/store.ts'
 import { createSheet as onWeft } from './sheet.ts'
-import { sampleSheet, key } from '../common/sample.ts'
+import { sampleSheet, key } from '#demo'
 
 test('both sheets show the same thing in every cell', () => {
   const shape = { rows: 300, cols: 26 }

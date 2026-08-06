@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
-import { Grid, Toolbar } from '../common/ui.tsx'
-import { key, sampleSheet, shapeFromLocation, sizeOf } from '../common/sample.ts'
-import { countGridRender, timeEdit } from '../common/stats.ts'
+import { Grid, Toolbar } from '#demo/ui.tsx'
+import { key, sampleSheet, shapeFromLocation, sizeOf } from '#demo'
+import { countGridRender, timeEdit } from '#demo'
 import { createSheet } from './sheet.ts'
 import { cellOf } from './Cell.tsx'
 

@@ -2,7 +2,7 @@
 
 import { applyMiddleware, combineReducers, legacy_createStore as createStore } from 'redux'
 import { createEpicMiddleware } from 'redux-observable'
-import type { KanbanServer } from '../kanban-common/server.ts'
+import type { KanbanServer } from '#kanban'
 import type { BoardAction } from './actions.ts'
 import { makeEpics } from './epics.ts'
 import type { RootState } from './epics.ts'

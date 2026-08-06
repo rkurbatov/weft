@@ -6,8 +6,8 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { subscribe } from '#weft'
-import type { KanbanServer } from '../kanban-common/server.ts'
-import { kanbanServer } from '../kanban-common/server.ts'
+import type { KanbanServer } from '#kanban'
+import { kanbanServer } from '#kanban'
 import type { Kanban } from './state.ts'
 
 export interface Bench {

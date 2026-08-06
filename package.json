@@ -24,7 +24,11 @@
     "#data": "./packages/data/src/index.ts",
     "#data/*": "./packages/data/src/*",
     "#table": "./packages/table/src/index.ts",
-    "#table/*": "./packages/table/src/*"
+    "#table/*": "./packages/table/src/*",
+    "#demo": "./demo/common/index.ts",
+    "#demo/*": "./demo/common/*",
+    "#kanban": "./demo/kanban-common/index.ts",
+    "#kanban/*": "./demo/kanban-common/*"
   },
   "scripts": {
     "test": "node --test \"packages/**/*.test.ts\" \"test/**/*.test.ts\" \"demo/**/*.test.ts\"",
@@ -35,9 +39,9 @@
     "check": "tsc --noEmit",
     "demo": "vite",
     "demo:build": "vite build",
-    "demo:bench": "node demo/bench.ts",
-    "demo:list": "node demo/list-bench.ts",
-    "demo:folds": "node demo/fold-bench.ts",
+    "demo:bench": "node demo/bench/sheets.ts",
+    "demo:list": "node demo/bench/lists.ts",
+    "demo:folds": "node demo/bench/folds.ts",
     "demo:preview": "vite preview",
     "lint": "oxlint",
     "format": "oxfmt",

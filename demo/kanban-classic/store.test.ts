@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { kanbanServer } from '../kanban-common/server.ts'
+import { kanbanServer } from '#kanban'
 import { makeStore } from './store.ts'
 import { appStop, boardLoad, cardMove } from './actions.ts'
 

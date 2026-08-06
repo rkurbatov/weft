@@ -1,7 +1,7 @@
 // Selectors: memoized where reference stability matters for the tree.
 
 import { createSelector } from 'reselect'
-import type { BoardColumnView } from '../kanban-common/board.tsx'
+import type { BoardColumnView } from '#kanban/board.tsx'
 import type { RootState } from './epics.ts'
 
 const selectColumns = (state: RootState) => state.board.columns

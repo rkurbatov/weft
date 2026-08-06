@@ -6,11 +6,11 @@
 
 import { batch, blocks, family, port, untracked } from '#weft'
 import type { Blocks, Derived, Port } from '#weft'
-import { refName } from '../common/address.ts'
-import { fail, foldJoin, foldOne, foldZero, plan, run, same, show } from '../common/formula.ts'
-import type { FoldName, Value } from '../common/formula.ts'
-import type { Contents } from '../common/sample.ts'
-import type { Ref } from '../common/address.ts'
+import { refName } from '#demo'
+import { fail, foldJoin, foldOne, foldZero, plan, run, same, show } from '#demo'
+import type { FoldName, Value } from '#demo'
+import type { Contents } from '#demo'
+import type { Ref } from '#demo'
 
 const LOOP: Value = { error: '#CYCLE!' }
 

@@ -4,7 +4,7 @@
 import type { ReactNode } from 'react'
 import { Provider, useDispatch, useSelector } from 'react-redux'
 import { Loader2 } from 'lucide-react'
-import { BoardView } from '../kanban-common/board.tsx'
+import { BoardView } from '#kanban/board.tsx'
 import { Button } from '../kanban-common/ui/button.tsx'
 import { boardLoad, cardAdd, cardDelete, cardMove } from './actions.ts'
 import {

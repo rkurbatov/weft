@@ -7,7 +7,7 @@ import { adopt, cell, offer } from '#loom'
 import type { Refusal } from '#loom'
 import type { OfferOptions } from '#loom'
 import type { Channel, Watchable } from '#weft'
-import type { Card, ColumnData } from '../kanban-common/types.ts'
+import type { Card, ColumnData } from '#kanban'
 import type { Kanban } from './state.ts'
 
 /** The station's side: what of the kanban goes on the wire. */

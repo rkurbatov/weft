@@ -1,6 +1,6 @@
 // Action constants and creators, the usual way.
 
-import type { BoardSnapshot, Card } from '../kanban-common/types.ts'
+import type { BoardSnapshot, Card } from '#kanban'
 
 export const BOARD_LOAD = 'board/LOAD'
 export const BOARD_LOAD_SUCCESS = 'board/LOAD_SUCCESS'

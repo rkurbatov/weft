@@ -14,7 +14,7 @@ import { Component, StrictMode, Suspense, act, createElement as h, useRef, useSt
 import type { ReactNode } from 'react'
 import { port } from '#weft'
 import { source } from '#weft'
-import { useCell, useInputBinding, useKeepRow, useSourceValue } from '#react'
+import { useCell, useField, useKeepRow, useSourceValue } from '#react'
 import { useLive } from '#loom/react'
 import { wait } from '#testkit'
 
@@ -83,10 +83,10 @@ describe('the React seam, rendered', () => {
     assert.deepEqual(life, ['on', 'off']) // and leaves with the screen
   })
 
-  test('useInputBinding: keystrokes land in the input, the input lands in the field', () => {
+  test('useField: keystrokes land in the input, the input lands in the field', () => {
     const title = port('', { name: 'title' })
     function Field(): ReactNode {
-      return h('input', { ...useInputBinding(title) })
+      return h('input', { ...useField(title) })
     }
     const shown = mount(h(Field))
     const box = shown.el.querySelector('input')

@@ -5,7 +5,7 @@
 import type { ReactNode } from 'react'
 import { Loader2, WifiOff } from 'lucide-react'
 import { useLive } from '#loom/react'
-import { BoardView } from '../kanban-common/board.tsx'
+import { BoardView } from '#kanban/board.tsx'
 import { Button } from '../kanban-common/ui/button.tsx'
 import type { Kanban } from './state.ts'
 

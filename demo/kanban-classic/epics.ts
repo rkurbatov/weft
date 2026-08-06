@@ -14,7 +14,7 @@ import {
   switchMap,
   takeUntil,
 } from 'rxjs/operators'
-import type { KanbanServer } from '../kanban-common/server.ts'
+import type { KanbanServer } from '#kanban'
 import * as A from './actions.ts'
 import type { BoardAction } from './actions.ts'
 import type { BoardState } from './reducer.ts'
