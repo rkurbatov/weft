@@ -39,6 +39,10 @@ describe('the React seam, rendered', () => {
     }
   }
 
+  // React reports a caught error through `console.error`, so a test that wants
+  // a boundary to catch something prints a stack that looks like a failure and
+  // is not one. Where that happens it is silenced by hand, and the silencing is
+  // counted: a boundary that never fired must not pass for a working one.
   class Boundary extends Component<{ children: ReactNode }, { trouble: unknown }> {
     override state = { trouble: null as unknown }
     static getDerivedStateFromError(trouble: unknown): { trouble: unknown } {
@@ -151,10 +155,21 @@ describe('the React seam, rendered', () => {
       h(Boundary, null, h(Suspense, { fallback: h('i', null, 'wait') }, h(Shows))),
     )
     assert.equal(shown.el.textContent, 'wait')
-    await act(async () => {
-      await wait(20)
-    })
+    // React's own report of a caught error is not this test's output.
+    const before = console.error
+    let complained = 0
+    console.error = () => {
+      complained++
+    }
+    try {
+      await act(async () => {
+        await wait(20)
+      })
+    } finally {
+      console.error = before
+    }
     assert.match(shown.el.textContent ?? '', /the world is down/)
+    assert.ok(complained > 0, 'the boundary really caught it, rather than nothing happening')
     shown.unmount()
   })
 
