@@ -8,12 +8,14 @@
 // goes: every chunk publishes what it has, and the panel shows a real answer
 // over part of the log rather than a spinner over all of it.
 
-import { cell, truthBy } from '#loom'
+import { cell, giveWay, truthBy } from '#loom'
 import type { Port, Watchable } from '#loom'
 import { logLines, searching } from '../engine-common/corpus.ts'
 import type { Line, Log, Progress } from '../engine-common/corpus.ts'
 
 export interface Found {
+  /** Matches per bucket — the bulk number that crosses the wire. */
+  readonly hist: Float64Array
   /** The first fifty matching lines — what a screen can actually show. */
   readonly lines: readonly Line[]
   /** How many matched among the lines looked at so far. */
@@ -39,10 +41,19 @@ export interface Engine {
   readonly abandoned: Watchable<number>
 }
 
-const EMPTY: Found = { lines: [], total: 0, seen: 0, of: 0, done: true, ms: 0 }
+const EMPTY: Found = {
+  hist: new Float64Array(24),
+  lines: [],
+  total: 0,
+  seen: 0,
+  of: 0,
+  done: true,
+  ms: 0,
+}
 
 /** A step of the run, said in the words the panel reads. */
 const shown = (step: Progress, of: number): Found => ({
+  hist: step.hist,
   lines: step.found,
   total: step.total,
   seen: step.seen,
@@ -81,12 +92,11 @@ export function engine(): Engine {
         }
         steps.set(steps.peek() + 1)
         soFar(shown(step.value, held.length))
-        // Give the event loop a turn, so the tab stays alive and the abort
-        // has a chance to arrive. Awaiting in a loop is the point here: this
-        // loop is the long run, and yielding between chunks is what makes it
-        // interruptible at all.
+        // Let the page paint and the abort arrive. Awaiting in a loop is the
+        // point here: this loop is the long run, and the yield between chunks
+        // is what makes it interruptible at all.
         // oxlint-disable-next-line no-await-in-loop
-        await new Promise(resolve => setTimeout(resolve, 0))
+        await giveWay()
         step = run.next()
       }
       steps.set(steps.peek() + 1)

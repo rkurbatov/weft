@@ -34,6 +34,7 @@ export {
   command,
   derived,
   family,
+  giveWay,
   graph,
   journal,
   onCommandFailure,

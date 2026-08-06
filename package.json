@@ -42,6 +42,7 @@
     "demo:bench": "node demo/bench/sheets.ts",
     "demo:list": "node demo/bench/lists.ts",
     "demo:folds": "node demo/bench/folds.ts",
+    "demo:wire": "node demo/bench/wire.ts",
     "demo:preview": "vite preview",
     "lint": "oxlint",
     "format": "oxfmt",

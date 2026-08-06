@@ -9,10 +9,16 @@ import type { Timers } from '#graph/time.ts'
 import { cleanupWith } from './lifetime.ts'
 
 /** Let promise callbacks run. The shortest wait there is. */
+/**
+ * Let queued work run. A timeout on purpose rather than the library's
+ * `giveWay`: settling in a test has to wait for timers as well, and the fast
+ * yield runs before them.
+ */
 export function settle(turns = 1): Promise<void> {
   return turns <= 1
     ? new Promise(resolve => setTimeout(resolve, 0))
     : (async () => {
+        // oxlint-disable-next-line no-await-in-loop
         for (let i = 0; i < turns; i++) await new Promise(resolve => setTimeout(resolve, 0))
       })()
 }

@@ -145,6 +145,15 @@ export interface Progress {
   readonly seen: number
   readonly done: boolean
   readonly ms: number
+  /**
+   * Matches per hour of the day, as a typed array.
+   *
+   * Here because a screen wants to draw it, and because it is the thing З-6
+   * asks about: bulk numbers crossing a wire ten times a second. A histogram
+   * of twenty-four buckets is small; the page also builds a wide one on
+   * demand, to show what the size does to the crossing.
+   */
+  readonly hist: Float64Array
 }
 
 /**
@@ -165,14 +174,16 @@ export function* searching(
   needle: string,
   chunk = 25_000,
   limit = 50,
+  buckets = 24,
 ): Generator<Progress, Progress, undefined> {
   const started = performance.now()
   const found: Line[] = []
+  const hist = new Float64Array(buckets)
   let total = 0
   let seen = 0
 
   if (needle === '') {
-    return { found, total, seen: log.length, done: true, ms: 0 }
+    return { found, total, seen: log.length, done: true, ms: 0, hist }
   }
 
   const asRegex = isRegex(needle)
@@ -182,7 +193,7 @@ export function* searching(
       re = new RegExp(needle)
     } catch {
       // Half a typed expression is a normal state of a text box, not an error.
-      return { found, total, seen: log.length, done: true, ms: 0 }
+      return { found, total, seen: log.length, done: true, ms: 0, hist }
     }
   }
   const target = asRegex ? undefined : bytesOf(needle)
@@ -211,6 +222,9 @@ export function* searching(
 
       if (!hit) continue
       total++
+      // The bucket a line falls into: a stand-in for a real dimension, decided
+      // by the line number so it costs nothing to compute.
+      hist[i % buckets] = (hist[i % buckets] ?? 0) + 1
       // Only the lines that will be shown become strings.
       if (found.length < limit) found.push({ id: i, text: log.at(i) })
     }
@@ -221,9 +235,12 @@ export function* searching(
       seen,
       done: seen >= log.length,
       ms: performance.now() - started,
+      // A copy, because the running one keeps changing and what is published
+      // has to stand still.
+      hist: hist.slice(),
     }
     if (step.done) return step
     yield step
   }
-  return { found, total, seen, done: true, ms: performance.now() - started }
+  return { found, total, seen, done: true, ms: performance.now() - started, hist: hist.slice() }
 }
