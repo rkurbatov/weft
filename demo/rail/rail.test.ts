@@ -3,7 +3,7 @@ import { test } from 'node:test'
 import { subscribe } from '#weft'
 import { railServer } from './server.ts'
 import { rail } from './state.ts'
-import { held, wait } from '../../test/kit/index.ts'
+import { held, wait } from '#testkit'
 
 test('the rail feeds itself: a look starts the feed and loads pages; leaving stops both', async () => {
   const server = railServer({ seed: 3, size: 90, pageDelay: 5, tickEvery: 10 })

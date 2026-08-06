@@ -36,7 +36,7 @@
   },
   "overrides": [
     {
-      "files": ["**/*.test.ts", "test/kit/*.ts", "demo/bench.ts"],
+      "files": ["**/*.test.ts", "packages/testkit/src/*.ts", "demo/bench.ts"],
       "rules": {
         "no-console": "off",
         "no-await-in-loop": "off",
@@ -50,7 +50,7 @@
       }
     },
     {
-      "files": ["packages/ipc/src/*.ts"],
+      "files": ["packages/link/src/*.ts"],
       "rules": {
         "unicorn/require-post-message-target-origin": "off"
       }

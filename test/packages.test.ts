@@ -18,11 +18,13 @@ import { describe, test } from 'node:test'
 
 /** Bottom first: a package may use the ones before it, never the ones after. */
 const stack = [
-  'graph', // cells, engines, regions, waves, journal, and the plain values below
-  'async', // the shape of an answer from elsewhere, sources, queries, reconciling
-  'rel', // tables, folds, the planner, and the relational layer over them
-  'offline', // disk, kept values, the outbox and the projection over it
-  'ipc', // transport, addressing, the tab protocol, serving and mirroring
+  'data', // keys, structural sharing, arrangement, the notice channel
+  'graph', // cells, engines, regions, ticks, the journal
+  'remote', // the shape of an answer from elsewhere, sources, queries, reconciling
+  'table', // rows with a key, live views, folds, carriers and the planner
+  'rel', // the relational layer: trees as data, runners, the builder
+  'keep', // disk, kept values, the outbox and the projection over it
+  'link', // transport, addressing, the tab protocol, serving and mirroring
   'weft', // the front door: everything above, in one import
   'react', // hooks over the door
   'loom', // the dialect
@@ -32,7 +34,11 @@ type Package = (typeof stack)[number]
 
 const rank = new Map<Package, number>(stack.map((name, i) => [name, i]))
 
-/** Which package a file belongs to. */
+/**
+ * Which package a file belongs to. The test kit is deliberately outside the
+ * order: it is used by the tests of every package and used by no source, so it
+ * has no place in a stack that talks about what may depend on what.
+ */
 function owner(path: string): Package | undefined {
   const name = path.split('/')[1] as Package
   return rank.has(name) ? name : undefined

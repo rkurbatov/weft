@@ -15,14 +15,14 @@
 // The escape hatch is the same as everywhere: a closure may stand in for any
 // expression, and the tree honestly loses its canon.
 
-import { derived } from '#graph/graph/graph.ts'
-import type { Watchable } from '#graph/graph/graph.ts'
-import type { Key, Table } from '#rel/table/table.ts'
-import { field as fieldExpr, lit } from '#rel/rel/expr.ts'
-import type { Expr, Row } from '#rel/rel/expr.ts'
-import { agg as aggNode, filter as filterNode, source as sourceNode } from '#rel/rel/node.ts'
-import type { FoldDecl, RelNode } from '#rel/rel/node.ts'
-import { relate } from '#rel/rel/live.ts'
+import { derived } from '#graph/graph.ts'
+import type { Watchable } from '#graph/graph.ts'
+import type { Key, Table } from '#table/table.ts'
+import { field as fieldExpr, lit } from '#rel/expr.ts'
+import type { Expr, Row } from '#rel/expr.ts'
+import { agg as aggNode, filter as filterNode, source as sourceNode } from '#rel/node.ts'
+import type { FoldDecl, RelNode } from '#rel/node.ts'
+import { relate } from '#rel/live.ts'
 import { tableOfFeed } from './feed.ts'
 import type { Feed } from './feed.ts'
 

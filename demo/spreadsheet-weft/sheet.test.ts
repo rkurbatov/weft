@@ -7,7 +7,7 @@ import assert from 'node:assert/strict'
 import { subscribe } from '#weft'
 import { createSheet } from './sheet.ts'
 import { sampleSheet, key } from '../common/sample.ts'
-import { until } from '../../test/kit/index.ts'
+import { until } from '#testkit'
 
 function small() {
   return createSheet(

@@ -14,7 +14,7 @@ export {
   trace,
   graph,
   attachProbe,
-} from './graph/graph.ts'
+} from './graph.ts'
 export type {
   Equal,
   DerivedOptions,
@@ -24,26 +24,21 @@ export type {
   Watchable,
   Trace,
   Engine,
-} from './graph/graph.ts'
-export { command, onCommandFailure } from './graph/command.ts'
-export type { Command, CommandOptions, CommandState, WhileRunning } from './graph/command.ts'
-export { family } from './graph/family.ts'
-export type { Family, FamilyOptions } from './graph/family.ts'
+} from './graph.ts'
+export { command, onCommandFailure } from './command.ts'
+export type { Command, CommandOptions, CommandState, WhileRunning } from './command.ts'
+export { family } from './family.ts'
+export type { Family, FamilyOptions } from './family.ts'
 
 // Of the planner, only what an application has a reason to touch: hearing the
 // decisions, and naming a carrier by hand in a passport. Deciding is the
 // library's own business, and its traits and plans are not offered.
-export { onNotice } from './data/notice.ts'
-export type { Notice } from './data/notice.ts'
-export { region, owned, regionName } from './graph/region.ts'
-export type { Region } from './graph/region.ts'
-export { quietly } from './graph/ticks.ts'
-export type { Probe, TickSummary, TickWrite, TickCompute } from './graph/ticks.ts'
-export type { EngineOptions } from './graph/engine.ts'
-export { journal } from './graph/journal.ts'
-export type { Journal } from './graph/journal.ts'
-export { preserve } from './data/preserve.ts'
-export { laneDrop, lanePlace, laneAppend, laneFind } from './data/arrange.ts'
-export type { Lanes } from './data/arrange.ts'
-export { wallClock } from './graph/time.ts'
-export type { Timers } from './graph/time.ts'
+export { region, owned, regionName } from './region.ts'
+export type { Region } from './region.ts'
+export { quietly } from './ticks.ts'
+export type { Probe, TickSummary, TickWrite, TickCompute } from './ticks.ts'
+export type { EngineOptions } from './engine.ts'
+export { journal } from './journal.ts'
+export type { Journal } from './journal.ts'
+export { wallClock } from './time.ts'
+export type { Timers } from './time.ts'

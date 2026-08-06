@@ -15,7 +15,7 @@ import { kanbanMirror, serveKanban } from './mirror.ts'
 import { kanbanSuite } from './suite.ts'
 import type { Make } from './suite.ts'
 import type { KanbanServer } from '../kanban-common/server.ts'
-import { held } from '../../test/kit/index.ts'
+import { held } from '#testkit'
 
 const wait = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms))
 
