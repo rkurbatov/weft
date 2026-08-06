@@ -11,8 +11,8 @@
 
 import { port, subscribe } from '#graph/graph.ts'
 import type { Port, Watchable } from '#graph/graph.ts'
-import { heldOf } from '#remote/remote.ts'
-import type { Source } from '#remote/source.ts'
+import { heldOf } from '#remote'
+import type { Source } from '#remote'
 import type { Store } from './store.ts'
 
 /** Why something on disk was not put back. */

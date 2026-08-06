@@ -1,96 +1,29 @@
 // The engine: one propagation core, owned as a value.
 //
-// Everything a graph needs while it works — who is reading, what is being
-// tracked, how deep the batch is, which watchers are queued — lives here
-// rather than in module variables. One isolate can therefore hold several
-// graphs that do not share a queue, a batch, or a lifetime.
+// Everything a graph needs while it works — who is queued, how deep the batch
+// is, which regions are open, which watchers are alive — lives here rather
+// than in module variables. One isolate can therefore hold several graphs that
+// do not share a queue, a batch, or a lifetime.
 //
-// This matters in two places, and both are ours. A leading tab or a shared
-// worker serves tabs belonging to different people: their data must not meet.
-// And a widget embedded in someone else's page has no "the" graph at all —
-// each application builds its own.
-//
-// Nodes carry their core from birth, so reading, watching and tracing never
-// ask which engine is meant. Reading across engines is refused by name: a
-// stitch between two people's data is not something to discover later.
+// The contract its parts speak is in parts.ts; who is reading right now is in
+// reading.ts, because that is a property of the stack and not of any engine.
 
 import { TickTap } from './ticks.ts'
+import { CLEAN, CHECK, DIRTY, NODE } from './parts.ts'
+import type { Consumer, EngineOptions, RegionOf, Source } from './parts.ts'
+import { asReader, untracked } from './reading.ts'
 
-/** Node states. CHECK means "an ancestor may have changed" — resolved by walking up. */
-export const CLEAN = 0
-export const CHECK = 1
-export const DIRTY = 2
-
-export type State = typeof CLEAN | typeof CHECK | typeof DIRTY
-
-/**
- * Nodes are recognised by mark, not by class. A page may end up with two
- * copies of this library — two bundles, a host page and a widget — and
- * `instanceof` across copies is false. The symbol is registered globally, so
- * both copies agree on it.
- */
-export const NODE = Symbol.for('weft.node')
-
-export type NodeKind = 'input' | 'cell' | 'watcher'
-
-export interface Marked {
-  readonly [NODE]: NodeKind
-}
-
-export function markOf(value: unknown): NodeKind | undefined {
-  if (typeof value !== 'object' || value === null) return undefined
-  const kind = (value as Partial<Marked>)[NODE]
-  return kind === 'input' || kind === 'cell' || kind === 'watcher' ? kind : undefined
-}
-
-export interface Source extends Marked {
-  readonly engine: Core
-  readonly name: string
-  readonly observers: Set<Consumer>
-  readonly demand: number
-  /** Bring own value up to date. Port cells are always current. */
-  stabilize(): void
-  /** Called by the graph when the number of demanding paths changes. */
-  demandChanged(delta: number): void
-}
-
-export interface Consumer extends Marked {
-  readonly engine: Core
-  readonly name: string
-  /** Leaf of the graph. A plain field: the hot path asks this on every mark. */
-  readonly leaf: boolean
-  state: State
-  readonly sources: Set<Source>
-  readonly observers: Set<Consumer>
-  /** 1 if links made by this consumer carry demand upward, 0 otherwise. */
-  contribution(): number
-  stabilize(): void
-}
+export * from './parts.ts'
+export { track, untracked } from './reading.ts'
 
 /** Anything the engine takes down when it goes: watchers, and regions' teardowns. */
 interface Mortal {
   dispose(): void
 }
 
-export interface RegionOf<T> {
-  readonly name: string
-  readonly value: T
-  readonly disposed: boolean
-  dispose(): void
-}
-
 interface Owner {
   name: string
   teardowns: Array<() => void>
-}
-
-export interface EngineOptions {
-  /**
-   * Where failures of this engine are reported. Without one, the first failure
-   * of a round is thrown once the round has been carried to its end — loudly,
-   * but never instead of waking the rest.
-   */
-  onError?: (error: unknown) => void
 }
 
 /**
@@ -298,17 +231,11 @@ export class Core {
 
   /** Run a formula or a watcher body, keeping links that it reads again. */
   retrack(node: Consumer, body: () => void): void {
-    const prevActive = active
-    const prevTracking = tracking
     const previous = new Set(node.sources)
     node.sources.clear()
-    active = node
-    tracking = previous
     try {
-      body()
+      asReader(node, previous, body)
     } finally {
-      active = prevActive
-      tracking = prevTracking
       // Whatever was not read again is no longer a dependency.
       this.detach(node, previous)
     }
@@ -418,52 +345,6 @@ export class Core {
     forget(this)
   }
 }
-
-/**
- * Who is reading right now is a property of the call stack, not of an engine:
- * a formula of one engine can reach for a node of another, and that reach is
- * exactly what has to be refused. So the reader is tracked per isolate, and
- * the engines are compared at the moment of the link.
- */
-let active: Consumer | null = null
-let tracking: Set<Source> | null = null
-
-export function track(source: Source): void {
-  const consumer = active
-  if (consumer === null) return
-  if (source.engine !== consumer.engine) throw crossing(consumer, source)
-  if (consumer.sources.has(source)) return
-  consumer.sources.add(source)
-  // A link that survives a recompute keeps its observer slot and its demand.
-  if (tracking !== null && tracking.delete(source)) return
-  source.observers.add(consumer)
-  const carried = consumer.contribution()
-  if (carried > 0) source.demandChanged(carried)
-}
-
-/** Read without becoming dependent on it. */
-export function untracked<T>(fn: () => T): T {
-  const prevActive = active
-  const prevTracking = tracking
-  active = null
-  tracking = null
-  try {
-    return fn()
-  } finally {
-    active = prevActive
-    tracking = prevTracking
-  }
-}
-
-function crossing(reader: Consumer, source: Source): Error {
-  return new Error(
-    `weft: "${reader.name}" in engine "${reader.engine.name}" read "${source.name}", ` +
-      `which lives in engine "${source.engine.name}". Engines do not read each other; ` +
-      `publish from a shared engine and adopt it instead.`,
-  )
-}
-
-// ── The registry ─────────────────────────────────────────────────────────────
 
 let building: Core | null = null
 let root: Core | null = null
