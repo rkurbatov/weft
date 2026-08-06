@@ -8,6 +8,7 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
 import { batch, derived, heldOf, port, subscribe, wirePair } from '#weft'
+import { onNotice } from '#data'
 import { atOnce, link, serve } from '#link'
 import { settle, until } from '#testkit'
 
@@ -185,5 +186,47 @@ describe('a fact a panel writes and reads back', () => {
     watcher.write('needle', 'alpha')
     await settle(3)
     assert.equal(heldOf(mirror.peek())?.value, 'alpha')
+  })
+
+  test('a mirror of a name the station never published says so out loud', async () => {
+    const heard: Array<{ where: string; message: string }> = []
+    until(
+      onNotice(what => {
+        if (what.kind === 'mirror-refused') heard.push({ where: what.where, message: what.message })
+      }),
+    )
+
+    const needle = port('', { name: 'needle' })
+    const wire = wirePair()
+    // Offered for writing only — the mistake this test exists for.
+    until(serve({ cells: {}, facts: { needle } }, wire.graph, { schedule: atOnce }))
+
+    const watcher = link(wire.watcher)
+    until(watcher.close)
+    until(subscribe(watcher.derived<string>('needle'), () => {}))
+    await settle(3)
+
+    assert.equal(heard.length, 1, 'said once, by name')
+    assert.equal(heard[0]?.where, 'needle')
+    assert.match(heard[0]?.message ?? '', /facts/, 'and says what to do about it')
+  })
+
+  test('a mirror that is published says nothing at all', async () => {
+    const heard: unknown[] = []
+    until(
+      onNotice(what => {
+        if (what.kind === 'mirror-refused') heard.push(what)
+      }),
+    )
+
+    const needle = port('a', { name: 'needle' })
+    const wire = wirePair()
+    until(serve({ cells: { needle }, facts: { needle } }, wire.graph, { schedule: atOnce }))
+    const watcher = link(wire.watcher)
+    until(watcher.close)
+    until(subscribe(watcher.derived<string>('needle'), () => {}))
+    await settle(3)
+
+    assert.deepEqual(heard, [])
   })
 })

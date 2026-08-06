@@ -10,6 +10,7 @@ import type { Remote } from '#remote/remote.ts'
 import { wallClock } from '#graph/time.ts'
 import type { Timers } from '#graph/time.ts'
 import type { Channel, ToWatcher } from './channel.ts'
+import { notice } from '#data'
 
 /**
  * The third outcome of an ask, told apart from a refusal: no answer came and
@@ -65,6 +66,8 @@ export function link(channel: Channel, options: LinkOptions = {}): Link {
   const mirrors = new Map<string, { id: number; cell: Port<Remote<unknown>> }>()
   const lingering = new Set<unknown>()
   const byId = new Map<number, Port<Remote<unknown>>>()
+  /** Which name each watch was made for, so a refusal can be named out loud. */
+  const nameOf = new Map<number, string>()
   const waiting = new Map<
     number,
     { resolve: (value: never) => void; reject: (error: unknown) => void; held?: unknown }
@@ -129,6 +132,20 @@ export function link(channel: Channel, options: LinkOptions = {}): Link {
         // told apart from "nothing arrived yet".
         const mirror = byId.get(message.id)
         mirror?.set(refused(mirror.peek(), new Error(message.error), 1, 'rejected'))
+        // And said out loud. A screen reading a mirror plainly sees `undefined`
+        // either way, so a name the station never published looks exactly like
+        // an answer that has not landed yet — for as long as the tab is open.
+        // A typo lived a whole afternoon behind that silence.
+        notice({
+          kind: 'mirror-refused',
+          where: nameOf.get(message.id) ?? String(message.id),
+          level: 'warn',
+          message:
+            `the station refused a mirror of "${nameOf.get(message.id) ?? '?'}": ${message.error}. ` +
+            `A view is offered under \`views\`; a name offered only under \`facts\` can be ` +
+            `written but not watched.`,
+          detail: { error: message.error },
+        })
         return
       }
       default:
@@ -166,6 +183,7 @@ export function link(channel: Channel, options: LinkOptions = {}): Link {
         // A look may return after the mirror was let go of: register again.
         mirrors.set(at, { id, cell })
         byId.set(id, cell)
+        nameOf.set(id, name)
         channel.send({ kind: 'watch', id, cell: name, key })
       },
       onIdle: () => {
