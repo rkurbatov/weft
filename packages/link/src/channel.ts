@@ -2,6 +2,9 @@
 // listen — and a handful of messages. In one process the two ends are a pair of
 // functions; in a browser they are a worker; nothing above this layer can tell.
 
+import { wallClock } from '#graph'
+import type { Timers } from '#graph'
+
 export interface Channel {
   send(message: unknown): void
   /** Returns the way to stop listening. */
@@ -59,3 +62,44 @@ export const perFrame: Schedule = work => {
 
 /** Everything at once, for tests that want no waiting. */
 export const atOnce: Schedule = work => work()
+
+/**
+ * No oftener than once every `ms`, and the last value always arrives.
+ *
+ * The word is the language's own: a gateway declares time as
+ * `takes tick from time { every 1s }`, and a source declares its pace the same
+ * way. Three names for one idea would be three vocabularies, so this is
+ * `every` too — in a different place, with the same meaning.
+ *
+ * What it promises, and nothing besides: at most one flush per interval, and
+ * the state after the last write is delivered. There is no leading or trailing
+ * option here, deliberately — the channel already keeps the latest value per
+ * cell, so what a flush carries is what is true now.
+ *
+ * Background tabs keep the same guard as `perFrame`: a timer, not a frame, so
+ * a leading tab goes on serving the others after the person switches away.
+ */
+export function every(ms: number, timers: Timers = wallClock): Schedule {
+  let waiting: (() => void) | null = null
+  let timer: unknown = null
+
+  return work => {
+    // Inside an interval: remember the newest work and let the timer do it.
+    if (timer !== null) {
+      waiting = work
+      return
+    }
+    work()
+    timer = timers.set(function done() {
+      timer = null
+      const owed = waiting
+      waiting = null
+      if (owed === null) return
+      // Something happened while we waited: do it, and start another interval,
+      // so a storm of writes settles into one flush per interval rather than
+      // two in a row at the boundary.
+      owed()
+      timer = timers.set(done, ms)
+    }, ms)
+  }
+}

@@ -154,6 +154,7 @@ export {
   atOnce,
   busChannel,
   busHub,
+  every,
   leadOrFollow,
   link,
   localBroadcast,
