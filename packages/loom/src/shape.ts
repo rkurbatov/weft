@@ -1,30 +1,14 @@
-// The shape of the answer, declared once and kept true.
+// A form: the shape of the answer a screen needs, written as a structure
+// rather than as a sequence of operations.
 //
-// Every query surface in use asks for a process — filter, then join, then
-// group. A React developer has been taught the opposite for ten years: a
-// component is the shape of the answer at the current state, and how it gets
-// there is the machine's business. So this is what a query looks like here:
-// the structure the screen wants, written as the structure the screen wants,
-// compiled into the relational tree underneath. Groups nest instead of
-// flattening, because our algebra has `collect`/`expand` and SQL does not.
-// A link is `reach` — take the row this one points at — and an unmatched
-// link is `null` in the type, which is `keeping` wearing TypeScript's own
-// grammar. There is no projection to write: demand already knows what the
-// screen reads.
-//
-// The escape hatch is the same as everywhere: a closure may stand in for any
-// expression, and the tree honestly loses its canon.
+// Its parts live beside this file — fields.ts says which field may be named
+// where, group.ts holds shelves and aggregates, list.ts the windows, keys.ts
+// learns what a row's key is made of — and this one only says what a part is
+// and puts a form together.
 
-import { derived } from '#graph/graph.ts'
-import type { Watchable } from '#graph/graph.ts'
-import type { Key, Table } from '#table/table.ts'
-import { field as fieldExpr, lit } from '#rel/expr.ts'
-import type { Expr, Row } from '#rel/expr.ts'
-import { agg as aggNode, filter as filterNode, source as sourceNode } from '#rel/node.ts'
-import type { FoldDecl, RelNode } from '#rel/node.ts'
-import { relate } from '#rel/live.ts'
-import { tableOfFeed } from './feed.ts'
-import type { Feed } from './feed.ts'
+import { field as fieldExpr, lit } from '#rel'
+import type { Expr } from '#rel'
+import type { Key } from '#weft'
 
 /**
  * A part of a form builds whatever that part actually is.
@@ -50,6 +34,7 @@ export function shape<Form extends Record<string, Part<unknown>>>(
   return out as never
 }
 
+/** A shorthand for the commonest condition: this field equals this value. */
 export const has = (field: string, value: unknown): Expr => ({
   is: 'cmp',
   op: '==',

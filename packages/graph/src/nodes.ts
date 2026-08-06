@@ -7,7 +7,8 @@
 // Building them — in which engine, owned by which region — is the business of
 // graph.ts next door; here is only what they are.
 
-import { CHECK, CLEAN, Core, coreForBuild, DIRTY, markOf, NODE, track } from './engine.ts'
+import { CHECK, CLEAN, coreForBuild, DIRTY, markOf, NODE, track } from './engine.ts'
+import type { Core } from './engine.ts'
 import type { Consumer, NodeKind, Source, State } from './engine.ts'
 
 export type Equal<T> = (a: T, b: T) => boolean

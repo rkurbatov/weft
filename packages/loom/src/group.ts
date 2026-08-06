@@ -7,7 +7,6 @@ import {
   agg as aggNode,
   field as fieldExpr,
   filter as filterNode,
-  lit,
   relate,
   source as sourceNode,
 } from '#rel'

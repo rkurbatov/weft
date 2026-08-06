@@ -9,7 +9,6 @@ import type { Readable } from '#graph/graph.ts'
 import { EMPTY, arrived, heldOf, loading, refused } from './remote.ts'
 import type { Fault, Remote } from './remote.ts'
 import { wallClock } from '#graph/time.ts'
-import type { Timers } from '#graph/time.ts'
 import type { Source, SourceOptions } from './shape.ts'
 
 export type { Source, SourceOptions }

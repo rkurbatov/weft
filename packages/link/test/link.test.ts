@@ -343,15 +343,15 @@ describe('the wire', () => {
           },
         },
         async advance(ms: number) {
-          const until = time + ms
+          const deadline = time + ms
           // Snapshot: the loop deletes from `jobs` as it runs them.
           // oxlint-disable-next-line unicorn/no-useless-spread
           for (const [handle, job] of [...jobs]) {
-            if (job.at > until) continue
+            if (job.at > deadline) continue
             jobs.delete(handle)
             job.fn()
           }
-          time = until
+          time = deadline
           await settle()
         },
       }

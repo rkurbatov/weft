@@ -3,8 +3,7 @@
 // files here implement pieces of the same contract, and a contract read from
 // inside one implementation is a contract nobody reads.
 import type { Key } from '#data'
-import type { Derived, Equal, Watchable } from '#graph'
-import type { Carrier } from './plan.ts'
+import type { Equal, Watchable } from '#graph'
 
 export type { Key }
 
@@ -109,9 +108,4 @@ export interface Follower<R> {
   first(): void
   apply(changes: readonly Change<R>[]): void
   resync(): void
-}
-
-interface ChangeLog<R> {
-  push(v: number, changes: Change<R>[]): void
-  since(v: number, current: number): Change<R>[] | null
 }

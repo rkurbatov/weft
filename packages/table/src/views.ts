@@ -5,12 +5,10 @@
 // each keeps only what its own answer needs: an order keeps a sorted line, a
 // filter keeps who passes.
 
-import { derived, family, port, untracked, watch } from '#graph'
-import type { Derived } from '#graph'
+import { derived, family } from '#graph'
 import type { Key } from '#data'
-import { offsets } from './offsets.ts'
 import { changeLog, follow, KEEP } from './log.ts'
-import { alike, sameItems } from './same.ts'
+import { sameItems } from './same.ts'
 import type { Change, Feed, Ordered, Table } from './shape.ts'
 import { tableOver } from './over.ts'
 

@@ -6,7 +6,6 @@
 // message reads `not assignable to 'NotANumberField<"title">'`, which says
 // what is wrong and about which field.
 
-import type { Key } from '#data'
 import type { Row } from './expr.ts'
 
 export type Scalar = string | number | boolean | null

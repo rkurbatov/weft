@@ -5,7 +5,7 @@
 // the call site. Apart from the machinery so that it can be read as a list of
 // decisions rather than hunted for inside a closure.
 
-import type { Readable, Watchable } from '#graph'
+import type { Readable } from '#graph'
 import type { Timers } from '#graph/time.ts'
 import type { Fault, Remote } from './remote.ts'
 

@@ -9,7 +9,7 @@
 // reading.ts, because that is a property of the stack and not of any engine.
 
 import { TickTap } from './ticks.ts'
-import { CLEAN, CHECK, DIRTY, NODE } from './parts.ts'
+import { CLEAN, CHECK, DIRTY } from './parts.ts'
 import type { Consumer, EngineOptions, RegionOf, Source } from './parts.ts'
 import { asReader, untracked } from './reading.ts'
 

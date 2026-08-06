@@ -9,7 +9,7 @@ import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
 import { busChannel, busHub, heldOf, port, memoryStore, serve, subscribe, within } from '#weft'
 import { link } from '#link'
-import { onBus, settle, until } from '#testkit'
+import { onBus } from '#testkit'
 
 describe('sessions apart', () => {
   const settle = async (turns = 4): Promise<void> => {

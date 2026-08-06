@@ -4,7 +4,6 @@
 // Its own file because the form, the list and the group all speak it, and the
 // three of them would otherwise each carry a copy in their heads.
 
-import type { Key } from '#weft'
 import type { FoldDecl } from '#rel'
 
 export type Scalar = string | number | boolean | null

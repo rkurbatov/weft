@@ -5,7 +5,7 @@
 // book writes, the schedule waits, the pump decides — and a promise read from
 // inside one of them is a promise nobody reads.
 
-import type { Readable, Watchable } from '#graph'
+import type { Readable } from '#graph'
 import type { Timers } from '#graph/time.ts'
 import type { Fault } from '#remote'
 import type { Note, NoteState } from './book.ts'

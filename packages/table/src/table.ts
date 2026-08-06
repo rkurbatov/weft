@@ -4,14 +4,13 @@
 // same.ts, the change log in log.ts, views in views.ts, folds in fold.ts —
 // and this one puts them together and hands out the surface.
 
-import { derived, family, port, untracked } from '#graph'
+import { port } from '#graph'
 import type { Key } from '#data'
-import { alike, sameItems } from './same.ts'
-import { changeLog, follow, KEEP } from './log.ts'
-import { foldOver } from './fold.ts'
+import { alike } from './same.ts'
+import { changeLog, KEEP } from './log.ts'
 import { tableOver } from './over.ts'
 import { remember } from './feeds.ts'
-import type { Change, Feed, Patch, SourceTable, Table, TableOptions } from './shape.ts'
+import type { Change, Feed, Patch, SourceTable, TableOptions } from './shape.ts'
 
 export type {
   Change,

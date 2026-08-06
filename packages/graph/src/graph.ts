@@ -12,15 +12,14 @@ import { Core, coreForBuild, markOf, register } from './engine.ts'
 import type { Consumer, EngineOptions, RegionOf as Region, State } from './engine.ts'
 import { CHECK, CLEAN } from './engine.ts'
 import type { Probe } from './ticks.ts'
-import { Derived, engineOf, Port, Watcher } from './nodes.ts'
-import type {
-  DerivedOptions,
-  Equal,
-  PortOptions,
-  Readable,
-  Watchable,
-  WatchOptions,
+import {
+  Derived as DerivedCell,
+  engineOf,
+  Port as PortCell,
+  Watcher as WatcherNode,
 } from './nodes.ts'
+import type { Derived, Port } from './nodes.ts'
+import type { DerivedOptions, PortOptions, Watchable, WatchOptions } from './nodes.ts'
 
 // What a node is lives next door; passed through here so that one import of
 // this file gives an application everything it needs.
@@ -34,32 +33,32 @@ export type {
   WatchOptions,
 } from './nodes.ts'
 
-function makeStored<T>(core: Core, initial: T, options?: PortOptions<T>): Port<T> {
-  return new Port(initial, options, core)
+function buildPort<T>(core: Core, initial: T, options?: PortOptions<T>): Port<T> {
+  return new PortCell(initial, options, core)
 }
 
-function makeDerived<T>(core: Core, formula: () => T, options?: DerivedOptions<T>): Derived<T> {
-  const c = new Derived(formula, options, core)
+function buildDerived<T>(core: Core, formula: () => T, options?: DerivedOptions<T>): Derived<T> {
+  const c = new DerivedCell(formula, options, core)
   core.owned(() => c.dispose())
   return c
 }
 
-function makeWatcher(core: Core, body: () => void, options?: WatchOptions): () => void {
-  const w = new Watcher(body, options, core)
+function buildWatcher(core: Core, body: () => void, options?: WatchOptions): () => void {
+  const w = new WatcherNode(body, options, core)
   core.owned(() => w.dispose())
   return () => w.dispose()
 }
 
 export function port<T>(initial: T, options?: PortOptions<T>): Port<T> {
-  return makeStored(coreForBuild(), initial, options)
+  return buildPort(coreForBuild(), initial, options)
 }
 
 export function derived<T>(formula: () => T, options?: DerivedOptions<T>): Derived<T> {
-  return makeDerived(coreForBuild(), formula, options)
+  return buildDerived(coreForBuild(), formula, options)
 }
 
 export function watch(body: () => void, options?: WatchOptions): () => void {
-  return makeWatcher(coreForBuild(), body, options)
+  return buildWatcher(coreForBuild(), body, options)
 }
 
 /** Group writes so watchers see one settled picture. */
@@ -81,7 +80,7 @@ export function subscribe<T>(
   // The node knows its engine, so subscribing never has to be told.
   const core = engineOf(source) ?? coreForBuild()
   let first = true
-  return makeWatcher(
+  return buildWatcher(
     core,
     () => {
       const value = source.get()
@@ -132,20 +131,20 @@ export function trace(node: Watchable<unknown>, depth = 2): Trace {
     }
   }
   if (kind === 'cell') {
-    const derived = node as unknown as Derived<unknown>
+    const cellNode = node as unknown as Derived<unknown>
     const raw = node as unknown as { value?: unknown; state: State; failure: unknown }
     const reads =
       depth > 0
-        ? [...derived.sources].flatMap(s =>
+        ? [...cellNode.sources].flatMap(s =>
             markOf(s) === 'input' || markOf(s) === 'cell'
               ? [trace(s as unknown as Watchable<unknown>, depth - 1)]
               : [],
           )
         : undefined
     return {
-      name: derived.name,
+      name: cellNode.name,
       kind: 'cell',
-      state: derived.broken
+      state: cellNode.broken
         ? 'failed'
         : raw.state === CLEAN
           ? 'clean'
@@ -154,7 +153,7 @@ export function trace(node: Watchable<unknown>, depth = 2): Trace {
             : 'dirty',
       value: raw.value,
       ...(reads === undefined ? {} : { reads }),
-      readBy: [...derived.observers].map(watcherName),
+      readBy: [...cellNode.observers].map(watcherName),
     }
   }
   return { name: '(unknown)', kind: 'cell', state: 'dirty', value: undefined, readBy: [] }
@@ -204,9 +203,9 @@ export function graph(name = 'engine', how?: EngineOptions): Engine {
     get disposed() {
       return core.disposed
     },
-    port: (initial, options) => makeStored(core, initial, options),
-    derived: (formula, options) => makeDerived(core, formula, options),
-    watch: (body, options) => makeWatcher(core, body, options),
+    port: (initial, options) => buildPort(core, initial, options),
+    derived: (formula, options) => buildDerived(core, formula, options),
+    watch: (body, options) => buildWatcher(core, body, options),
     batch: fn => core.batch(fn),
     untracked: fn => core.untracked(fn),
     build: fn => core.build(fn),
@@ -224,12 +223,12 @@ function adopt<T>(core: Core, source: Watchable<T>): Watchable<T> {
   if (home === core) return source
   const named = source as unknown as { name: string }
   let hot: (() => void) | undefined
-  const mirror = makeStored(core, source.peek(), {
+  const mirror = buildPort(core, source.peek(), {
     name: `adopted(${named.name})`,
     // Demand crosses the border but is not what keeps the value true: the
     // shared engine starts its own sources only while somebody here looks.
     onDemand: () => {
-      hot = makeWatcher(home, () => {
+      hot = buildWatcher(home, () => {
         source.get()
       })
     },
@@ -241,7 +240,7 @@ function adopt<T>(core: Core, source: Watchable<T>): Watchable<T> {
   // A cold watcher, always: it carries the value across without asking the
   // shared engine to work, so an unwatched formula here is as fresh as it
   // would be reading an ordinary cell.
-  const cold = makeWatcher(
+  const cold = buildWatcher(
     home,
     () => {
       const value = source.get()

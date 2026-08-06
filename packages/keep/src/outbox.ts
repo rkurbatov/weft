@@ -6,13 +6,9 @@ import { derived } from '#graph/graph.ts'
 import { book as openBook } from './book.ts'
 import { schedule } from './schedule.ts'
 import { owned } from '#graph/region.ts'
-import type { Readable } from '#graph/graph.ts'
 import type { Fault } from '#remote/remote.ts'
-import type { Store } from './store.ts'
-import type { Timers } from '#graph/time.ts'
-import type { Saving } from './keep.ts'
 
-import type { Handler, Handling, Note, Outbox, OutboxOptions } from './shape.ts'
+import type { Handling, Note, Outbox, OutboxOptions } from './shape.ts'
 
 export type { Handler, Handling, Note, NoteState, Outbox, OutboxOptions } from './shape.ts'
 

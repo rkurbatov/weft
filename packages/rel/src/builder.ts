@@ -40,10 +40,7 @@ import type {
   MustBeNumber,
   MustHoldRows,
   MustMatch,
-  NumericField,
   OpFor,
-  RowsField,
-  Scalar,
   ScalarField,
 } from './guards.ts'
 

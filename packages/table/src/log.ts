@@ -3,8 +3,6 @@
 // A follower that arrives late, or one that fell behind further than the log
 // remembers, is told to rebuild rather than handed a hole — falling behind is
 // an event with a name, not a silence.
-import { derived, port, untracked, watch } from '#graph'
-import type { Key } from '#data'
 import type { Change, Feed, Follower } from './shape.ts'
 
 /** What the log promises: keep a batch by version, and answer what came after. */

@@ -5,7 +5,7 @@
 
 import { derived, family } from '#graph'
 import type { Key } from '#data'
-import { feedOf, remember } from './feeds.ts'
+import { remember } from './feeds.ts'
 import { foldOver } from './fold.ts'
 import { orderedOver, whereOver } from './views.ts'
 import { sameItems } from './same.ts'

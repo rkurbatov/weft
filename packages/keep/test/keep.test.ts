@@ -161,8 +161,8 @@ describe('keeping things on disk', () => {
       store,
       version: 2,
       now: clock.now,
-      migrate: (port, from) =>
-        from === 1 ? { title: `${(port as { title: string }).title} (v1)` } : undefined,
+      migrate: (kept, from) =>
+        from === 1 ? { title: `${(kept as { title: string }).title} (v1)` } : undefined,
     })
     assert.equal(await withMigration.restored, true)
     assert.equal(rescued.peek().title, 'kept (v1)')
