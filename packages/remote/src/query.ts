@@ -6,8 +6,9 @@
 // goes quiet by itself — the answer for the old key lands in its own cell,
 // which nobody is looking at.
 
-import { source } from './source.ts'
+import { source, tally } from './source.ts'
 import type { Source, SourceOptions } from './source.ts'
+import type { Tally } from './shape.ts'
 
 export interface QueryOptions<K> extends SourceOptions {
   /** How a key becomes a map key. Required for object keys. */
@@ -23,6 +24,14 @@ export interface Query<K, T> {
   /** The source for this key — the same one for the same key, while it lives. */
   (key: K): Source<T>
   readonly size: number
+  /**
+   * What the question has done across every key.
+   *
+   * Of the family, not of the current member: a run called off because the key
+   * changed belongs to the question, and the key that replaced it never saw it
+   * happen.
+   */
+  readonly tally: Tally
   /** Drop one unwatched member. Returns whether it went. */
   evict(key: K): boolean
   /** Drop every unwatched member. Returns how many went. */
@@ -34,6 +43,10 @@ export function query<K, T>(
   options: QueryOptions<K>,
 ): Query<K, T> {
   const { keyOf, max, ...perSource } = options
+  // One set of counters for the whole family: a panel asks what the question
+  // has done, not what the current key has done — and a run called off because
+  // the key changed belongs to the family, not to the key that replaced it.
+  const shared = tally(`${perSource.name ?? 'query'}.tally`)
   const held = new Map<string, { key: K; feed: Source<T> }>()
 
   const nameOf = (key: K): string => {
@@ -71,6 +84,7 @@ export function query<K, T>(
     }
     const feed = source<T>(asked => load(key, asked), {
       ...perSource,
+      tally: shared,
       name: `${perSource.name ?? 'query'}:${name}`,
     })
     held.set(name, { key, feed })
@@ -79,6 +93,7 @@ export function query<K, T>(
   }) as Query<K, T>
 
   Object.defineProperty(ask, 'size', { get: () => held.size })
+  Object.defineProperty(ask, 'tally', { value: shared })
   ask.evict = key => {
     const name = nameOf(key)
     const member = held.get(name)

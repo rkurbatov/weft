@@ -5,7 +5,7 @@
 // not exist in application code.
 
 import { derived } from '#weft'
-import type { Watchable } from '#weft'
+import type { Tally, Watchable } from '#weft'
 import { heldOf } from '#weft'
 import type { Remote } from '#weft'
 import { arrivalOf, source } from '#weft'
@@ -40,6 +40,15 @@ export interface Truth<T> {
   fault: Watchable<string | null>
   /** When the standing answer's question was asked; 0 before anything came. */
   asked: Watchable<number>
+  /**
+   * What this truth has done: asked, answered, called off, refused, published.
+   *
+   * Ordinary cells. Here because the engine knows these numbers exactly — it
+   * raises the abort itself — and an application that counts them by hand gets
+   * them wrong: a run called off between two steps never gets a turn to notice,
+   * and a finished run whose question was dropped is not called off at all.
+   */
+  tally: Tally
   refresh(): Promise<void>
 }
 
@@ -49,7 +58,7 @@ interface Carried<T> {
 }
 
 function faceOf<T>(
-  feed: { state: Watchable<Remote<Carried<T>>> },
+  feed: { state: Watchable<Remote<Carried<T>>>; tally: Tally },
   empty: T,
   refresh: () => Promise<void>,
   name: string,
@@ -66,6 +75,7 @@ function faceOf<T>(
   )
   const asked = derived(() => heldOf(state.get())?.value.askedAt ?? 0, { name: `${name}.asked` })
   return {
+    tally: feed.tally,
     get: () => value.get(),
     peek: () => value.peek(),
     suspend: () => {
@@ -147,7 +157,15 @@ export function truthBy<K, T>(
     const known = faces.get(at)
     if (known !== undefined) return known
     const feed = family(key)
-    const face = faceOf(feed, passport.empty, () => feed.refresh(), `${name}:${at}`)
+    // The family's counters, not this member's: a run called off because the
+    // key changed belongs to the question, and the key that replaced it never
+    // saw it happen.
+    const face = faceOf(
+      { state: feed.state, tally: family.tally },
+      passport.empty,
+      () => feed.refresh(),
+      `${name}:${at}`,
+    )
     faces.set(at, face)
     return face
   }

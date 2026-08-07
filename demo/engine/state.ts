@@ -9,7 +9,7 @@
 // over part of the log rather than a spinner over all of it.
 
 import { cell, giveWay, truthBy } from '#loom'
-import type { Port, Watchable } from '#loom'
+import type { Port, Tally, Watchable } from '#loom'
 import { logLines, searching } from '../engine-common/corpus.ts'
 import type { Line, Log, Progress } from '../engine-common/corpus.ts'
 
@@ -33,12 +33,17 @@ export interface Engine {
   readonly size: Port<number>
   /** The answer, growing while the run goes on. */
   readonly found: Watchable<Found>
-  /** How many chunks have been published since this engine started. */
   /** How much memory the corpus itself takes, in bytes. */
   readonly corpusBytes: Watchable<number>
-  readonly steps: Watchable<number>
-  /** How many runs were called off before finishing. */
-  readonly abandoned: Watchable<number>
+  /**
+   * What the searching has done: asked, answered, called off, published.
+   *
+   * Kept by the library, not counted here. Counting it in this file is what
+   * went wrong before: a run called off between two chunks never got a turn to
+   * notice, and a finished run whose question was dropped was counted as
+   * called off.
+   */
+  readonly tally: Tally
 }
 
 const EMPTY: Found = {
@@ -68,10 +73,6 @@ export function engine(): Engine {
   const log = cell<Log>(() => logLines(size.get()), { name: 'log' })
   const corpusBytes = cell(() => log.get().size, { name: 'corpusBytes' })
 
-  // Instrumentation: written from inside the run, read by nothing in the graph.
-  const steps = cell(0, { name: 'steps' })
-  const abandoned = cell(0, { name: 'abandoned' })
-
   // Keyed by the pattern, not by nothing: a source is asked once per key, so
   // the key has to be the question. Typing changes the key, which is what
   // calls the old run off — the same mechanism the order asks for, rather than
@@ -81,18 +82,6 @@ export function engine(): Engine {
       const held = log.peek()
       const run = searching(held, asked)
 
-      // The count of called-off runs is taken from the abort itself, not from
-      // the loop noticing it: a run called off between two chunks never gets
-      // another turn to look, and counting in the loop counted only the ones
-      // that happened to.
-      //
-      // A finished run is aborted too — the question it answered is gone — so
-      // only the unfinished ones count. That is what "called off" means.
-      let finished = false
-      signal.addEventListener('abort', () => {
-        if (!finished) abandoned.set(abandoned.peek() + 1)
-      })
-
       let step = run.next()
       while (step.done === false) {
         // Between chunks: has anybody stopped caring? A run whose demand has
@@ -101,7 +90,6 @@ export function engine(): Engine {
         // Stop as soon as the answer stops being wanted; the counting is
         // already done above.
         if (signal.aborted) return shown(step.value, held.length)
-        steps.set(steps.peek() + 1)
         soFar(shown(step.value, held.length))
         // Let the page paint and the abort arrive. Awaiting in a loop is the
         // point here: this loop is the long run, and the yield between chunks
@@ -110,15 +98,15 @@ export function engine(): Engine {
         await giveWay()
         step = run.next()
       }
-      steps.set(steps.peek() + 1)
-      finished = true
       return shown(step.value, held.length)
     },
     { name: 'found', empty: EMPTY },
   )
 
-  // What the panel watches: the run for whatever is typed right now.
+  // What the panel watches: the run for whatever is typed right now, and the
+  // tally of the run behind it.
   const found = cell(() => runFor(needle.get()).get(), { name: 'found' })
-
-  return { needle, size, found, corpusBytes, steps, abandoned }
+  // The tally is the family's, so it counts every run of every pattern typed —
+  // including the ones called off when the next letter arrived.
+  return { needle, size, found, corpusBytes, tally: runFor('').tally }
 }

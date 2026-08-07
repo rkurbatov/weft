@@ -26,8 +26,10 @@ offer(
     views: {
       found: held.found,
       corpusBytes: held.corpusBytes,
-      steps: held.steps,
-      abandoned: held.abandoned,
+      // Counters the library keeps, published like anything else.
+      published: held.tally.published,
+      calledOff: held.tally.calledOff,
+      answered: held.tally.answered,
       needle: held.needle,
       size: held.size,
       // The pace made visible: how many packets the wire actually carried,

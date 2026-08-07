@@ -11,6 +11,15 @@ import type { Fault, Remote } from './remote.ts'
 
 export interface SourceOptions {
   name?: string
+  /**
+   * Where to count what this source does.
+   *
+   * Given from outside when several sources are one question asked different
+   * ways — the members of a family — so that the numbers a panel reads are the
+   * numbers of the whole family, not of whichever key is current. A source on
+   * its own keeps its own.
+   */
+  tally?: Tally
   /** Ask again this often while watched. Without it, a source loads once per demand. */
   every?: number
   /**
@@ -46,6 +55,31 @@ export interface SourceOptions {
   timers?: Timers
 }
 
+/**
+ * What a source has done since it was made.
+ *
+ * Ordinary cells, so a screen reads them like anything else and a panel can
+ * draw them. Here rather than in applications because every one of these
+ * numbers is a fact the source already knows and used to keep to itself: a
+ * demo that wanted them counted aborts by hand, got the counting wrong, and
+ * had no way to tell.
+ *
+ * Cheap: five integers written on events that happen a few times a second at
+ * most. Nothing is sampled, nothing is timed.
+ */
+export interface Tally {
+  /** How many times the body was started. */
+  readonly asked: Readable<number>
+  /** How many runs returned a value — the ones that finished. */
+  readonly answered: Readable<number>
+  /** How many were called off before finishing: demand left, or the key changed. */
+  readonly calledOff: Readable<number>
+  /** How many ended in a refusal. */
+  readonly refused: Readable<number>
+  /** How many values were published, counting the ones a run reported as it went. */
+  readonly published: Readable<number>
+}
+
 export interface Source<T> {
   readonly name: string
   /** The state of what the world said: empty, in flight, value with an age, refused. */
@@ -54,6 +88,8 @@ export interface Source<T> {
   readonly demanded: boolean
   /** How often the source is asked right now, given every live requirement. Undefined means "once per demand". */
   readonly pace: number | undefined
+  /** What this source has done: asked, answered, called off, refused, published. */
+  readonly tally: Tally
   /**
    * State a requirement: this value must not be older than `within`. Held for as
    * long as the returned release is uncalled; the strictest live one sets the pace.

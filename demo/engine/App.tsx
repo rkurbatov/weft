@@ -126,9 +126,10 @@ function Results({ needle }: { needle: string }): ReactNode {
 export function App(): ReactNode {
   const [typed, setTyped] = useState('')
   const [showing, setShowing] = useState(true)
-  const steps = useLive(() => station.get().engine.view<number>('steps').get())
+  const published = useLive(() => station.get().engine.view<number>('published').get())
   const corpusBytes = useLive(() => station.get().engine.view<number>('corpusBytes').get())
-  const abandoned = useLive(() => station.get().engine.view<number>('abandoned').get())
+  const calledOff = useLive(() => station.get().engine.view<number>('calledOff').get())
+  const answered = useLive(() => station.get().engine.view<number>('answered').get())
   const sent = useLive(() => station.get().engine.view<number>('sent').get())
   const echoed = useLive(() => station.get().engine.view<string>('needle').get())
 
@@ -160,8 +161,9 @@ export function App(): ReactNode {
       </div>
 
       <div className="counts">
-        <Count label="chunks published" value={steps ?? '—'} />
-        <Count label="runs called off" value={abandoned ?? '—'} />
+        <Count label="chunks published" value={published ?? '—'} />
+        <Count label="runs finished" value={answered ?? '—'} />
+        <Count label="runs called off" value={calledOff ?? '—'} />
         <Count label="packets on the wire" value={sent ?? '—'} />
         <Count label="corpus in memory" value={mb(corpusBytes)} />
         <Count

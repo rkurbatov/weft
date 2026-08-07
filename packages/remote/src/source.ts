@@ -3,15 +3,36 @@
 // stops it — so an unwatched screen costs nothing.
 
 import { derived, port, subscribe, untracked } from '#graph/graph.ts'
+import type { Port } from '#graph'
 import type { Watchable } from '#graph/graph.ts'
 import { owned } from '#graph/region.ts'
 import type { Readable } from '#graph/graph.ts'
 import { EMPTY, arrived, heldOf, loading, refused } from './remote.ts'
 import type { Fault, Remote } from './remote.ts'
 import { wallClock } from '#graph/time.ts'
-import type { Source, SourceOptions } from './shape.ts'
+import type { Source, SourceOptions, Tally } from './shape.ts'
 
 export type { Source, SourceOptions }
+
+/** The same counters, seen from the inside — where they are written. */
+interface MutableTally {
+  asked: Port<number>
+  answered: Port<number>
+  calledOff: Port<number>
+  refused: Port<number>
+  published: Port<number>
+}
+
+/** A set of counters a family can hand to each of its members. */
+export function tally(name = 'tally'): Tally {
+  return {
+    asked: port(0, { name: `${name}.asked` }),
+    answered: port(0, { name: `${name}.answered` }),
+    calledOff: port(0, { name: `${name}.calledOff` }),
+    refused: port(0, { name: `${name}.refused` }),
+    published: port(0, { name: `${name}.published` }),
+  }
+}
 
 export function source<T>(
   load: (asked: { signal: AbortSignal; soFar: (value: T) => void }) => Promise<T>,
@@ -37,6 +58,16 @@ export function source<T>(
   let attempt = 0
   let inFlight: Promise<void> | null = null
   let asking: AbortController | null = null
+
+  // What this source has done. Plain ports, written on events that happen a
+  // few times a second at worst, read like any other cell. A family hands its
+  // own in, so its members count into one place.
+  const shared = options.tally as MutableTally | undefined
+  const tallyAsked = shared?.asked ?? port(0, { name: `${name}.asked` })
+  const tallyAnswered = shared?.answered ?? port(0, { name: `${name}.answered` })
+  const tallyCalledOff = shared?.calledOff ?? port(0, { name: `${name}.calledOff` })
+  const tallyRefused = shared?.refused ?? port(0, { name: `${name}.refused` })
+  const tallyPublished = shared?.published ?? port(0, { name: `${name}.published` })
 
   const state = port<Remote<T>>(EMPTY, {
     name,
@@ -152,13 +183,24 @@ export function source<T>(
     const mine = ++generation
     const controller = new AbortController()
     asking = controller
+    // Counted here rather than by whoever wrote the body: the source is what
+    // raises the signal, so it is the only place that knows the difference
+    // between a run that was called off and one that had already finished when
+    // its question was dropped. Counted by hand, it came out wrong both ways.
+    let done = false
+    controller.signal.addEventListener('abort', () => {
+      if (!done) tallyCalledOff.set(tallyCalledOff.peek() + 1)
+    })
     let finish!: () => void
     const flight = new Promise<void>(resolve => {
       finish = resolve
     })
-    // Claim the slot before touching the cell: writing it wakes watchers, and a
-    // waking watcher may ask for this very source again.
+    // Claim the slot before touching any cell: writing one wakes watchers, and
+    // a waking watcher may ask for this very source again. The counter is a
+    // cell like any other, and counting before this line started a second run
+    // per demand — caught by a test that had nothing to do with counting.
     inFlight = flight
+    tallyAsked.set(tallyAsked.peek() + 1)
     let guard: unknown = null
     if (timeout !== undefined) {
       guard = timers.set(() => {
@@ -202,6 +244,7 @@ export function source<T>(
      */
     const soFar = (value: T): void => {
       if (mine !== generation) return
+      tallyPublished.set(tallyPublished.peek() + 1)
       state.set(arrived(value, now()))
     }
 
@@ -210,6 +253,9 @@ export function source<T>(
         value => {
           if (mine !== generation) return
           if (guard !== null) timers.clear(guard)
+          done = true
+          tallyAnswered.set(tallyAnswered.peek() + 1)
+          tallyPublished.set(tallyPublished.peek() + 1)
           attempt = 0
           notBefore = 0
           state.set(arrived(value, now()))
@@ -220,6 +266,8 @@ export function source<T>(
           if (guard !== null) timers.clear(guard)
           attempt++
           const fault = classify(error)
+          done = true
+          tallyRefused.set(tallyRefused.peek() + 1)
           state.set(refused(state.peek(), error, attempt, fault))
           // Only what can pass by itself is retried by itself. A source is a
           // read, so unknown is safe to repeat; permanent and rejected lie
@@ -276,6 +324,13 @@ export function source<T>(
     },
     get pace() {
       return pace()
+    },
+    tally: {
+      asked: tallyAsked,
+      answered: tallyAnswered,
+      calledOff: tallyCalledOff,
+      refused: tallyRefused,
+      published: tallyPublished,
     },
     refresh: () => begin(true),
   }
