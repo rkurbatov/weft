@@ -111,5 +111,5 @@ export function engine(): Engine {
   const found = cell(() => runFor(needle.get()).get(), { name: 'found' })
   // The tally is the family's, so it counts every run of every pattern typed —
   // including the ones called off when the next letter arrived.
-  return { needle, size, found, corpusBytes, tally: runFor('').tally }
+  return { needle, size, found, corpusBytes, tally: runFor.tally }
 }

@@ -129,10 +129,17 @@ export function truth<T>(
  * how a long run is cancelled without anybody writing cancellation. As with
  * `truth`, the body may report as it goes.
  */
+/** A keyed truth: a truth per key, and one tally for the question. */
+export interface TruthBy<K, T> {
+  (key: K): Truth<T>
+  /** What the question has done across every key it was asked with. */
+  readonly tally: Tally
+}
+
 export function truthBy<K, T>(
   ask: (key: K, asked: { signal: AbortSignal; soFar: (value: T) => void }) => Promise<T>,
   passport: TruthPassport<T>,
-): (key: K) => Truth<T> {
+): TruthBy<K, T> {
   const name = passport.name ?? 'truth'
   const family = query<K, Carried<T>>(
     async (key: K, { signal, soFar }) => {
@@ -152,7 +159,7 @@ export function truthBy<K, T>(
     },
   )
   const faces = new Map<unknown, Truth<T>>()
-  return (key: K): Truth<T> => {
+  const byKey = (key: K): Truth<T> => {
     const at = JSON.stringify(key)
     const known = faces.get(at)
     if (known !== undefined) return known
@@ -169,4 +176,9 @@ export function truthBy<K, T>(
     faces.set(at, face)
     return face
   }
+  // The tally hangs on the function, not on a member: asking for it used to
+  // mean building a truth for a made-up key, which then went and asked the
+  // world a question nobody wanted.
+  Object.defineProperty(byKey, 'tally', { value: family.tally })
+  return byKey as TruthBy<K, T>
 }
