@@ -25,6 +25,7 @@ export default defineConfig({
         kanbanWeft: resolve(import.meta.dirname, 'demo/kanban-weft/index.html'),
         kanbanTabs: resolve(import.meta.dirname, 'demo/kanban-tabs/index.html'),
         engine: resolve(import.meta.dirname, 'demo/engine/index.html'),
+        tableWire: resolve(import.meta.dirname, 'demo/table-wire/index.html'),
       },
     },
   },

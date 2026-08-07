@@ -62,6 +62,15 @@
         the worker with the button: the mirrors ask again by themselves, and nothing in the panel
         code knows it happened.
       </p>
+      <h1>A table that lives in another thread</h1>
+      <p>
+        <a href="./table-wire/"
+          >A hundred thousand rows held by a worker, twenty of them on screen.</a
+        >
+        Scrolling writes where the window starts and reads back exactly the rows that fit — the
+        counter says how few crossed. An edit half-typed survives its row scrolling out of sight,
+        because the draft is a cell of its own rather than a field of the row.
+      </p>
     </main>
   </body>
 </html>

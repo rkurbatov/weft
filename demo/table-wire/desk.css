@@ -1,0 +1,105 @@
+/* Plain: what the page has to show is that scrolling stays smooth. */
+.desk {
+  max-width: 52rem;
+  margin: 2rem auto;
+  padding: 0 1rem;
+  font:
+    15px/1.5 system-ui,
+    sans-serif;
+  color: #222;
+}
+.desk h1 {
+  font-size: 1.4rem;
+  margin-bottom: 8px;
+}
+.desk .story {
+  color: #444;
+  margin: 8px 0 16px;
+}
+.desk .story.small {
+  font-size: 13px;
+  color: #777;
+  margin-top: 20px;
+  border-top: 1px solid #eee;
+  padding-top: 12px;
+}
+.desk .counts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  gap: 12px;
+  margin: 16px 0;
+  padding: 12px 0;
+  border-top: 1px solid #eee;
+  border-bottom: 1px solid #eee;
+}
+.desk .count {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.desk .count b {
+  font-size: 1.15rem;
+  font-variant-numeric: tabular-nums;
+}
+.desk .count span {
+  font-size: 12px;
+  color: #777;
+}
+
+/* The scroller is as tall as the whole table; only the window is drawn. */
+.desk .scroller {
+  height: 560px;
+  overflow-y: auto;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  position: relative;
+}
+.desk .tall {
+  position: relative;
+}
+.desk .window {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+}
+.desk .row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 12px;
+  border-bottom: 1px solid #f4f4f4;
+  font-family: ui-monospace, monospace;
+  font-size: 13px;
+  box-sizing: border-box;
+}
+.desk .row .no {
+  width: 4.5rem;
+  color: #aaa;
+}
+.desk .row .title {
+  flex: 1;
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 2px 4px;
+  font: inherit;
+  color: inherit;
+  cursor: text;
+  border-radius: 3px;
+}
+.desk .row .title:hover {
+  background: #f4f4f4;
+}
+.desk .row input {
+  flex: 1;
+  font: inherit;
+  padding: 2px 4px;
+  border: 1px solid #4a7;
+  border-radius: 3px;
+}
+.desk .row .owner {
+  width: 3rem;
+  color: #888;
+}
