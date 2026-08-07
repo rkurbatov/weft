@@ -81,15 +81,26 @@ export function engine(): Engine {
       const held = log.peek()
       const run = searching(held, asked)
 
+      // The count of called-off runs is taken from the abort itself, not from
+      // the loop noticing it: a run called off between two chunks never gets
+      // another turn to look, and counting in the loop counted only the ones
+      // that happened to.
+      //
+      // A finished run is aborted too — the question it answered is gone — so
+      // only the unfinished ones count. That is what "called off" means.
+      let finished = false
+      signal.addEventListener('abort', () => {
+        if (!finished) abandoned.set(abandoned.peek() + 1)
+      })
+
       let step = run.next()
       while (step.done === false) {
         // Between chunks: has anybody stopped caring? A run whose demand has
         // left, or whose pattern has changed, is called off here — and its
         // `soFar` would land nowhere anyway.
-        if (signal.aborted) {
-          abandoned.set(abandoned.peek() + 1)
-          return shown(step.value, held.length)
-        }
+        // Stop as soon as the answer stops being wanted; the counting is
+        // already done above.
+        if (signal.aborted) return shown(step.value, held.length)
         steps.set(steps.peek() + 1)
         soFar(shown(step.value, held.length))
         // Let the page paint and the abort arrive. Awaiting in a loop is the
@@ -100,6 +111,7 @@ export function engine(): Engine {
         step = run.next()
       }
       steps.set(steps.peek() + 1)
+      finished = true
       return shown(step.value, held.length)
     },
     { name: 'found', empty: EMPTY },

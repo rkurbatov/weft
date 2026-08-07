@@ -6,71 +6,157 @@
   font:
     15px/1.5 system-ui,
     sans-serif;
+  color: #222;
 }
 .engine h1 {
   font-size: 1.4rem;
+  margin-bottom: 8px;
 }
 .engine .story {
   color: #444;
+  margin: 8px 0 16px;
 }
 .engine .story.small {
   font-size: 13px;
-  color: #666;
-  margin-top: 24px;
+  color: #777;
+  margin-top: 28px;
+  border-top: 1px solid #eee;
+  padding-top: 12px;
 }
-.engine .row {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-  margin: 12px 0;
-  flex-wrap: wrap;
+.engine code {
+  font-family: ui-monospace, monospace;
+  font-size: 0.92em;
+  background: #f4f4f4;
+  padding: 1px 4px;
+  border-radius: 3px;
 }
-/* Numbers sit on their own line and wrap as a block: crammed into a flex row
-   beside the buttons they used to overlap them. */
-.engine .row.numbers {
-  display: block;
-  color: #555;
-  font-size: 0.95rem;
-  line-height: 1.6;
-}
-.engine .row.numbers span {
-  margin-right: 18px;
-  white-space: nowrap;
-}
-.engine .row .grow {
-  flex: 1;
+
+/* The search box and its two buttons: one row, the box taking what is left. */
+.engine .search {
   display: flex;
   gap: 8px;
   align-items: center;
 }
 .engine input {
   flex: 1;
-  padding: 8px 10px;
+  min-width: 0;
+  padding: 9px 11px;
   font: inherit;
   border: 1px solid #ccc;
   border-radius: 6px;
 }
 .engine button {
-  padding: 8px 12px;
+  padding: 9px 12px;
   font: inherit;
+  white-space: nowrap;
   border: 1px solid #ccc;
   border-radius: 6px;
   background: #fff;
   cursor: pointer;
 }
-.engine .numbers {
-  color: #444;
-  font-variant-numeric: tabular-nums;
-  gap: 24px;
+.engine button:hover {
+  background: #f6f6f6;
 }
-.engine .results {
-  min-height: 320px;
+
+/* The counters: a grid, so they never crowd the buttons above them. */
+.engine .counts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
+  gap: 12px;
+  margin: 16px 0;
+  padding: 12px 0;
   border-top: 1px solid #eee;
-  padding-top: 12px;
+  border-bottom: 1px solid #eee;
+}
+.engine .count {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.engine .count b {
+  font-size: 1.15rem;
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.engine .count span {
+  font-size: 12px;
+  color: #777;
+}
+
+.engine .results {
+  min-height: 22rem;
 }
 .engine .summary {
   color: #444;
+  margin: 0 0 10px;
 }
+
+/* The histogram: what the worker sends as a typed array, ten times a second. */
+.engine .hist {
+  margin: 0 0 18px;
+}
+.engine .hist .frame {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+/* The vertical scale: what the top and the bottom of the plot are worth. */
+.engine .hist .scale {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  font-size: 11px;
+  color: #999;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  min-width: 3.2rem;
+  padding-bottom: 2px;
+}
+.engine .hist .plot {
+  flex: 1;
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 96px;
+  padding-bottom: 1px;
+  border-bottom: 1px solid #ccc;
+}
+.engine .hist .bar {
+  flex: 1;
+  min-width: 0;
+  background: #4a7;
+  border-radius: 2px 2px 0 0;
+}
+.engine .hist .axis {
+  position: relative;
+  height: 1.2em;
+  margin: 3px 0 0 calc(3.2rem + 8px);
+  font-size: 11px;
+  color: #999;
+  font-variant-numeric: tabular-nums;
+}
+/* Ticks sit at their own position along the axis, not spread by the browser:
+   a quarter of the way along has to mean a quarter of the durations. */
+.engine .hist .axis span {
+  position: absolute;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+.engine .hist .axis span:first-child {
+  transform: none;
+}
+.engine .hist .axis span:last-child {
+  transform: translateX(-100%);
+}
+.engine .hist figcaption {
+  font-size: 12px;
+  color: #777;
+  margin-top: 4px;
+}
+
 .engine .lines {
   margin: 0;
   padding: 0;

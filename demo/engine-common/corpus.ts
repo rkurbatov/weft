@@ -95,6 +95,14 @@ export interface Line {
 /** The corpus: bytes, an index of where each line starts, and how many. */
 export interface Log {
   readonly bytes: Uint8Array
+  /**
+   * How long each operation took, as its own column.
+   *
+   * Kept apart from the text on purpose: a histogram over durations should not
+   * have to parse two million lines to find the number in them. This is what
+   * columnar storage buys — the text for showing, the numbers for counting.
+   */
+  readonly ms: Uint16Array
   /** `length + 1` offsets: line `i` is `bytes[offsets[i] .. offsets[i + 1]]`. */
   readonly offsets: Uint32Array
   readonly length: number
@@ -114,6 +122,7 @@ export function logLines(count: number, seed = 1): Log {
   // to what was actually written.
   const bytes = new Uint8Array(count * 72)
   const offsets = new Uint32Array(count + 1)
+  const durations = new Uint16Array(count)
   let at = 0
 
   for (let id = 0; id < count; id++) {
@@ -121,8 +130,12 @@ export function logLines(count: number, seed = 1): Log {
     const who = WHO[Math.floor(next() * WHO.length)] ?? 'api'
     const region = REGION[Math.floor(next() * REGION.length)] ?? 'eu-west'
     const what = WHAT[Math.floor(next() * WHAT.length)] ?? 'request finished'
-    const ms = Math.floor(next() * 2000)
+    // Latency is not uniform: most operations are quick and a few drag on.
+    // A log-normal-ish shape, so the histogram has something to show — a
+    // uniform one would be a flat wall whatever the scale.
+    const ms = Math.min(1999, Math.floor(Math.exp(next() * 5.6 + 2.2) + next() * 20))
     const user = 1000 + Math.floor(next() * 9000)
+    durations[id] = ms
     const line = `${level} [${who}@${region}] ${what} in ${String(ms)}ms user=${String(user)}`
     at += encoder.encodeInto(line, bytes.subarray(at)).written
     offsets[id + 1] = at
@@ -132,6 +145,7 @@ export function logLines(count: number, seed = 1): Log {
   return {
     bytes: packed,
     offsets,
+    ms: durations,
     length: count,
     size: packed.byteLength + offsets.byteLength,
     at: id =>
@@ -146,12 +160,12 @@ export interface Progress {
   readonly done: boolean
   readonly ms: number
   /**
-   * Matches per hour of the day, as a typed array.
+   * How the matches are spread over operation duration: one bucket per
+   * hundred milliseconds, from nought to two seconds.
    *
-   * Here because a screen wants to draw it, and because it is the thing З-6
-   * asks about: bulk numbers crossing a wire ten times a second. A histogram
-   * of twenty-four buckets is small; the page also builds a wide one on
-   * demand, to show what the size does to the crossing.
+   * Read from the duration column rather than parsed out of the text, and sent
+   * to the panel as a typed array — which is also the bulk data З-6 asks
+   * about, crossing the wire ten times a second.
    */
   readonly hist: Float64Array
 }
@@ -169,12 +183,16 @@ function bytesOf(needle: string): Uint8Array {
 
 const isRegex = (needle: string): boolean => /[\\^$.*+?()[\]{}|]/.test(needle)
 
+/** Duration buckets: one per hundred milliseconds, up to two seconds. */
+export const BUCKETS = 20
+export const BUCKET_MS = 100
+
 export function* searching(
   log: Log,
   needle: string,
   chunk = 25_000,
   limit = 50,
-  buckets = 24,
+  buckets = BUCKETS,
 ): Generator<Progress, Progress, undefined> {
   const started = performance.now()
   const found: Line[] = []
@@ -222,9 +240,9 @@ export function* searching(
 
       if (!hit) continue
       total++
-      // The bucket a line falls into: a stand-in for a real dimension, decided
-      // by the line number so it costs nothing to compute.
-      hist[i % buckets] = (hist[i % buckets] ?? 0) + 1
+      // Which duration bucket this line falls into, taken from the column.
+      const at = Math.min(buckets - 1, Math.floor((log.ms[i] ?? 0) / BUCKET_MS))
+      hist[at] = (hist[at] ?? 0) + 1
       // Only the lines that will be shown become strings.
       if (found.length < limit) found.push({ id: i, text: log.at(i) })
     }
