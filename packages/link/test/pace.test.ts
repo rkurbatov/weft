@@ -1,7 +1,7 @@
 // A pace for the wire: no oftener than once every so often, and the last
 // value always arrives.
 //
-// Ordered by Retex (З-5): folds of a long run must reach a panel about ten
+// Ordered by Retex (order item 5): folds of a long run must reach a panel
 // times a second, not a thousand. What matters is the pair of promises — the
 // rate is kept under a storm, and nothing is lost at the end of one — so both
 // are tested here rather than watched on a page.

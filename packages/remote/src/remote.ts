@@ -124,8 +124,9 @@ export function refused<T>(
 // ── Combining outcomes ───────────────────────────────────────────────────────
 // Screens rarely wait for one thing. `together` is the whole of Promise.all
 // said for living values: value when every part holds, the first refusal in
-// declaration order speaks for the whole (первый отказ is a law of order, not
-// of clocks), and the summary is only as old as its oldest part. `firstOf` is
+// declaration order speaks for the whole (which refusal comes first is fixed
+// by the order they were written in, not by which one arrived first), and the
+// summary is only as old as its oldest part. `firstOf` is
 // precedence among stand-ins: the first part that holds a value wins; hope
 // outranks refusal among the empty-handed.
 

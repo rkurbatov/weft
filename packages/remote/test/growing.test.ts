@@ -1,6 +1,6 @@
 // A long run that shows its work.
 //
-// Ordered by Retex (З-2): a histogram over a hundred megabytes is not one
+// Ordered by Retex (item 2): a histogram over a hundred megabytes is not one
 // answer at the end. Every step is a real value — a histogram half way is a
 // histogram — and the screen should be showing it while the work goes on.
 //

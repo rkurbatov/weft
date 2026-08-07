@@ -164,7 +164,7 @@ export interface Progress {
    * hundred milliseconds, from nought to two seconds.
    *
    * Read from the duration column rather than parsed out of the text, and sent
-   * to the panel as a typed array — which is also the bulk data З-6 asks
+   * to the panel as a typed array — which is also the bulk data order item 6
    * about, crossing the wire ten times a second.
    */
   readonly hist: Float64Array

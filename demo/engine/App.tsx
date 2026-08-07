@@ -33,7 +33,7 @@ function Count({ label, value }: { label: string; value: ReactNode }): ReactNode
 /**
  * Matches per bucket, drawn from the typed array the worker sends.
  *
- * The bars are the bulk data of З-6 made visible: this is what crosses the
+ * The bars are the bulk data of order item 6 made visible: this is what
  * wire ten times a second, and it grows chunk by chunk while the run goes on.
  */
 export function Histogram({ hist }: { hist: Float64Array }): ReactNode {
@@ -157,6 +157,25 @@ export function App(): ReactNode {
           }}
           placeholder="declined"
         />
+        <button
+          type="button"
+          onClick={() => {
+            // Typing faster than the search: eighty milliseconds a letter
+            // against a search of half a second. Every letter but the last
+            // calls off the run before it — which is the thing this page is
+            // about and which nobody can demonstrate by hand reliably.
+            const word = 'declined'
+            for (let i = 1; i <= word.length; i++) {
+              setTimeout(() => {
+                const part = word.slice(0, i)
+                setTyped(part)
+                station.peek().engine.write('needle', part)
+              }, i * 80)
+            }
+          }}
+        >
+          type fast
+        </button>
         <button type="button" onClick={() => setShowing(open => !open)}>
           {showing ? 'hide results' : 'show results'}
         </button>

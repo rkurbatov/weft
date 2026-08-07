@@ -1,6 +1,6 @@
 // A batch at scale: hundreds of writes, one waking.
 //
-// The order from Retex (З-8) is not a new capability but a proof: editing a
+// The order from Retex (item 8) is not a new capability but a proof: editing a
 // node of a tree rewrites a subtree, so hundreds of ports change at once and
 // no watcher may see the halfway states or wake a hundred times. Written here
 // rather than in the demo, so that the proof survives the demo.

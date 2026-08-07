@@ -1,6 +1,6 @@
 // What bulk numbers cost on the way to a panel.
 //
-// The order (З-6) asks whether histograms and heat maps should be handed over
+// The order (item 6) asks whether histograms and heat maps should be handed
 // by ownership instead of copied. The answer is a number, and it depends on
 // two things: how big the array is, and how often it is sent. Both are here.
 //
