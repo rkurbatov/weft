@@ -69,7 +69,10 @@ const shown = (step: Progress, of: number): Found => ({
 
 export function engine(): Engine {
   const needle = cell('', { name: 'needle' })
-  const size = cell(2_000_000, { name: 'size' })
+  // Four million lines: a search takes about a second, which is what makes a
+  // called-off run visible at ordinary typing speed. Two million searched in a
+  // quarter of a second, and nobody types that fast.
+  const size = cell(4_000_000, { name: 'size' })
   const log = cell<Log>(() => logLines(size.get()), { name: 'log' })
   const corpusBytes = cell(() => log.get().size, { name: 'corpusBytes' })
 

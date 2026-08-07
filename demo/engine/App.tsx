@@ -94,7 +94,9 @@ function Results({ needle }: { needle: string }): ReactNode {
       </p>
     )
   }
-  if (found === undefined) return <p className="dim">asking the worker…</p>
+  if (found === undefined) {
+    return <p className="dim">the worker is building four million lines of log…</p>
+  }
 
   // Nothing found *yet* is not nothing found: a run over part of the log is a
   // real answer, and saying "no matches" while it goes on would be a lie.
@@ -126,6 +128,7 @@ function Results({ needle }: { needle: string }): ReactNode {
 export function App(): ReactNode {
   const [typed, setTyped] = useState('')
   const [showing, setShowing] = useState(true)
+  const asked = useLive(() => station.get().engine.view<number>('asked').get())
   const published = useLive(() => station.get().engine.view<number>('published').get())
   const corpusBytes = useLive(() => station.get().engine.view<number>('corpusBytes').get())
   const calledOff = useLive(() => station.get().engine.view<number>('calledOff').get())
@@ -138,8 +141,10 @@ export function App(): ReactNode {
       <h1>Searching a log that lives in another thread</h1>
 
       <p className="story">
-        Two million lines of made-up service log, searched by a worker in chunks. This page holds
-        nothing but a mirror of the answer — which is why the box never stutters.
+        Four million lines of made-up service log, searched by a worker in chunks. This page holds
+        nothing but a mirror of the answer — which is why the box never stutters. The first search
+        waits a few seconds while the worker builds the corpus; after that a search takes about a
+        second, so typing another letter calls the running one off.
       </p>
 
       <div className="search">
@@ -161,9 +166,10 @@ export function App(): ReactNode {
       </div>
 
       <div className="counts">
-        <Count label="chunks published" value={published ?? '—'} />
+        <Count label="runs started" value={asked ?? '—'} />
         <Count label="runs finished" value={answered ?? '—'} />
         <Count label="runs called off" value={calledOff ?? '—'} />
+        <Count label="chunks published" value={published ?? '—'} />
         <Count label="packets on the wire" value={sent ?? '—'} />
         <Count label="corpus in memory" value={mb(corpusBytes)} />
         <Count

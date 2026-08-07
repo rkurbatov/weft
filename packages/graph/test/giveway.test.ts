@@ -8,6 +8,7 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
 import { giveWay } from '#graph'
+import { MessageChannel } from 'node:worker_threads'
 
 describe('giving way', () => {
   test('the caller resumes after other work has had its turn', async () => {
@@ -57,5 +58,37 @@ describe('giving way', () => {
     control.abort()
     await run
     assert.equal(sawIt, true, 'which is the whole reason for yielding at all')
+  })
+})
+
+describe('what giving way must not do', () => {
+  test('a message queued while the run waits is heard before it resumes', async () => {
+    // The reason this matters: a worker searching a corpus hears "stop" as a
+    // message. A yield that puts the caller ahead of newly queued tasks —
+    // `scheduler.yield()` does exactly that — means the message is never
+    // heard, the run finishes work nobody wants, and cancelling silently does
+    // nothing. It looked fine in Node and never worked in a browser.
+    const order: string[] = []
+    const { port1, port2 } = new MessageChannel()
+    port1.addEventListener('message', () => order.push('message'))
+    port1.start()
+
+    const run = (async () => {
+      for (let i = 0; i < 3; i++) {
+        await giveWay()
+        order.push(`chunk ${String(i)}`)
+      }
+    })()
+
+    port2.postMessage(null)
+    await run
+    port1.close()
+    port2.close()
+
+    assert.ok(order.includes('message'), 'the message arrived at all')
+    assert.ok(
+      order.indexOf('message') < order.indexOf('chunk 2'),
+      `the run overtook the message: ${order.join(' → ')}`,
+    )
   })
 })

@@ -27,6 +27,7 @@ offer(
       found: held.found,
       corpusBytes: held.corpusBytes,
       // Counters the library keeps, published like anything else.
+      asked: held.tally.asked,
       published: held.tally.published,
       calledOff: held.tally.calledOff,
       answered: held.tally.answered,
