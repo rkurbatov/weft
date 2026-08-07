@@ -47,12 +47,18 @@ export interface Link {
   close(): void
 }
 
-/** The three cells a followed table hands out. */
+/** The cells a followed table hands out. */
 const faceOfTable = (made: {
   rows: Port<readonly unknown[]>
   cold: Port<boolean>
   catchingUp: Port<boolean>
-}): Mirrored<unknown> => ({ rows: made.rows, cold: made.cold, catchingUp: made.catchingUp })
+  received: Port<number>
+}): Mirrored<unknown> => ({
+  rows: made.rows,
+  cold: made.cold,
+  catchingUp: made.catchingUp,
+  received: made.received,
+})
 
 /** A table on this side of a wire: rows, and whether they are behind. */
 export interface Mirrored<R> {
@@ -61,6 +67,16 @@ export interface Mirrored<R> {
   readonly cold: Watchable<boolean>
   /** A batch was lost and the rows on screen are the last good ones. */
   readonly catchingUp: Watchable<boolean>
+  /**
+   * How many rows have actually arrived over the wire: the snapshot, plus
+   * every row of every batch since.
+   *
+   * Counted here because here is where they land. Counted on the other side it
+   * would be the rows the list handed out, which is not the same number and
+   * not the interesting one — a demo said "rows that crossed the wire" while
+   * counting something else entirely.
+   */
+  readonly received: Watchable<number>
 }
 
 export interface LinkOptions {
@@ -154,6 +170,7 @@ export function link(channel: Channel, options: LinkOptions = {}): Link {
         const made = name === undefined ? undefined : tables.get(name)
         if (made === undefined) return
         made.held.clear()
+        made.received.set(made.received.peek() + message.rows.length)
         for (const { key, row } of message.rows) made.held.set(key, row)
         made.at = message.at
         made.rows.set([...made.held.values()])
@@ -173,12 +190,20 @@ export function link(channel: Channel, options: LinkOptions = {}): Link {
           channel.send({ kind: 'catchUp', id: message.id, since: made.at })
           return
         }
+        made.received.set(made.received.peek() + message.changes.length)
         for (const change of message.changes) {
           if (change.next === null) made.held.delete(change.key)
           else made.held.set(change.key, change.next)
         }
         made.at = message.to
-        made.rows.set([...made.held.values()])
+        // With an order given, the rows are shown in it. Without one, they keep
+        // the order they arrived in — which is right for a table and wrong for
+        // a window, where new rows would pile up at the end.
+        made.rows.set(
+          message.order === undefined
+            ? [...made.held.values()]
+            : message.order.map(key => made.held.get(key)).filter(row => row !== undefined),
+        )
         made.catchingUp.set(false)
         return
       }
@@ -280,6 +305,7 @@ export function link(channel: Channel, options: LinkOptions = {}): Link {
       rows: Port<readonly unknown[]>
       cold: Port<boolean>
       catchingUp: Port<boolean>
+      received: Port<number>
       held: Map<unknown, unknown>
       at: number
     }
@@ -309,11 +335,15 @@ export function link(channel: Channel, options: LinkOptions = {}): Link {
       }),
       cold: port(true, { name: `${name}.cold` }),
       catchingUp: port(false, { name: `${name}.catchingUp` }),
+      received: port(0, { name: `${name}.received` }),
       held: new Map<unknown, unknown>(),
       at: 0,
     }
     tables.set(name, made)
     byTable.set(id, name)
+    // So a refusal can name what was asked for. Without this the complaint
+    // said `"?"`, which is exactly the moment a name is wanted.
+    nameOf.set(id, name)
     return faceOfTable(made) as Mirrored<R>
   }
 

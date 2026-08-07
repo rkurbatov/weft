@@ -11,7 +11,7 @@
 
 import { cell } from '#loom'
 import type { Port, Watchable } from '#loom'
-import { quietly, table, watch } from '#weft'
+import { table } from '#weft'
 import type { Key, SourceTable } from '#weft'
 
 export interface Task {
@@ -49,8 +49,6 @@ export interface Desk {
   readonly window: Watchable<readonly Task[]>
   /** Drafts by row key: an edit in progress survives its row leaving the window. */
   readonly draft: (key: Key) => Port<string>
-  /** How many rows have crossed the wire since this desk was made. */
-  readonly crossed: Watchable<number>
 }
 
 export function desk(count = 100_000): Desk {
@@ -65,19 +63,6 @@ export function desk(count = 100_000): Desk {
     name: 'window',
   })
 
-  // How many rows the window has handed out, which is what crosses the wire.
-  //
-  // Counted by a watcher, not inside the formula. A formula that writes a cell
-  // wakes whatever reads it — including itself, through the settling — and the
-  // first version of this line was an infinite recursion that only showed up
-  // in the browser. A watcher writes and reads nothing back, so it cannot feed
-  // itself.
-  const crossed = cell(0, { name: 'crossed' })
-  watch(() => {
-    const shown = window.get()
-    quietly(() => crossed.set(crossed.peek() + shown.length))
-  })
-
   const drafts = new Map<Key, Port<string>>()
   const draft = (key: Key): Port<string> => {
     const known = drafts.get(key)
@@ -87,5 +72,5 @@ export function desk(count = 100_000): Desk {
     return made
   }
 
-  return { rows, size: rows.size, from, span, window, draft, crossed }
+  return { rows, size: rows.size, from, span, window, draft }
 }

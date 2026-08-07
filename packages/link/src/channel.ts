@@ -68,6 +68,16 @@ export type ToWatcher =
       readonly from: number
       readonly to: number
       readonly changes: readonly { readonly key: unknown; readonly next: unknown | null }[]
+      /**
+       * The keys in the order they are to be shown, when order is part of the
+       * answer — a window onto an ordered view is the case.
+       *
+       * Keys, not rows: the order of twenty rows is twenty numbers, while the
+       * rows themselves are only sent when they change. Without it a receiver
+       * holds the right rows in the order they happened to arrive, which for a
+       * scrolled window is no order at all.
+       */
+      readonly order?: readonly unknown[]
     }
   | { readonly kind: 'failed'; readonly id: number; readonly error: string }
   /** The station will not serve this watcher: not its session. */

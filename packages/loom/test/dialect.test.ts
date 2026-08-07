@@ -3,8 +3,8 @@
 
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
-import { owned, port, subscribe } from '#weft'
-import { cell, laid, notes, region, sends, truth, truthBy, will } from '#loom'
+import { owned, port, subscribe, wirePair } from '#weft'
+import { adopt, cell, laid, listed, notes, offer, region, sends, truth, truthBy, will } from '#loom'
 import type { Note } from '#weft'
 import type { Channel as Wire } from '#weft'
 import { settle, until, wait, world } from '#testkit'
@@ -172,12 +172,11 @@ describe('the Loom dialect', () => {
   })
 
   test('carry: without talking tabs the station lives inline, and the mirror cannot tell', async () => {
-    const { carry, adopt } = await import('#loom')
+    const { carry } = await import('#loom')
     const { kanbanServer } = await import('../../../demo/kanban-common/server.ts')
     const { kanban } = await import('../../../demo/kanban-weft/state.ts')
     const { serveKanban, kanbanMirror } = await import('../../../demo/kanban-weft/mirror.ts')
     const { atOnce } = await import('#weft')
-    void adopt
 
     const carried = carry(
       {
@@ -205,7 +204,7 @@ describe('the Loom dialect', () => {
   })
 
   test('carry: with talking tabs one leads and the others mirror it', async () => {
-    const { carry, offer } = await import('#loom')
+    const { carry } = await import('#loom')
     const { link } = await import('#weft')
     const { atOnce } = await import('#weft')
     const { heldOf } = await import('#weft')
@@ -397,5 +396,34 @@ describe('a truth that reports as it goes', () => {
     until(subscribe(plain, () => {}))
     await settle(3)
     assert.equal(plain.peek(), 'answer')
+  })
+})
+
+describe('a station that publishes a list', () => {
+  test('the list reaches the tab through the dialect, not only through the wire', async () => {
+    // The type said a station may publish lists; the code that hands them to
+    // the wire was missing, so a panel asked for a table nobody offered and
+    // got a refusal. Declared and forwarded are two different things.
+    const rows = port<readonly { id: number; title: string }[]>(
+      [
+        { id: 1, title: 'one' },
+        { id: 2, title: 'two' },
+      ],
+      { name: 'rows' },
+    )
+    const wire = wirePair()
+    until(offer({ lists: { rows: listed(rows, row => row.id) } }, wire.graph))
+
+    const panel = adopt(wire.watcher)
+    until(panel.close)
+    const mirror = panel.list<{ id: number; title: string }>('rows')
+    until(subscribe(mirror.rows, () => {}))
+    await settle(3)
+
+    assert.deepEqual(
+      mirror.rows.peek().map(row => row.title),
+      ['one', 'two'],
+    )
+    assert.equal(mirror.received.peek(), 2, 'and it counts what landed')
   })
 })

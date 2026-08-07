@@ -17,7 +17,7 @@ import type { ServeOptions } from '#weft'
 import { link } from '#weft'
 import type { LinkOptions } from '#weft'
 import type { Channel } from '#weft'
-import type { Lock } from '#weft'
+import type { ListOffer, Lock, Mirrored } from '#weft'
 import { subscribe } from '#weft'
 
 export interface Offering {
@@ -31,6 +31,20 @@ export interface Offering {
    */
   facts?: Readonly<Record<string, { set(value: never): void }>>
   acts?: Readonly<Record<string, (...args: never[]) => unknown>>
+  /**
+   * Lists that travel as differences: what entered and what left, not the
+   * whole list every time.
+   *
+   * For a window onto something big. Scrolling by one row sends one row.
+   */
+  lists?: Readonly<
+    Record<
+      string,
+      // The least a list must be, not `never[]`: a list of rows is not a list
+      // of nevers, and asking for one would make every station cast its own.
+      ListOffer
+    >
+  >
 }
 
 export interface OfferOptions extends ServeOptions {
@@ -56,6 +70,7 @@ export function offer(handles: Offering, channel: Channel, options: OfferOptions
     {
       cells,
       ...(handles.facts === undefined ? {} : { facts: handles.facts }),
+      ...(handles.lists === undefined ? {} : { lists: handles.lists }),
       ...(handles.acts === undefined ? {} : { commands: handles.acts }),
     },
     channel,
@@ -70,6 +85,13 @@ export function offer(handles: Offering, channel: Channel, options: OfferOptions
 export interface Adopted {
   /** The station's views, read plain: undefined until the first value lands. */
   view<T>(name: string): Watchable<T | undefined>
+  /**
+   * A list the station publishes as differences: rows here, kept up to date by
+   * what entered and what left.
+   *
+   * For a window onto something big — scrolling by one row costs one row.
+   */
+  list<R>(name: string): Mirrored<R>
   /** The station's facts: write-through. */
   write(fact: string, value: unknown): void
   /** The station's acts. */
@@ -86,6 +108,8 @@ export function adopt(channel: Channel, options: LinkOptions = {}): Adopted {
 
   // Names are declared by the station, so this map is as big as the face and no
   // bigger; the mirrors under it are let go on their own when nobody looks.
+  const list = <R>(name: string): Mirrored<R> => wire.table<R>(name)
+
   const view = <T>(name: string): Watchable<T | undefined> => {
     const known = faces.get(name)
     if (known !== undefined) return known as Watchable<T | undefined>
@@ -109,6 +133,7 @@ export function adopt(channel: Channel, options: LinkOptions = {}): Adopted {
 
   return {
     view,
+    list,
     write: (fact, value) => wire.write(fact, value),
     act: name => wire.command(name),
     warm(names) {

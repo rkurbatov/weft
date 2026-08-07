@@ -13,8 +13,9 @@ export interface Desk {
   readonly size: { get(): number | undefined }
   readonly from: { get(): number | undefined; set(value: number): void }
   readonly span: { get(): number | undefined; set(value: number): void }
-  readonly window: { get(): readonly Task[] | undefined }
-  readonly crossed: { get(): number | undefined }
+  readonly window: { rows: { get(): readonly Task[] } }
+  /** Rows that actually arrived over the wire — counted where they land. */
+  readonly received: { get(): number }
   readonly draft: (key: number) => { get(): string; set(value: string): void }
   readonly rename: (id: number, title: string) => Promise<void>
 }
@@ -34,6 +35,8 @@ function start(): Desk {
     return made
   }
 
+  const mirror = station.list<Task>('window')
+
   return {
     size: station.view<number>('size'),
     from: {
@@ -44,8 +47,11 @@ function start(): Desk {
       get: () => station.view<number>('span').get(),
       set: value => station.write('span', value),
     },
-    window: station.view<readonly Task[]>('window'),
-    crossed: station.view<number>('crossed'),
+    // Followed, not watched: the window arrives as differences, so scrolling
+    // by one row costs one row on the wire.
+    window: mirror,
+    received: mirror.received,
+
     draft,
     rename: station.act<[number, string]>('rename'),
   }

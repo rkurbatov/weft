@@ -245,9 +245,18 @@ export function serve(surface: Surface, channel: Channel, options: ServeOptions 
    * not against what the list held a moment ago — so a follower that missed
    * nothing gets exactly the rows that changed for it.
    */
-  function followList(id: number, list: ListOffer): void {
+  function followList(id: number, list: ListOffer, keep = 4096): void {
     let sentKeys = new Map<unknown, unknown>()
     let at = 0
+    /**
+     * Rows this follower already has, including ones no longer in the list.
+     *
+     * A window scrolled down and back up asks for rows it was sent a moment
+     * ago; without this they are sent again, and elbowing about one place on
+     * screen keeps paying for the same rows. Bounded, because a follower that
+     * has walked a hundred thousand rows should not be remembered whole.
+     */
+    const alreadySent = new Map<unknown, unknown>()
 
     const send = (rows: readonly unknown[], first: boolean): void => {
       const now = new Map<unknown, unknown>()
@@ -256,24 +265,38 @@ export function serve(surface: Surface, channel: Channel, options: ServeOptions 
       if (first) {
         at = 1
         sentKeys = now
+        for (const [key, row] of now) alreadySent.set(key, row)
         channel.send({ kind: 'rows', id, at, rows: [...now].map(([key, row]) => ({ key, row })) })
         return
       }
 
+      const order = [...now.keys()]
+
       const changes: { key: unknown; next: unknown | null }[] = []
       for (const [key, row] of now) {
-        const had = sentKeys.get(key)
-        if (had === undefined || had !== row) changes.push({ key, next: row })
+        // Sent before and unchanged since: the other side still has it, so the
+        // order alone puts it back on screen.
+        if (alreadySent.get(key) === row) continue
+        changes.push({ key, next: row })
+        alreadySent.set(key, row)
       }
-      for (const key of sentKeys.keys()) {
-        if (!now.has(key)) changes.push({ key, next: null })
+      // Nothing is dropped here: what left the window is kept on the far side
+      // and put back by the order when it returns. The bound below is what
+      // stops that from growing without end.
+      while (alreadySent.size > keep) {
+        const oldest = alreadySent.keys().next().value
+        if (oldest === undefined) break
+        alreadySent.delete(oldest)
+        changes.push({ key: oldest, next: null })
       }
-      if (changes.length === 0) return
+      const sameOrder =
+        order.length === sentKeys.size && order.every((key, i) => [...sentKeys.keys()][i] === key)
+      if (changes.length === 0 && sameOrder) return
 
       const from = at
       at++
       sentKeys = now
-      channel.send({ kind: 'changed', id, from, to: at, changes })
+      channel.send({ kind: 'changed', id, from, to: at, changes, order })
     }
 
     // The snapshot goes now, not on the first change: a subscription reports

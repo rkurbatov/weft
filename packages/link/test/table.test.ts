@@ -281,3 +281,96 @@ describe('a list that travels as a difference', () => {
     assert.equal(counted.rows(), settled, 'writing the same window again sends nothing')
   })
 })
+
+describe('counting what actually crossed', () => {
+  test('the count is of rows that landed, not of rows handed out', async () => {
+    const rows = table<Row>({ key: r => r.id as Key, name: 'rows' })
+    until(() => rows.dispose())
+    rows.replace(Array.from({ length: 500 }, (_, i) => ({ id: i, title: `row ${String(i)}` })))
+    const ordered = rows.orderBy((a, b) => a.id - b.id, 'byId')
+    until(() => ordered.dispose())
+
+    const from = port(0, { name: 'from' })
+    const window = derived(() => ordered.slice(from.get(), from.get() + 20).get(), {
+      name: 'window',
+    })
+    const wire = wirePair()
+    until(
+      serve({ lists: { window: listed(window, row => row.id) } }, wire.graph, {
+        schedule: atOnce,
+      }),
+    )
+    const watcher = link(wire.watcher)
+    until(watcher.close)
+    const mirror = watcher.table<Row>('window')
+    until(subscribe(mirror.rows, () => {}))
+    await settle(3)
+
+    assert.equal(mirror.received.peek(), 20, 'the first screenful')
+
+    // Scrolling within one row: the window does not move, so nothing lands.
+    const settled = mirror.received.peek()
+    for (let i = 0; i < 20; i++) from.set(0)
+    await settle(3)
+    assert.equal(mirror.received.peek(), settled, 'the same window costs nothing')
+
+    // A step of one row costs the one row that entered — and going back costs
+    // nothing at all, because the far side still has what it was sent. Elbowing
+    // about one place on screen is free after the first pass.
+    from.set(1)
+    await settle(3)
+    const afterOneStep = mirror.received.peek() - settled
+    assert.equal(afterOneStep, 1, 'one row entered, one row crossed')
+
+    for (let i = 0; i < 5; i++) {
+      from.set(0)
+      from.set(1)
+    }
+    await settle(3)
+    assert.equal(
+      mirror.received.peek() - settled,
+      afterOneStep,
+      'and going over the same rows again costs nothing',
+    )
+  })
+})
+
+describe('a window keeps its order', () => {
+  test('scrolling up and down leaves the rows in order, not in arrival order', async () => {
+    const rows = table<Row>({ key: r => r.id as Key, name: 'rows' })
+    until(() => rows.dispose())
+    rows.replace(Array.from({ length: 200 }, (_, i) => ({ id: i, title: `row ${String(i)}` })))
+    const ordered = rows.orderBy((a, b) => a.id - b.id, 'byId')
+    until(() => ordered.dispose())
+
+    const from = port(0, { name: 'from' })
+    const window = derived(() => ordered.slice(from.get(), from.get() + 10).get(), {
+      name: 'window',
+    })
+    const wire = wirePair()
+    until(
+      serve({ lists: { window: listed(window, row => row.id) } }, wire.graph, {
+        schedule: atOnce,
+      }),
+    )
+    const watcher = link(wire.watcher)
+    until(watcher.close)
+    const mirror = watcher.table<Row>('window')
+    until(subscribe(mirror.rows, () => {}))
+    await settle(3)
+
+    const shown = (): number[] => rowsOf(mirror).map(row => row.id)
+    assert.deepEqual(shown(), [0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
+
+    // Scrolling down: the rows that entered would otherwise pile up at the end
+    // of the map, and the window would read 5..9 then 10..14 in arrival order.
+    from.set(5)
+    await settle(3)
+    assert.deepEqual(shown(), [5, 6, 7, 8, 9, 10, 11, 12, 13, 14], 'in order after scrolling down')
+
+    // And back up: rows that entered at the top belong at the top.
+    from.set(2)
+    await settle(3)
+    assert.deepEqual(shown(), [2, 3, 4, 5, 6, 7, 8, 9, 10, 11], 'in order after scrolling up')
+  })
+})
