@@ -62,9 +62,10 @@ export interface Feed<R> {
   count: (test?: (row: R) => boolean) => Watchable<number>
   sumBy: (measure: (row: R) => number) => Watchable<number>
   /** Rows the application fetched itself — a page, a search, a reload. */
-  take: (...rows: R[]) => void
+  /** Rows in: loose, or one collection. `take(rows)` never spreads. */
+  take: (...rows: readonly R[] | [Iterable<R>]) => void
   /** Rows the application knows are gone. */
-  lose: (...keys: Key[]) => void
+  lose: (...keys: readonly Key[] | [Iterable<Key>]) => void
   /** A batch from the world, put and drop together. */
   feed: (delta: Delta<R>) => void
   /** The whole picture anew; rows that stayed keep their identity. */
@@ -135,6 +136,8 @@ export function feed<R>(passport: FeedPassport<R>): Feed<R> {
 
   const self = {
     ...reading(t, passport.key),
+    // Passed through as they came: one collection stays one argument, so a
+    // large one is never spread into call arguments.
     take: (...rows) => t.put(...rows),
     lose: (...keys) => t.drop(...keys),
     feed: delta => t.apply(delta),

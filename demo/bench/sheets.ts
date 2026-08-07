@@ -15,6 +15,10 @@ import type { Contents, SheetShape } from '#demo'
 import { createSheet as classic } from '../spreadsheet/store.ts'
 import { createSheet as onWeft } from '../spreadsheet-weft/sheet.ts'
 
+/** The longest of a set of widths, folded rather than spread. */
+const widest = (widths: readonly number[]): number =>
+  widths.reduce((most, one) => (one > most ? one : most), 0)
+
 interface Sheet {
   watch(at: string, told: () => void): () => void
   set(at: string, text: string): void
@@ -129,7 +133,7 @@ const count = (value: number): string => value.toLocaleString('en-US')
 
 function table(rows: string[][]): string {
   const widths = (rows[0] ?? []).map((_head, col) =>
-    Math.max(...rows.map(row => (row[col] ?? '').length)),
+    widest(rows.map(row => (row[col] ?? '').length)),
   )
   return rows
     .map(row =>

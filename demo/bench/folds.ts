@@ -32,7 +32,7 @@ function scene(
       const page: Row[] = []
       for (let i = from; i < Math.min(from + 10_000, N); i++)
         page.push({ id: i, score: (i * 7919) % 1_000_003 })
-      t.put(...page)
+      t.put(page)
     }
     const answer = make(t)
     const stop = subscribe(answer as never, () => {})

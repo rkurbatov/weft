@@ -65,7 +65,8 @@ export function whyRow(
       const out: Array<{ source: string; key: Key }> = []
       for (const [underKey, row] of oracle(node.input, sources)) {
         if (JSON.stringify(groupOf(node, row)) !== wanted) continue
-        out.push(...whyRow(node.input, underKey, sources))
+        // Not a spread: a group can have any number of members.
+        for (const one of whyRow(node.input, underKey, sources)) out.push(one)
       }
       return out
     }

@@ -64,8 +64,17 @@ export interface Table<R> {
 export interface SourceTable<R> extends Table<R> {
   /** One batch, one version step; a put equal to what is there is not a change. */
   apply(patch: Patch<R>): void
-  put(...rows: R[]): void
-  drop(...keys: Key[]): void
+  /**
+   * Put rows in, one batch, one version step.
+   *
+   * Takes them loose or as one iterable: `put(a, b)` for a couple, `put(rows)`
+   * for a collection. Not rest-only, because rest invites `put(...rows)`, and
+   * spreading a hundred thousand rows into call arguments overflows the stack
+   * — in a browser, where the stack is smaller than Node's, so tests stay
+   * green while the page dies on load. That has happened here.
+   */
+  put(...rows: readonly R[] | [Iterable<R>]): void
+  drop(...keys: readonly Key[] | [Iterable<Key>]): void
   /** The whole picture anew — pages and snapshots land here. Kept rows keep their identity. */
   replace(rows: Iterable<R>): void
   has(key: Key): boolean

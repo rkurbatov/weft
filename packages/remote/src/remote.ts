@@ -56,6 +56,16 @@ export type Remote<T> =
       readonly loading: false
     }
 
+/**
+ * The smallest of a set of moments.
+ *
+ * A fold rather than `Math.min(...moments)`: spreading a collection into call
+ * arguments has a size limit, and `together` is handed however many parts the
+ * caller has. Small today is not a reason to write it so it breaks on large.
+ */
+const oldest = (moments: readonly number[]): number =>
+  moments.reduce((least, at) => (at < least ? at : least), Number.POSITIVE_INFINITY)
+
 export const EMPTY: Remote<never> = {
   kind: 'empty',
   value: undefined,
@@ -160,7 +170,7 @@ export function together<P extends Parts>(parts: P): Remote<ValuesOf<P>> {
   }
   const held: Held<ValuesOf<P>> | undefined =
     allHeld && list.length > 0
-      ? { value: rebuild(helds.map(h => h.value)), at: Math.min(...helds.map(h => h.at)) }
+      ? { value: rebuild(helds.map(h => h.value)), at: oldest(helds.map(h => h.at)) }
       : undefined
 
   const bad = list.find(part => part.kind === 'failed')
@@ -179,7 +189,7 @@ export function together<P extends Parts>(parts: P): Remote<ValuesOf<P>> {
 
   const flights = list.filter(part => part.kind === 'loading')
   if (flights.length > 0) {
-    const since = Math.min(...flights.map(part => (part.kind === 'loading' ? part.since : 0)))
+    const since = oldest(flights.map(part => (part.kind === 'loading' ? part.since : 0)))
     return {
       kind: 'loading',
       since,

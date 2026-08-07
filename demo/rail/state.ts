@@ -58,7 +58,7 @@ export function rail(server: RailServer): Rail {
   const nextPage = command(
     async () => {
       const got = await server.page(loaded.peek(), PAGE)
-      games.take(...got.items)
+      games.take(got.items)
       total.set(got.total)
       loaded.set(Math.min(loaded.peek() + PAGE, got.total))
     },

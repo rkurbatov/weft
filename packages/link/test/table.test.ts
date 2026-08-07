@@ -7,8 +7,8 @@
 
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
-import { atOnce, link, serve } from '#link'
-import { subscribe, table, wirePair } from '#weft'
+import { atOnce, link, listed, serve } from '#link'
+import { derived, port, subscribe, table, wirePair } from '#weft'
 import type { Key } from '#weft'
 import { settle, until } from '#testkit'
 
@@ -75,7 +75,7 @@ describe('following a table across a wire', () => {
     const { rows, watcher, close } = pair()
     until(close)
 
-    rows.put(...Array.from({ length: 2_000 }, (_, i) => ({ id: i, title: `row ${String(i)}` })))
+    rows.put(Array.from({ length: 2_000 }, (_, i) => ({ id: i, title: `row ${String(i)}` })))
 
     let carried = 0
     const mirror = watcher.table<Row>('rows')
@@ -185,5 +185,99 @@ describe('following a table across a wire', () => {
     await settle(3)
 
     assert.equal(mirror.cold.peek(), true, 'nothing arrived, and nothing pretended to')
+  })
+})
+
+describe('a list that travels as a difference', () => {
+  /** Counts what actually crosses: rows in a snapshot, changes in a batch. */
+  function counting(inner: {
+    send(m: unknown): void
+    listen(h: (m: unknown) => void): () => void
+  }) {
+    let rows = 0
+    return {
+      rows: () => rows,
+      channel: {
+        send: (message: unknown) => {
+          const m = message as { kind?: string; rows?: unknown[]; changes?: unknown[] }
+          if (m.kind === 'rows') rows += m.rows?.length ?? 0
+          if (m.kind === 'changed') rows += m.changes?.length ?? 0
+          inner.send(message)
+        },
+        listen: (handler: (m: unknown) => void) => inner.listen(handler),
+      },
+    }
+  }
+
+  test('scrolling by one row sends one row, not a screenful', async () => {
+    const rows = table<Row>({ key: r => r.id as Key, name: 'rows' })
+    until(() => rows.dispose())
+    rows.replace(Array.from({ length: 1_000 }, (_, i) => ({ id: i, title: `row ${String(i)}` })))
+    const ordered = rows.orderBy((a, b) => a.id - b.id, 'byId')
+    until(() => ordered.dispose())
+
+    const from = port(0, { name: 'from' })
+    const window = derived(() => ordered.slice(from.get(), from.get() + 20).get(), {
+      name: 'window',
+    })
+
+    const wire = wirePair()
+    const counted = counting(wire.graph)
+    until(
+      serve({ lists: { window: listed(window, row => row.id) } }, counted.channel, {
+        schedule: atOnce,
+      }),
+    )
+
+    const watcher = link(wire.watcher)
+    until(watcher.close)
+    const mirror = watcher.table<Row>('window')
+    until(subscribe(mirror.rows, () => {}))
+    await settle(3)
+
+    const afterSnapshot = counted.rows()
+    assert.equal(afterSnapshot, 20, 'the first screenful arrives whole, once')
+
+    for (let at = 1; at <= 10; at++) from.set(at)
+    await settle(3)
+
+    const moved = counted.rows() - afterSnapshot
+    // Ten rows entered and ten left: twenty changes, not two hundred rows.
+    assert.ok(moved <= 40, `${String(moved)} rows crossed for ten one-row scrolls`)
+    assert.deepEqual(
+      rowsOf(mirror).map(r => r.id),
+      Array.from({ length: 20 }, (_, i) => i + 10),
+      'and the window on this side is the right one',
+    )
+  })
+
+  test('a list that did not change sends nothing', async () => {
+    const rows = table<Row>({ key: r => r.id as Key, name: 'rows' })
+    until(() => rows.dispose())
+    rows.replace([{ id: 1, title: 'one' }])
+    const ordered = rows.orderBy((a, b) => a.id - b.id, 'byId')
+    until(() => ordered.dispose())
+
+    const from = port(0, { name: 'from' })
+    const window = derived(() => ordered.slice(from.get(), from.get() + 20).get(), {
+      name: 'window',
+    })
+    const wire = wirePair()
+    const counted = counting(wire.graph)
+    until(
+      serve({ lists: { window: listed(window, row => row.id) } }, counted.channel, {
+        schedule: atOnce,
+      }),
+    )
+    const watcher = link(wire.watcher)
+    until(watcher.close)
+    until(subscribe(watcher.table<Row>('window').rows, () => {}))
+    await settle(3)
+
+    const settled = counted.rows()
+    from.set(0)
+    from.set(0)
+    await settle(3)
+    assert.equal(counted.rows(), settled, 'writing the same window again sends nothing')
   })
 })

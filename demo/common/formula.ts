@@ -453,7 +453,7 @@ export function evaluate(node: Node, lookup: Lookup): Value {
       for (const arg of node.args) {
         const some = gather(arg, lookup)
         if (!Array.isArray(some)) return some
-        values.push(...some)
+        for (const one of some) values.push(one)
       }
       return callFunction(node.name, values)
     }

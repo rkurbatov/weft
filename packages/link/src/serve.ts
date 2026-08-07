@@ -9,6 +9,27 @@ import type { Channel, Schedule, ToGraph } from './channel.ts'
 import { feedOf, follow } from '#table'
 import type { Table } from '#table'
 
+/** A list published as a difference: its rows, and how a row is identified. */
+/**
+ * A list published as a difference: its rows, and how a row is identified.
+ *
+ * Built with `listed()` rather than written out, so a station keeps its own
+ * row type and the wire keeps none: a map of lists of different row types has
+ * no honest element type, and asking for one would make every station cast.
+ */
+export interface ListOffer {
+  readonly rows: Watchable<readonly unknown[]>
+  readonly key: (row: unknown) => unknown
+}
+
+/** Publish a list of rows, identified by key. */
+export function listed<R>(rows: Watchable<readonly R[]>, key: (row: R) => unknown): ListOffer {
+  return {
+    rows: rows as Watchable<readonly unknown[]>,
+    key: row => key(row as R),
+  }
+}
+
 export interface Surface {
   /** Cells anyone may watch, by name. */
   cells?: Readonly<Record<string, Watchable<unknown>>>
@@ -31,6 +52,18 @@ export interface Surface {
    * its own tables. The same mistake was made once with facts.
    */
   tables?: Readonly<Record<string, { readonly name: string }>>
+  /**
+   * Lists of rows that travel as differences rather than whole.
+   *
+   * A window onto a big table is the case: scrolling by one row used to send
+   * the whole screen, because a list is one value and a value is sent whole.
+   * Declared here with the key of a row, the station sends what entered and
+   * what left — one row for one row of scrolling.
+   *
+   * The rows themselves stay wherever they are; this is only about what
+   * crosses.
+   */
+  lists?: Readonly<Record<string, ListOffer>>
 }
 
 export interface ServeOptions {
@@ -147,6 +180,14 @@ export function serve(surface: Surface, channel: Channel, options: ServeOptions 
 
   function onFollow(message: Extract<ToGraph, { kind: 'follow' }>): void {
     if (following.has(message.id)) return
+    const list = surface.lists?.[message.table]
+    if (list !== undefined) {
+      followList(
+        message.id,
+        list as { rows: Watchable<readonly unknown[]>; key: (row: unknown) => unknown },
+      )
+      return
+    }
     const table = surface.tables?.[message.table]
     if (table === undefined) {
       channel.send({ kind: 'failed', id: message.id, error: `no table "${message.table}"` })
@@ -195,6 +236,55 @@ export function serve(surface: Surface, channel: Channel, options: ServeOptions 
     })
     const stop = watch(catchUpNow)
     following.set(message.id, stop)
+  }
+
+  /**
+   * Following a list: the rows once, then what entered and what left.
+   *
+   * The difference is taken here, against what this follower was last sent —
+   * not against what the list held a moment ago — so a follower that missed
+   * nothing gets exactly the rows that changed for it.
+   */
+  function followList(id: number, list: ListOffer): void {
+    let sentKeys = new Map<unknown, unknown>()
+    let at = 0
+
+    const send = (rows: readonly unknown[], first: boolean): void => {
+      const now = new Map<unknown, unknown>()
+      for (const row of rows) now.set(list.key(row), row)
+
+      if (first) {
+        at = 1
+        sentKeys = now
+        channel.send({ kind: 'rows', id, at, rows: [...now].map(([key, row]) => ({ key, row })) })
+        return
+      }
+
+      const changes: { key: unknown; next: unknown | null }[] = []
+      for (const [key, row] of now) {
+        const had = sentKeys.get(key)
+        if (had === undefined || had !== row) changes.push({ key, next: row })
+      }
+      for (const key of sentKeys.keys()) {
+        if (!now.has(key)) changes.push({ key, next: null })
+      }
+      if (changes.length === 0) return
+
+      const from = at
+      at++
+      sentKeys = now
+      channel.send({ kind: 'changed', id, from, to: at, changes })
+    }
+
+    // The snapshot goes now, not on the first change: a subscription reports
+    // changes, and waiting for one meant a follower saw nothing at all until
+    // the list happened to move.
+    send(
+      untracked(() => list.rows.get()),
+      true,
+    )
+    const stop = subscribe(list.rows, rows => send(rows, false))
+    following.set(id, stop)
   }
 
   function onCatchUp(message: Extract<ToGraph, { kind: 'catchUp' }>): void {

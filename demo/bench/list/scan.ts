@@ -41,7 +41,7 @@ interface ListRow {
 
 export function scanList(heights: number[]): List {
   const rows = table<Row>({ key: r => r['id'] as Key, name: 'rows' })
-  rows.put(...heights.map((height, i) => ({ id: i, rank: i, height })))
+  rows.put(heights.map((height, i) => ({ id: i, rank: i, height })))
 
   // No carry field is named: the screen wants offsets, not a number in every
   // row. The plan sees that and keeps the carry in the line.
@@ -79,7 +79,7 @@ export function scanList(heights: number[]): List {
         top -= 1
         put.push({ id: nextId++, rank: top, height })
       }
-      rows.put(...put)
+      rows.put(put)
     },
     size: () => order().size(),
     // The layer's own accounting lives behind onScanPlan and the journal;

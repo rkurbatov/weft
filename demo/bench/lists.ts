@@ -20,6 +20,10 @@ import { flatList } from './list/flat.ts'
 import { scanList } from './list/scan.ts'
 import type { List } from './list/classic.ts'
 
+/** The longest of a set of widths, folded rather than spread. */
+const widest = (widths: readonly number[]): number =>
+  widths.reduce((most, one) => (one > most ? one : most), 0)
+
 const arg = (name: string, fallback: number): number => {
   const found = process.argv.find(a => a.startsWith(`--${name}=`))
   return found === undefined ? fallback : Number(found.split('=')[1])
@@ -93,7 +97,7 @@ const count = (v: number): string => v.toLocaleString('en-US')
 
 function table(lines: string[][]): string {
   const widths = (lines[0] ?? []).map((_h, col) =>
-    Math.max(...lines.map(line => (line[col] ?? '').length)),
+    widest(lines.map(line => (line[col] ?? '').length)),
   )
   return lines
     .map(line =>

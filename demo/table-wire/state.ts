@@ -55,10 +55,7 @@ export interface Desk {
 
 export function desk(count = 100_000): Desk {
   const rows = table<Task>({ key: r => r.id as Key, name: 'tasks' })
-  // Not `put(...seed(count))`: a hundred thousand rows spread into call
-  // arguments overflows the stack. Node survives it, a browser does not — the
-  // page died on load with a stack overflow and nothing else to go on.
-  rows.replace(seed(count))
+  rows.put(seed(count))
 
   const from = cell(0, { name: 'from' })
   const span = cell(20, { name: 'span' })

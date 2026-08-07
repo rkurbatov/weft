@@ -17,7 +17,7 @@ describe('tables', () => {
   /** A table, disposed of when the test ends, optionally filled on the way in. */
   function filled(...seed: Row[]): SourceTable<Row> {
     const t = held(table<Row>({ key: r => r.id }))
-    if (seed.length > 0) t.put(...seed)
+    if (seed.length > 0) t.put(seed)
     return t
   }
 

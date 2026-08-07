@@ -34,6 +34,26 @@ export { feedOf } from './feeds.ts'
 // door on purpose — a feed's state reads are only valid after reading its
 // version, which is a contract for engine code, not for applications.
 
+/**
+ * One argument that is a collection, or several that are rows.
+ *
+ * So that a caller never has to write `put(...rows)`: spreading a large
+ * collection into call arguments overflows the stack, and it does so at a size
+ * Node survives and a browser does not.
+ */
+const loose = <T>(given: readonly unknown[]): readonly T[] => {
+  const first = given[0]
+  if (
+    given.length === 1 &&
+    typeof first === 'object' &&
+    first !== null &&
+    Symbol.iterator in (first as object)
+  ) {
+    return [...(first as Iterable<T>)]
+  }
+  return given as readonly T[]
+}
+
 export function table<R>(options: TableOptions<R>): SourceTable<R> {
   const name = options.name ?? 'table'
   const keyOf = options.key
@@ -105,8 +125,11 @@ export function table<R>(options: TableOptions<R>): SourceTable<R> {
   const self: SourceTable<R> = {
     ...tableOver(feed, () => {}),
     apply,
-    put: (...rows) => apply({ put: rows }),
-    drop: (...keys) => apply({ drop: keys }),
+    // One iterable or a handful of rows: `put(rows)` and `put(a, b)` both
+    // work, and neither asks the caller to spread a collection into call
+    // arguments.
+    put: (...rows) => apply({ put: loose(rows) as readonly R[] }),
+    drop: (...keys) => apply({ drop: loose(keys) as readonly Key[] }),
     replace,
     has: key => state.has(key),
     peek: key => state.get(key),

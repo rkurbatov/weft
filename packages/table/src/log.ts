@@ -25,7 +25,13 @@ export function changeLog<R>(keep: number): ChangeLog<R> {
       const oldest = batches[0]
       if (oldest === undefined || v < oldest.v - 1) return null
       const out: Change<R>[] = []
-      for (const b of batches) if (b.v > v) out.push(...b.changes)
+      // Not `push(...b.changes)`: a batch has no size limit, and spreading one
+      // into call arguments overflows the stack. The same mistake, in the same
+      // shape, has now been made three times in this repository.
+      for (const b of batches) {
+        if (b.v <= v) continue
+        for (const change of b.changes) out.push(change)
+      }
       return out
     },
   }

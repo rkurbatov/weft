@@ -674,7 +674,7 @@ describe('the relational layer', () => {
       { length: CROWDED_KEY + 5 },
       (_, i) => ({ id: i, status: 'open' }) as unknown as Row,
     )
-    orders.put(...many)
+    orders.put(many)
 
     assert.equal(heard.length, 1, 'said once, not per row')
     assert.match(heard[0]?.node ?? '', /status=status/)
@@ -700,7 +700,7 @@ describe('the relational layer', () => {
     )
     until(subscribe(live.all, () => {}))
 
-    orders.put(...Array.from({ length: 500 }, (_, i) => ({ id: i, client: i }) as unknown as Row))
+    orders.put(Array.from({ length: 500 }, (_, i) => ({ id: i, client: i }) as unknown as Row))
     assert.deepEqual(heard, [])
   })
 
