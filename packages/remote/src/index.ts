@@ -19,3 +19,4 @@ export {
 export type { Remote, Held, Fault } from './remote.ts'
 export { reconcile } from './reconcile.ts'
 export type { Reconciliation, ReconcileOptions } from './reconcile.ts'
+export type { Tally } from './shape.ts'
