@@ -42,17 +42,19 @@
     "demo:bench": "node demo/bench/sheets.ts",
     "demo:list": "node demo/bench/lists.ts",
     "demo:folds": "node demo/bench/folds.ts",
-    "demo:wire": "node demo/bench/wire.ts",
     "demo:preview": "vite preview",
     "lint": "oxlint",
     "format": "oxfmt",
-    "format:check": "oxfmt --check"
+    "format:check": "oxfmt --check",
+    "demo:wire": "node demo/bench/wire.ts",
+    "test:browser": "playwright test"
   },
   "devDependencies": {
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
     "@happy-dom/global-registrator": "^16.8.1",
+    "@playwright/test": "^1.62.1",
     "@radix-ui/react-slot": "^1.3.3",
     "@tailwindcss/vite": "^4.3.3",
     "@types/node": "^26.1.2",

@@ -1,0 +1,25 @@
+# Browser tests
+
+Only what Node cannot show honestly belongs here. Everything else stays in the ordinary tests beside the code: they are faster, and nothing should be written twice.
+
+What lives here, and why it has to:
+
+**Task ordering.** The yield a long run takes between chunks must let incoming messages through. It once did not — the worker never heard the message telling it to stop, cancelling silently did nothing, and Node stayed green because that branch of the code is different there.
+
+**Real workers.** A message between threads goes through a queue, not through a function call. A pair of functions in memory does not reproduce that.
+
+**A backgrounded tab.** Frames stop; nested timeouts are clamped to four milliseconds.
+
+**Tab locks, disk, transfer of ownership** — when we get to them.
+
+What must not live here: the relational layer, tables, the graph, the outbox projection, query shapes. The environment plays no part in those, and a browser run costs ten times as much.
+
+## Running them
+
+```
+pnpm add -D @playwright/test
+pnpm exec playwright install chromium
+pnpm test:browser
+```
+
+The set builds the demos, serves them, and walks the pages as a person would. It checks the numbers the page already shows rather than anything inside.

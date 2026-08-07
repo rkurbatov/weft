@@ -13,5 +13,6 @@
     "jsx": "react-jsx",
     "types": ["node"]
   },
-  "include": ["packages", "test", "demo", "vite.config.ts"]
+  "include": ["packages", "test", "demo", "vite.config.ts"],
+  "exclude": ["browser", "playwright.config.ts"]
 }
