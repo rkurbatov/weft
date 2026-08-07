@@ -4,7 +4,7 @@
 export { serve } from './serve.ts'
 export type { Surface, ServeOptions } from './serve.ts'
 export { link, Unknown } from './link.ts'
-export type { Link, LinkOptions } from './link.ts'
+export type { Link, LinkOptions, Mirrored } from './link.ts'
 export { wirePair, overWire } from './wires.ts'
 export type { WirePair, Wire } from './wires.ts'
 export { busHub, busChannel } from './bus.ts'

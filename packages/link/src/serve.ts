@@ -2,10 +2,12 @@
 // answers whoever asks. Watching from the other side is ordinary demand: the
 // first watcher wakes whatever the cell depends on, the last one lets it go.
 
-import { subscribe, untracked } from '#graph/graph.ts'
+import { subscribe, untracked, watch } from '#graph/graph.ts'
 import type { Watchable } from '#graph/graph.ts'
 import { perFrame } from './channel.ts'
 import type { Channel, Schedule, ToGraph } from './channel.ts'
+import { feedOf, follow } from '#table'
+import type { Table } from '#table'
 
 export interface Surface {
   /** Cells anyone may watch, by name. */
@@ -16,6 +18,19 @@ export interface Surface {
   commands?: Readonly<Record<string, (...args: never[]) => unknown>>
   /** Facts the other side may write into. Writing outside these is refused. */
   facts?: Readonly<Record<string, { set(value: never): void }>>
+  /**
+   * Tables the other side may follow.
+   *
+   * Named apart from `cells` on purpose: a table is not delivered like a value.
+   * A watcher gets one snapshot and then batches of what changed, so a hundred
+   * thousand rows do not cross the wire because one of them was edited. Hiding
+   * that behind the same word would be lying to whoever reads the declaration.
+   *
+   * Asked for as the least a table must be, not as `Table<never>`: a table of
+   * rows is not a table of nevers, and asking for one made every station cast
+   * its own tables. The same mistake was made once with facts.
+   */
+  tables?: Readonly<Record<string, { readonly name: string }>>
 }
 
 export interface ServeOptions {
@@ -120,6 +135,82 @@ export function serve(surface: Surface, channel: Channel, options: ServeOptions 
     return keyed === undefined ? undefined : keyed(key as never)
   }
 
+  /**
+   * Following a table: a snapshot, then batches of what changed.
+   *
+   * The change log and the catching up already exist in the table; what is new
+   * here is carrying them across. Nothing is invented — the batch a follower
+   * gets is the batch the table recorded, and the version numbers are the
+   * table's own, so both sides can tell a lost batch from a quiet one.
+   */
+  const following = new Map<number, () => void>()
+
+  function onFollow(message: Extract<ToGraph, { kind: 'follow' }>): void {
+    if (following.has(message.id)) return
+    const table = surface.tables?.[message.table]
+    if (table === undefined) {
+      channel.send({ kind: 'failed', id: message.id, error: `no table "${message.table}"` })
+      return
+    }
+    // The one cast, made here rather than by every application: a station
+    // declares its tables, and what a table is made of is its own business.
+    const feed = feedOf(table as Table<unknown>)
+    if (feed === undefined) {
+      channel.send({ kind: 'failed', id: message.id, error: `"${message.table}" is not a table` })
+      return
+    }
+
+    const sendRows = (): void => {
+      const rows: { key: unknown; row: unknown }[] = []
+      feed.each(row => rows.push({ key: feed.keyOf(row), row }))
+      channel.send({ kind: 'rows', id: message.id, at: untracked(() => feed.version.get()), rows })
+    }
+
+    let sent = 0
+    // `follow` returns a function that brings this follower up to date; it has
+    // to be called inside something that watches the feed's version, which is
+    // what the watcher below does.
+    const catchUpNow = follow(feed, {
+      first: () => {
+        sent = untracked(() => feed.version.get())
+        sendRows()
+      },
+      apply: changes => {
+        const to = untracked(() => feed.version.get())
+        channel.send({
+          kind: 'changed',
+          id: message.id,
+          from: sent,
+          to,
+          changes: changes.map(change => ({ key: change.key, next: change.next ?? null })),
+        })
+        sent = to
+      },
+      // The table has forgotten how to get from there to here, so it says so
+      // with everything rather than with a silence.
+      resync: () => {
+        sent = untracked(() => feed.version.get())
+        sendRows()
+      },
+    })
+    const stop = watch(catchUpNow)
+    following.set(message.id, stop)
+  }
+
+  function onCatchUp(message: Extract<ToGraph, { kind: 'catchUp' }>): void {
+    const stop = following.get(message.id)
+    if (stop === undefined) return
+    // Whoever asks has fallen behind; the simplest honest answer is the state
+    // as it is now. Sending the missing batches instead is an optimisation for
+    // the day a snapshot turns out to be too big to send.
+    stop()
+    following.delete(message.id)
+    onFollow({ kind: 'follow', id: message.id, table: nameOfFollow.get(message.id) ?? '' })
+  }
+
+  /** Which table each follow was for, so a catch-up can be answered. */
+  const nameOfFollow = new Map<number, string>()
+
   function onWatch(message: Extract<ToGraph, { kind: 'watch' }>): void {
     if (watching.has(message.id)) return
     const cell = cellOf(message.cell, message.key)
@@ -179,6 +270,21 @@ export function serve(surface: Surface, channel: Channel, options: ServeOptions 
         surface.facts?.[message.fact]?.set(message.value as never)
         return
       }
+      case 'follow': {
+        nameOfFollow.set(message.id, message.table)
+        onFollow(message)
+        return
+      }
+      case 'unfollow': {
+        following.get(message.id)?.()
+        following.delete(message.id)
+        nameOfFollow.delete(message.id)
+        return
+      }
+      case 'catchUp': {
+        onCatchUp(message)
+        return
+      }
       default:
         return
     }
@@ -188,6 +294,9 @@ export function serve(surface: Surface, channel: Channel, options: ServeOptions 
   channel.send({ kind: 'up' })
 
   return () => {
+    for (const stop of following.values()) stop()
+    following.clear()
+    nameOfFollow.clear()
     stopListening()
     for (const stop of watching.values()) stop()
     watching.clear()

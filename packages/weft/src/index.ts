@@ -120,6 +120,7 @@ export type {
   Remote,
   Source,
   SourceOptions,
+  Tally,
 } from '#remote'
 
 export {
@@ -184,6 +185,7 @@ export type {
   Link,
   LinkOptions,
   Lock,
+  Mirrored,
   Schedule,
   ServeOptions,
   SharedScope,

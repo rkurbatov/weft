@@ -33,9 +33,34 @@ export interface Link {
   command<A extends readonly unknown[], T>(name: string): (...args: A) => Promise<T>
   /** Write into a fact the other side published. */
   write(fact: string, value: unknown): void
+  /**
+   * A table of the other side, kept up to date by batches of changes.
+   *
+   * The rows arrive once and then only what changed arrives, so editing one
+   * row of a hundred thousand costs one row on the wire. While a lost batch is
+   * being made up for, the rows already here stay on screen — `catchingUp`
+   * says that is what is happening, and stale-but-labelled beats blank.
+   */
+  table<R>(name: string): Mirrored<R>
   /** How many mirrors are held right now. */
   held(): number
   close(): void
+}
+
+/** The three cells a followed table hands out. */
+const faceOfTable = (made: {
+  rows: Port<readonly unknown[]>
+  cold: Port<boolean>
+  catchingUp: Port<boolean>
+}): Mirrored<unknown> => ({ rows: made.rows, cold: made.cold, catchingUp: made.catchingUp })
+
+/** A table on this side of a wire: rows, and whether they are behind. */
+export interface Mirrored<R> {
+  readonly rows: Watchable<readonly R[]>
+  /** Nothing has arrived yet — no snapshot, no rows. */
+  readonly cold: Watchable<boolean>
+  /** A batch was lost and the rows on screen are the last good ones. */
+  readonly catchingUp: Watchable<boolean>
 }
 
 export interface LinkOptions {
@@ -64,6 +89,8 @@ export function link(channel: Channel, options: LinkOptions = {}): Link {
   const linger = options.linger ?? 15_000
   const timers = options.timers ?? wallClock
   const mirrors = new Map<string, { id: number; cell: Port<Remote<unknown>> }>()
+  /** Which table each follow is for, so an arriving batch finds its rows. */
+  const byTable = new Map<number, string>()
   const lingering = new Set<unknown>()
   const byId = new Map<number, Port<Remote<unknown>>>()
   /** Which name each watch was made for, so a refusal can be named out loud. */
@@ -120,6 +147,39 @@ export function link(channel: Channel, options: LinkOptions = {}): Link {
         const told = options.onRefused
         if (told === undefined) throw new Error(`weft: station refused this side — ${message.why}`)
         told(message.why)
+        return
+      }
+      case 'rows': {
+        const name = byTable.get(message.id)
+        const made = name === undefined ? undefined : tables.get(name)
+        if (made === undefined) return
+        made.held.clear()
+        for (const { key, row } of message.rows) made.held.set(key, row)
+        made.at = message.at
+        made.rows.set([...made.held.values()])
+        made.cold.set(false)
+        made.catchingUp.set(false)
+        return
+      }
+      case 'changed': {
+        const name = byTable.get(message.id)
+        const made = name === undefined ? undefined : tables.get(name)
+        if (made === undefined) return
+        if (made.at !== message.from) {
+          // A batch was lost: these changes were computed against a state this
+          // side is not in, and applying them would quietly corrupt the rows.
+          // What is on screen stays there, labelled, until the catch-up lands.
+          made.catchingUp.set(true)
+          channel.send({ kind: 'catchUp', id: message.id, since: made.at })
+          return
+        }
+        for (const change of message.changes) {
+          if (change.next === null) made.held.delete(change.key)
+          else made.held.set(change.key, change.next)
+        }
+        made.at = message.to
+        made.rows.set([...made.held.values()])
+        made.catchingUp.set(false)
         return
       }
       case 'failed': {
@@ -206,8 +266,60 @@ export function link(channel: Channel, options: LinkOptions = {}): Link {
     return cell
   }
 
+  /**
+   * Tables followed over this wire, by name.
+   *
+   * Rows are kept in a map by key and handed out as an array — the array is
+   * rebuilt when something changes and kept otherwise, so a screen that redraws
+   * on identity is not woken by a batch that changed nothing it shows.
+   */
+  const tables = new Map<
+    string,
+    {
+      id: number
+      rows: Port<readonly unknown[]>
+      cold: Port<boolean>
+      catchingUp: Port<boolean>
+      held: Map<unknown, unknown>
+      at: number
+    }
+  >()
+
+  function tableOf<R>(name: string): Mirrored<R> {
+    const known = tables.get(name)
+    if (known !== undefined) return faceOfTable(known) as Mirrored<R>
+
+    const id = next++
+    const made = {
+      id,
+      rows: port<readonly unknown[]>([], {
+        name: `${name}.rows`,
+        // Following starts when somebody looks and stops when nobody does —
+        // the same rule cells live by, so a table nobody shows costs nothing.
+        onDemand: () => channel.send({ kind: 'follow', id, table: name }),
+        onIdle: () => {
+          channel.send({ kind: 'unfollow', id })
+          untracked(() => {
+            made.held.clear()
+            made.rows.set([])
+            made.cold.set(true)
+            made.at = 0
+          })
+        },
+      }),
+      cold: port(true, { name: `${name}.cold` }),
+      catchingUp: port(false, { name: `${name}.catchingUp` }),
+      held: new Map<unknown, unknown>(),
+      at: 0,
+    }
+    tables.set(name, made)
+    byTable.set(id, name)
+    return faceOfTable(made) as Mirrored<R>
+  }
+
   return {
     rewatch,
+    table: <R>(name: string) => tableOf<R>(name),
     /** How many mirrors are held right now. For the instruments' eyes. */
     held: () => mirrors.size,
     derived: <T>(name: string, key?: unknown) =>
