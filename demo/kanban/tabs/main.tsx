@@ -10,9 +10,9 @@ import { carry } from '#loom'
 import { useLive } from '#loom/react'
 import '#kanban/kanban.css'
 import { kanbanServer } from '#kanban'
-import { kanban } from '../kanban-weft/state.ts'
-import { kanbanMirror, serveKanban } from '../kanban-weft/mirror.ts'
-import { App } from '../kanban-weft/App.tsx'
+import { kanban } from '../weft/state.ts'
+import { kanbanMirror, serveKanban } from '../weft/mirror.ts'
+import { App } from '../weft/App.tsx'
 
 const carried = carry({
   name: 'weft-kanban-tabs',

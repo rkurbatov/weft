@@ -15,11 +15,11 @@
       </p>
       <ul>
         <li>
-          <a href="./spreadsheet/">Classic</a> — state by hand: a dependency graph, a topological
+          <a href="./sheet/classic/">Classic</a> — state by hand: a dependency graph, a topological
           order, invalidation.
         </li>
         <li>
-          <a href="./spreadsheet-weft/">On weft</a> — a cell is an input, a value is a formula;
+          <a href="./sheet/weft/">On weft</a> — a cell is an input, a value is a formula;
           dependencies come from reading.
         </li>
       </ul>
@@ -33,15 +33,15 @@
       </p>
       <ul>
         <li>
-          <a href="./kanban-classic/">Classic</a> — redux + redux-observable: actions, a reducer
+          <a href="./kanban/classic/">Classic</a> — redux + redux-observable: actions, a reducer
           with rollback bookkeeping, epics, selectors.
         </li>
         <li>
-          <a href="./kanban-weft/">On weft</a> — one state file: each action is one function holding
+          <a href="./kanban/weft/">On weft</a> — one state file: each action is one function holding
           its hope, its ask and its retreat.
         </li>
         <li>
-          <a href="./kanban-tabs/">Carried</a> — the same board in every tab: one leads and serves,
+          <a href="./kanban/tabs/">Carried</a> — the same board in every tab: one leads and serves,
           the rest mirror. Close the leader and the lock hands the station over; the book survives
           the succession.
         </li>
@@ -64,7 +64,7 @@
       </p>
       <h1>A table that lives in another thread</h1>
       <p>
-        <a href="./table-wire/"
+        <a href="./table/wire/"
           >A hundred thousand rows held by a worker, twenty of them on screen.</a
         >
         Scrolling writes where the window starts and reads back exactly the rows that fit — the
@@ -73,7 +73,7 @@
       </p>
       <h1>A whole table, followed over a wire</h1>
       <p>
-        <a href="./table-full/"
+        <a href="./table/full/"
           >The protocol underneath: a snapshot, then batches of what changed.</a
         >
         A worker keeps pouring rows in and editing them; a switch on the page makes the wire drop

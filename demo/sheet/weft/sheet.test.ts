@@ -6,7 +6,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { subscribe } from '#weft'
 import { createSheet } from './sheet.ts'
-import { sampleSheet, key } from '#demo'
+import { sampleSheet, key } from '#sheet'
 import { until } from '#testkit'
 
 function small() {

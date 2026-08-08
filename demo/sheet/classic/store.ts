@@ -3,10 +3,10 @@
 // Reading order: what is port, then the two indexes that have to be kept in
 // step, then the four steps of an edit — relink, spread, sort, recompute.
 
-import { refName } from '#demo'
-import { read, show } from '#demo'
-import type { Value } from '#demo'
-import type { Contents } from '#demo'
+import { refName } from '#sheet'
+import { read, show } from '#sheet'
+import type { Value } from '#sheet'
+import type { Contents } from '#sheet'
 import { refsOf } from './depends.ts'
 
 export interface Sheet {

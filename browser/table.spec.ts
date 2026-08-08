@@ -19,7 +19,7 @@ async function count(page: Page, label: string): Promise<number> {
 test.beforeEach(async ({ page }) => {
   const trouble: string[] = []
   page.on('pageerror', error => trouble.push(String(error)))
-  await page.goto('/table-wire/')
+  await page.goto('/table/wire/')
   await expect(page.locator('.row').first()).toBeVisible({ timeout: 30_000 })
   expect(trouble, 'the page loaded without throwing').toEqual([])
 })
@@ -63,7 +63,7 @@ test('a half-typed edit survives its row scrolling away', async ({ page }) => {
 // The whole-table page: the protocol under a real wire.
 test.describe('a whole table over a wire', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/table-full/')
+    await page.goto('/table/full/')
     await expect(page.locator('.rows li').first()).toBeVisible({ timeout: 30_000 })
   })
 

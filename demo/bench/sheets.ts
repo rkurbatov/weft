@@ -10,10 +10,10 @@
 //   pnpm demo:bench --runs=7        more repetitions, median reported
 
 import { subscribe } from '#weft'
-import { key, sampleSheet, sizeOf } from '#demo'
-import type { Contents, SheetShape } from '#demo'
-import { createSheet as classic } from '../spreadsheet/store.ts'
-import { createSheet as onWeft } from '../spreadsheet-weft/sheet.ts'
+import { key, sampleSheet, sizeOf } from '#sheet'
+import type { Contents, SheetShape } from '#sheet'
+import { createSheet as classic } from '../sheet/classic/store.ts'
+import { createSheet as onWeft } from '../sheet/weft/sheet.ts'
 
 /** The longest of a set of widths, folded rather than spread. */
 const widest = (widths: readonly number[]): number =>

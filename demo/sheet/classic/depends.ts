@@ -1,10 +1,10 @@
 // Which cells a formula names. Only the hand-written sheet needs this: it has to
 // know the dependencies in advance, because nothing records them for it.
 
-import { spanRefs } from '#demo'
-import { plan } from '#demo'
-import type { Node } from '#demo'
-import type { Ref } from '#demo'
+import { spanRefs } from '#sheet'
+import { plan } from '#sheet'
+import type { Node } from '#sheet'
+import type { Ref } from '#sheet'
 
 export function refsIn(node: Node): Ref[] {
   switch (node.kind) {

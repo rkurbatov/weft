@@ -173,9 +173,9 @@ describe('the Loom dialect', () => {
 
   test('carry: without talking tabs the station lives inline, and the mirror cannot tell', async () => {
     const { carry } = await import('#loom')
-    const { kanbanServer } = await import('../../../demo/kanban-common/server.ts')
-    const { kanban } = await import('../../../demo/kanban-weft/state.ts')
-    const { serveKanban, kanbanMirror } = await import('../../../demo/kanban-weft/mirror.ts')
+    const { kanbanServer } = await import('#kanban/server.ts')
+    const { kanban } = await import('../../../demo/kanban/weft/state.ts')
+    const { serveKanban, kanbanMirror } = await import('../../../demo/kanban/weft/mirror.ts')
     const { atOnce } = await import('#weft')
 
     const carried = carry(

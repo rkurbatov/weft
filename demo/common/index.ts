@@ -1,53 +1,12 @@
-// What every example shares: the instrument panel, the sample sheet, the
-// formula language they compute with, the decimal, addresses and counters.
+// What every stand shares, whatever it is a stand of: the render counters and
+// the ticks instrument.
 //
 // A door of its own, reached as '#demo', because a shared set fetched by four
-// dots of relative path is the first thing that breaks when an example moves —
-// and because a set with a door has to decide what belongs in it.
+// dots of relative path is the first thing that breaks when a stand moves —
+// and because a set with a door has to decide what belongs in it. What only
+// one family needs lives with that family: the sheet's grid and formulas
+// behind '#sheet', the board's server and cards behind '#kanban'.
 
-export { columnName, columnNumber, parseRef, refName, spanRefs } from './address.ts'
-export type { Ref } from './address.ts'
-export {
-  PLACES,
-  ZERO,
-  abs,
-  add,
-  cmp,
-  div,
-  fromFloat,
-  fromInt,
-  fromText,
-  isSafe,
-  mul,
-  neg,
-  rem,
-  round,
-  sign,
-  sub,
-  toFloat,
-  toText,
-  trunc,
-} from './dec.ts'
-export type { Dec } from './dec.ts'
-export {
-  asDec,
-  counts,
-  evaluate,
-  fail,
-  foldJoin,
-  foldOne,
-  foldZero,
-  isError,
-  parse,
-  plan,
-  read,
-  run,
-  same,
-  show,
-} from './formula.ts'
-export type { CellError, ErrorCode, FoldName, Lookup, Node, Plan, Value } from './formula.ts'
-export { BLOCK, SHEET, key, sampleSheet, shapeFromLocation, sizeOf } from './sample.ts'
-export type { Contents, SheetShape } from './sample.ts'
 export {
   countCellRender,
   countGridRender,

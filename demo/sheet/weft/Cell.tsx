@@ -4,9 +4,9 @@
 
 import { memo } from 'react'
 import { useCell } from '#react'
-import { CellFrame } from '#demo/ui.tsx'
+import { CellFrame } from '#sheet/ui.tsx'
 import { countCellRender } from '#demo'
-import type { CellProps } from '#demo/ui.tsx'
+import type { CellProps } from '#sheet/ui.tsx'
 import type { Sheet } from './sheet.ts'
 
 export function cellOf(sheet: Sheet) {

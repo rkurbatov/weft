@@ -2,9 +2,9 @@
 // show too — every cell, before and after edits.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { createSheet as classic } from '../spreadsheet/store.ts'
+import { createSheet as classic } from '../classic/store.ts'
 import { createSheet as onWeft } from './sheet.ts'
-import { sampleSheet, key } from '#demo'
+import { sampleSheet, key } from '#sheet'
 
 test('both sheets show the same thing in every cell', () => {
   const shape = { rows: 300, cols: 26 }

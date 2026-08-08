@@ -4,8 +4,8 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { subscribe } from '#weft'
 import { createSheet } from './sheet.ts'
-import { columnName } from '#demo'
-import type { Contents } from '#demo'
+import { columnName } from '#sheet'
+import type { Contents } from '#sheet'
 
 /** A column of numbers, plus whatever else the test wants. */
 function column(rows: number, extra: Array<[string, string]> = []): Contents {

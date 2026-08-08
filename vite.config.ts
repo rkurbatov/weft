@@ -1,11 +1,30 @@
-import { resolve } from 'node:path'
+import { readdirSync } from 'node:fs'
+import { relative, resolve } from 'node:path'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 
-// One config, seven pages: the menu, the two spreadsheets, the sheet across windows, and the rail. The library is
-// reached through the package's own subpath imports (#weft), the same way the
-// tests reach it — no alias to keep in step with tsconfig.
+const root = resolve(import.meta.dirname, 'demo')
+
+/**
+ * Every page under `demo`, found rather than listed.
+ *
+ * A stand is a folder with an `index.html` in it, and its entry is named by
+ * its path — `sheet/weft`, `table/wire`. Listing them by hand meant a new
+ * stand worked in development and was quietly missing from the build.
+ */
+function pages(dir: string = root, found: Record<string, string> = {}): Record<string, string> {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const path = resolve(dir, entry.name)
+    if (entry.isDirectory()) pages(path, found)
+    else if (entry.name === 'index.html') {
+      const name = relative(root, dir).replaceAll('\\', '/')
+      found[name === '' ? 'menu' : name] = path
+    }
+  }
+  return found
+}
+
 export default defineConfig({
   root: 'demo',
   // Relative asset paths, so the built pages open from any directory — a static
@@ -15,19 +34,9 @@ export default defineConfig({
   build: {
     outDir: '../dist-demo',
     emptyOutDir: true,
-    rollupOptions: {
-      input: {
-        menu: resolve(import.meta.dirname, 'demo/index.html'),
-        classic: resolve(import.meta.dirname, 'demo/spreadsheet/index.html'),
-        weft: resolve(import.meta.dirname, 'demo/spreadsheet-weft/index.html'),
-        rail: resolve(import.meta.dirname, 'demo/rail/index.html'),
-        kanbanClassic: resolve(import.meta.dirname, 'demo/kanban-classic/index.html'),
-        kanbanWeft: resolve(import.meta.dirname, 'demo/kanban-weft/index.html'),
-        kanbanTabs: resolve(import.meta.dirname, 'demo/kanban-tabs/index.html'),
-        engine: resolve(import.meta.dirname, 'demo/engine/index.html'),
-        tableWire: resolve(import.meta.dirname, 'demo/table-wire/index.html'),
-        tableFull: resolve(import.meta.dirname, 'demo/table-full/index.html'),
-      },
-    },
+    // The library is reached through the package's own subpath imports
+    // (`#weft`, `#demo`), the same way the tests reach it — no alias table to
+    // keep in step with tsconfig.
+    rolldownOptions: { input: pages() },
   },
 })

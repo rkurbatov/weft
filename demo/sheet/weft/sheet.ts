@@ -6,11 +6,11 @@
 
 import { batch, blocks, family, port, untracked } from '#weft'
 import type { Blocks, Derived, Port } from '#weft'
-import { refName } from '#demo'
-import { fail, foldJoin, foldOne, foldZero, plan, run, same, show } from '#demo'
-import type { FoldName, Value } from '#demo'
-import type { Contents } from '#demo'
-import type { Ref } from '#demo'
+import { refName } from '#sheet'
+import { fail, foldJoin, foldOne, foldZero, plan, run, same, show } from '#sheet'
+import type { FoldName, Value } from '#sheet'
+import type { Contents } from '#sheet'
+import type { Ref } from '#sheet'
 
 const LOOP: Value = { error: '#CYCLE!' }
 

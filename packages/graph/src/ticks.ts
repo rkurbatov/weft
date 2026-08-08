@@ -1,4 +1,4 @@
-// Waves. The graph's natural unit of work is not an action but a tick: one
+// Ticks. The graph's natural unit of work is not an action but a tick: one
 // batch of writes into inputs, the recomputes it causes, the places it dies on
 // equality, the watchers it wakes. The tap below records exactly that — every
 // call from the hot path is behind one null check, so an unwatched tap costs

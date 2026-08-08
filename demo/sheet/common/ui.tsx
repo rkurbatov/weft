@@ -7,7 +7,7 @@ import type { ReactNode } from 'react'
 import { columnName } from './address.ts'
 import { SHEET, key } from './sample.ts'
 import type { SheetShape } from './sample.ts'
-import { useCounters, resetCounters } from './stats.ts'
+import { useCounters, resetCounters } from '#demo'
 
 export interface CellProps {
   readonly at: string

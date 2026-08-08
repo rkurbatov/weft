@@ -2,9 +2,9 @@
 // from. Here it is a subscription to the store, keyed by address.
 
 import { memo } from 'react'
-import { CellFrame } from '#demo/ui.tsx'
+import { CellFrame } from '#sheet/ui.tsx'
 import { countCellRender } from '#demo'
-import type { CellProps } from '#demo/ui.tsx'
+import type { CellProps } from '#sheet/ui.tsx'
 import { useSheet, useShown } from './useSheet.ts'
 
 export const Derived = memo(function Derived({ at }: CellProps) {

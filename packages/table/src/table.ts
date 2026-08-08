@@ -29,7 +29,7 @@ export { follow } from './log.ts'
 export { feedOf } from './feeds.ts'
 
 /** The reading surface every table shares, source and derived alike. */
-// Engine-internal: the relational layer (src/weft/rel) consumes a table's
+// Engine-internal: the relational layer (#rel) consumes a table's
 // changes through its feed instead of diffing snapshots. Not in the front
 // door on purpose — a feed's state reads are only valid after reading its
 // version, which is a contract for engine code, not for applications.

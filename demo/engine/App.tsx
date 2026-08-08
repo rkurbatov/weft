@@ -15,7 +15,7 @@ import { useLive } from '#loom/react'
 import { replace, station } from './main.tsx'
 import type { Found } from './state.ts'
 import { barHeights } from './bars.ts'
-import { BUCKET_MS } from '../engine-common/corpus.ts'
+import { BUCKET_MS } from './corpus.ts'
 
 const mb = (bytes: number | undefined): string =>
   bytes === undefined ? '—' : `${(bytes / 1024 / 1024).toFixed(0)} MB`

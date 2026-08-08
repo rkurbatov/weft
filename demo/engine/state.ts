@@ -10,8 +10,8 @@
 
 import { cell, giveWay, truthBy } from '#loom'
 import type { Port, Tally, Watchable } from '#loom'
-import { logLines, searching } from '../engine-common/corpus.ts'
-import type { Line, Log, Progress } from '../engine-common/corpus.ts'
+import { logLines, searching } from './corpus.ts'
+import type { Line, Log, Progress } from './corpus.ts'
 
 export interface Found {
   /** Matches per bucket — the bulk number that crosses the wire. */
