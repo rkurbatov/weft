@@ -197,6 +197,14 @@ export function link(channel: Channel, options: LinkOptions = {}): Link {
           // A batch was lost: these changes were computed against a state this
           // side is not in, and applying them would quietly corrupt the rows.
           // What is on screen stays there, labelled, until the catch-up lands.
+          //
+          // Asked for once per incident, not once per mismatched batch. The
+          // channel usually holds several batches in flight, every one of
+          // which now fails the same check — and every catch-up is answered
+          // with a whole snapshot, so asking per batch turns one lost packet
+          // into a storm of full tables on the wire. The flag is the lock;
+          // the snapshot's arrival is what releases it.
+          if (untracked(() => made.catchingUp.peek())) return
           made.catchingUp.set(true)
           made.caughtUp.set(made.caughtUp.peek() + 1)
           channel.send({ kind: 'catchUp', id: message.id, since: made.at })

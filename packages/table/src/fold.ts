@@ -34,9 +34,12 @@ export function foldOver<R, A>(feed: Feed<R>, spec: FoldSpec<R, A>, name: string
    * was built and the collection was often empty; a table that fills up
    * afterwards deserves the carrier it would have been given at its present
    * size. The check itself is a comparison against the thresholds, not a
-   * planning run, and a swap costs one rebuild — so a collection sitting on a
-   * threshold is kept from swapping back and forth by asking for a clear
-   * margin before it goes back down.
+   * planning run, and a swap costs one rebuild — a full pass — which is why
+   * there are two thresholds and not one: up at the limit, down at half of
+   * it. A collection breathing around a single line would tear the carrier
+   * down and rebuild it on every crossing, paying the structure's price
+   * without ever keeping the structure. The gap's own cost is small and not
+   * a matter of correctness: a shrunken collection rides the tree a while.
    */
   const replan = (): void => {
     if (spec.carrier !== undefined && spec.carrier !== 'auto') return

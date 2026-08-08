@@ -178,6 +178,20 @@ export class Core {
     }
   }
 
+  // The propagation scheme, in one place: push the marks, pull the values.
+  //
+  // A write pushes DIRTY/CHECK down the observer edges, and the only nodes
+  // queued for the flush are leaves — watchers. Intermediate cells are never
+  // scheduled; they are pulled when a leaf stabilizes, and the language's own
+  // call stack does the depth-first walk: each ancestor computes once, turns
+  // CLEAN, and every later branch that reaches it takes the cached value.
+  // That is what rules out both glitches — no leaf can observe a half-updated
+  // diamond, because its pull settles the whole ancestry first — and repeated
+  // recomputation, without any runtime topological sort or node ranks to
+  // maintain. CHECK is the cheap half of the same idea: "an ancestor may have
+  // moved" walks down without computing anything, and `verify` resolves it by
+  // pulling only until the first real change flips the node to DIRTY.
+
   /** Direct source changed: consumer must recompute. */
   markDirty(node: Consumer): void {
     if (node.leaf) {

@@ -184,7 +184,18 @@ export function whenever<T>(
         hasWaiting = false
         const next = waiting as T
         waiting = undefined
-        run(next)
+        // A body that throws synchronously rethrows out of `run` — and here
+        // that lands inside a promise callback, where it becomes an unhandled
+        // rejection: a crash in Node, a silent one in a worker. Routed the
+        // same way the asynchronous branch routes its errors instead, so a
+        // queued run and a direct run fail alike and the handler stands.
+        try {
+          run(next)
+        } catch (error) {
+          queueMicrotask(() => {
+            throw error
+          })
+        }
       })
   }
 

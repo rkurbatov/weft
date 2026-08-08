@@ -4,6 +4,7 @@
 // knows nothing about books, entries or handlers — which is what makes it
 // testable with a fake clock and nothing else.
 
+import { backoff } from '#data'
 import { wallClock } from '#graph/time.ts'
 import type { Timers } from '#graph/time.ts'
 
@@ -43,7 +44,7 @@ export function schedule(options: ScheduleOptions = {}): Schedule {
   }
 
   return {
-    backoff: attempt => Math.min(retry * 2 ** Math.max(0, attempt - 1), cap),
+    backoff: attempt => backoff(attempt, retry, cap),
     after(delay, work) {
       cancel()
       timer = timers.set(() => {

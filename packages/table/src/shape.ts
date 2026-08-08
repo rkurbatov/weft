@@ -109,6 +109,16 @@ export interface Feed<R> {
   get(key: Key): R | undefined
   each(fn: (row: R) => void): void
   count(): number
+  /**
+   * The rows as the map they already are, read-only and live.
+   *
+   * For a consumer that needs the whole collection at once — a relational
+   * rebuild, a served snapshot. Walking `each` into a fresh map copied a
+   * hundred thousand entries to hand over what the table was holding in
+   * exactly that shape; the reference is live, so take it for a synchronous
+   * look and copy only what outlives the call.
+   */
+  asMap(): ReadonlyMap<Key, R>
   /** Changes after the given version, or null when they are no longer remembered. */
   changesSince(v: number): Change<R>[] | null
 }

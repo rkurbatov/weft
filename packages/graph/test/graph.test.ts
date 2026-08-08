@@ -1,7 +1,7 @@
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { port, derived, watch, subscribe, batch, untracked } from '#graph'
-import { until } from '#testkit'
+import { until, track } from '#testkit'
 
 describe('the cell graph', () => {
   test('formula reads its inputs without declaring them', () => {
@@ -89,13 +89,12 @@ describe('the cell graph', () => {
     const a = port(1)
     const b = port(1)
     const sum = derived(() => a.get() + b.get())
-    const seen: number[] = []
-    until(subscribe(sum, v => seen.push(v)))
+    const seen = track(sum)
     batch(() => {
       a.set(10)
       b.set(10)
     })
-    assert.deepEqual(seen, [20])
+    seen.said([20])
   })
 
   test('watcher writing a cell settles in the same round', () => {

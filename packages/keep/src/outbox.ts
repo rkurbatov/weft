@@ -100,10 +100,13 @@ export function outbox(options: OutboxOptions): Outbox {
   /** Send the head of the book, one at a time: order is part of the promise. */
   async function pump(lane: string = MAIN): Promise<void> {
     if (sending.has(lane) || held || !pages.lifted()) return
-    const head = entries
-      .peek()
-      .find(entry => laneOf(entry) === lane && entry.state !== 'stuck' && entry.state !== 'done')
-    if (head === undefined) return
+    // The head of the lane is the head — a stuck one included. Skipping it to
+    // send whatever stands behind breaks the very order the lane promises: a
+    // Create stuck and an Update sent lands an edit for a thing the server
+    // never saw. A stuck head stops its lane until a person answers with
+    // `again` or `forget`; other lanes are other stories and keep moving.
+    const head = entries.peek().find(entry => laneOf(entry) === lane && entry.state !== 'done')
+    if (head === undefined || head.state === 'stuck') return
 
     const handler = handlers[head.name]
     if (handler === undefined) {
@@ -127,6 +130,14 @@ export function outbox(options: OutboxOptions): Outbox {
         key: head.id,
         attempt,
       })
+      // With `retain`, success does not remove the entry — it marks it done
+      // and leaves it laid over the base. Removing it here is the classic
+      // optimistic-UI flicker: the server said yes, the local note vanishes,
+      // but the base feed has not refetched yet, so the screen falls back to
+      // the OLD state for a beat and then jumps forward again. A done entry
+      // keeps covering that gap until `absorb(stamp)` says the base itself
+      // is from after the confirmation — only then is there nothing left to
+      // cover.
       if (retain) pages.replace(head.id, entry => ({ ...entry, state: 'done', doneAt: now() }))
       else pages.remove(head.id)
       settle(head.id)
@@ -231,6 +242,11 @@ export function outbox(options: OutboxOptions): Outbox {
     },
 
     absorb(before) {
+      // The timestamp comparison is the whole trick: a done note leaves only
+      // when the base snapshot is younger than its confirmation. A base
+      // fetched before the mutation landed still shows the old world and
+      // still needs the note over it; one fetched after already contains the
+      // change, and keeping the note past that point is merely harmless.
       const book = entries.peek()
       const kept = book.filter(
         entry => entry.state !== 'done' || entry.doneAt === undefined || entry.doneAt > before,

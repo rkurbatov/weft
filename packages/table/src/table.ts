@@ -119,6 +119,7 @@ export function table<R>(options: TableOptions<R>): SourceTable<R> {
       for (const row of state.values()) fn(row)
     },
     count: () => state.size,
+    asMap: () => state,
     changesSince: seen => log.since(seen, v),
   }
 

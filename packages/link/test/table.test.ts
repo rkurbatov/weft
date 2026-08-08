@@ -10,7 +10,7 @@ import { describe, test } from 'node:test'
 import { atOnce, link, listed, serve } from '#link'
 import { derived, port, subscribe, table, wirePair } from '#weft'
 import type { Key } from '#weft'
-import { settle, until } from '#testkit'
+import { settle, setupWire, until } from '#testkit'
 
 interface Row {
   id: number
@@ -24,18 +24,8 @@ const rowsOf = (mirror: { rows: { peek(): readonly unknown[] } }): Row[] =>
 /** A station serving one table, and a panel following it. */
 function pair() {
   const rows = table<Row>({ key: r => r.id as Key, name: 'rows' })
-  const wire = wirePair()
-  const stop = serve({ tables: { rows } }, wire.graph, { schedule: atOnce })
-  const watcher = link(wire.watcher)
-  return {
-    rows,
-    watcher,
-    close: () => {
-      stop()
-      watcher.close()
-      rows.dispose()
-    },
-  }
+  const { watcher } = setupWire({ tables: { rows } })
+  return { rows, watcher, close: () => rows.dispose() }
 }
 
 describe('following a table across a wire', () => {
@@ -372,5 +362,73 @@ describe('a window keeps its order', () => {
     from.set(2)
     await settle(3)
     assert.deepEqual(shown(), [2, 3, 4, 5, 6, 7, 8, 9, 10, 11], 'in order after scrolling up')
+  })
+})
+
+describe('losing batches', () => {
+  test('a run of mismatched batches asks to catch up once, not per batch', async () => {
+    // Every catch-up is answered with a whole snapshot. A channel normally
+    // holds several batches in flight, and after one is lost every one of
+    // them fails the same version check — asking per batch turns one lost
+    // packet into a storm of full tables on the wire.
+    const sent: unknown[] = []
+    const fromGraph: Array<(message: unknown) => void> = []
+    const channel = {
+      send: (message: unknown) => sent.push(message),
+      listen: (handler: (message: unknown) => void) => {
+        fromGraph.push(handler)
+        return () => {}
+      },
+    }
+    const watcher = link(channel)
+    until(() => watcher.close())
+    const mirror = watcher.table<Row>('rows')
+    until(subscribe(mirror.rows, () => {}))
+    const tell = (message: unknown): void => {
+      for (const handler of fromGraph) handler(message)
+    }
+
+    // The snapshot lands, then three batches arrive that skip a version.
+    tell({ kind: 'rows', id: 1, at: 1, rows: [{ key: 1, row: { id: 1, title: 'a' } }] })
+    const before = sent.filter(m => (m as { kind: string }).kind === 'catchUp').length
+    for (const from of [5, 6, 7]) {
+      tell({ kind: 'changed', id: 1, from, to: from + 1, changes: [] })
+    }
+    const asked = sent.filter(m => (m as { kind: string }).kind === 'catchUp').length - before
+    assert.equal(asked, 1, 'one incident, one catch-up')
+    assert.equal(mirror.catchingUp.peek(), true)
+
+    // The fresh snapshot releases the lock; a later loss may ask again.
+    tell({ kind: 'rows', id: 1, at: 9, rows: [{ key: 1, row: { id: 1, title: 'b' } }] })
+    assert.equal(mirror.catchingUp.peek(), false)
+    tell({ kind: 'changed', id: 1, from: 12, to: 13, changes: [] })
+    const again = sent.filter(m => (m as { kind: string }).kind === 'catchUp').length - before
+    assert.equal(again, 2, 'a new incident may ask anew')
+  })
+
+  test('a row on screen is never the one evicted from the follower memory', async () => {
+    // Insertion order is the age of the memory, and updating a key does not
+    // move it — so a row sent early and sitting quietly in the window can be
+    // the oldest entry at the very moment the memory overflows. Evicting it
+    // used to send `next: null`, and the follower deleted a row the person
+    // was looking at.
+    const all = Array.from({ length: 40 }, (_, id) => ({ id, title: `row ${id}` }))
+    const from = port(10)
+    const window = derived(() => all.slice(from.get(), from.get() + 4))
+    const { watcher } = setupWire(
+      { lists: { window: listed(window, row => (row as Row).id) } },
+      { remember: 7 },
+    )
+    const mirror = watcher.table<Row>('window')
+    until(subscribe(mirror.rows, () => {}))
+    await settle()
+
+    from.set(20) // four new keys: memory holds 8
+    await settle()
+    from.set(13) // three new keys (14..16): memory 11 > 7 — eviction reaches key 13
+    await settle()
+
+    const shown = rowsOf(mirror).map(row => row.id)
+    assert.deepEqual(shown, [13, 14, 15, 16], 'the window is whole, its oldest row included')
   })
 })

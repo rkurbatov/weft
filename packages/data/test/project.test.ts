@@ -21,6 +21,41 @@ const entry = (name: string, args: unknown, state: Note['state'] = 'waiting'): N
   state,
 })
 
+test('preserve: a date that moved is a new value, a date that did not keeps its identity', () => {
+  // A date has no enumerable keys, so the object walk saw two empty shapes
+  // and handed the OLD date back whenever only a timestamp changed.
+  const was = new Date(1000)
+  assert.equal(preserve(was, new Date(1000)), was)
+  const moved = new Date(2000)
+  assert.equal(preserve(was, moved), moved)
+  const prev = { id: 1, at: new Date(1000) }
+  const next = { id: 1, at: new Date(2000) }
+  const kept = preserve(prev, next)
+  assert.notEqual(kept, prev)
+  assert.equal(kept.at, next.at)
+  assert.equal(preserve(prev, { id: 1, at: new Date(1000) }), prev)
+})
+
+test('preserve: a key the old object lacked is a change even when it holds undefined', () => {
+  // Absence and `undefined` read the same through an index — so a schema
+  // change swapping one key for another used to hand the OLD object back.
+  const prev = { y: 1 } as Record<string, unknown>
+  const next = { x: undefined } as Record<string, unknown>
+  const kept = preserve(prev, next)
+  assert.notEqual(kept, prev)
+  assert.equal('x' in kept, true)
+  assert.equal('y' in kept, false)
+})
+
+test('preserve: a map entry the old map lacked is a change even when it holds undefined', () => {
+  const prev = new Map<string, unknown>([['y', 1]])
+  const next = new Map<string, unknown>([['x', undefined]])
+  const kept = preserve(prev, next)
+  assert.notEqual(kept, prev)
+  assert.equal(kept.has('x'), true)
+  assert.equal(kept.has('y'), false)
+})
+
 test('preserve: an unchanged piece keeps being the very same object', () => {
   const prev = { a: { x: 1 }, list: [1, 2, 3], b: { y: 2 } }
   const next = { a: { x: 1 }, list: [1, 2, 3], b: { y: 99 } }

@@ -158,12 +158,19 @@ export function truthBy<K, T>(
       ...(passport.now === undefined ? {} : { now: passport.now }),
     },
   )
-  const faces = new Map<unknown, Truth<T>>()
+  // Keyed by the source instance, not by the business key. The family under
+  // this wrapper already answers "which source for which key" and evicts
+  // unwatched sources past its ceiling; a second cache keyed by the key would
+  // duplicate that answer and then disagree with it — growing without bound,
+  // and handing out a face wired to a source the family had already let go,
+  // which asks the world nothing ever again. A weak map keyed by the source
+  // follows the family's decisions for free: evicted source, collected face;
+  // same source, same face.
+  const faces = new WeakMap<object, Truth<T>>()
   const byKey = (key: K): Truth<T> => {
-    const at = JSON.stringify(key)
-    const known = faces.get(at)
-    if (known !== undefined) return known
     const feed = family(key)
+    const known = faces.get(feed)
+    if (known !== undefined) return known
     // The family's counters, not this member's: a run called off because the
     // key changed belongs to the question, and the key that replaced it never
     // saw it happen.
@@ -171,9 +178,9 @@ export function truthBy<K, T>(
       { state: feed.state, tally: family.tally },
       passport.empty,
       () => feed.refresh(),
-      `${name}:${at}`,
+      `${name}:${JSON.stringify(key)}`,
     )
-    faces.set(at, face)
+    faces.set(feed, face)
     return face
   }
   // The tally hangs on the function, not on a member: asking for it used to

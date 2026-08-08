@@ -2,6 +2,7 @@
 // It runs only while somebody live is watching it — demand starts it, idleness
 // stops it — so an unwatched screen costs nothing.
 
+import { backoff as doubling } from '#data'
 import { derived, port, subscribe, untracked } from '#graph/graph.ts'
 import type { Port } from '#graph'
 import type { Watchable } from '#graph/graph.ts'
@@ -168,8 +169,7 @@ export function source<T>(
 
   function backoff(): number | undefined {
     if (retry === undefined) return undefined
-    const full = retry * 2 ** Math.max(0, attempt - 1)
-    const capped = retryCap === undefined ? full : Math.min(full, retryCap)
+    const capped = doubling(attempt, retry, retryCap)
     // Full jitter: uniform in (0, capped]. 1 - jitter() keeps the wait
     // strictly positive whatever the injected randomness returns.
     const wait = capped * (1 - jitter())

@@ -6,6 +6,15 @@
 // line. Each partial is an ordinary cell, so what depends on what, and what has
 // to be redone, is the graph's business.
 //
+// That last sentence is the design. A hand-built segment tree carries its own
+// invalidation: which nodes are stale, in what order to recompute them, how
+// not to recompute one twice — the exact bookkeeping the graph already does
+// for every cell. Here `read(line, at)` inside a partial's formula IS the
+// subscription to that element; an edit marks the one partial per level that
+// covers it, and a later `range()` pulls only the marked ones. No dirty
+// flags of our own, no propagation code to get wrong — the structure is just
+// cells whose formulas happen to be shaped like a tree.
+//
 // Correctness rests on the caller: `join` must be associative and exact in its
 // own type, since a blockwise answer is only the same answer as a left-to-right
 // one when it is. `zero` is the identity — the answer for an empty range.

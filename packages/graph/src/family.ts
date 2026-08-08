@@ -67,6 +67,13 @@ export function family<K, T>(
     let dropped = 0
     for (const [id, member] of members) {
       if (members.size - dropped <= max) break
+      // `observed`, not `demanded`, and the difference is the invariant at
+      // the top of this file: a cold watch — demand off, a journal following
+      // what happens anyway — is still a watcher, and dropping the cell
+      // under it leaves it deaf. The price is that a formula built and
+      // abandoned without a subscribe pins its members here; that is the
+      // documented anti-pattern the React seam is shaped to avoid (see
+      // useLive: the screen cell is born on subscription, never in render).
       if (member.cell.observed) continue
       member.cell.dispose()
       members.delete(id)
@@ -80,7 +87,13 @@ export function family<K, T>(
     const existing = members.get(id)
     if (existing !== undefined) {
       // Reordering costs a delete and an insert on every read; it only earns
-      // that while the ceiling is in sight.
+      // that while the ceiling is in sight — touching unconditionally showed
+      // up whole in a scene profile (95ms → 16ms without it). The trade,
+      // named: until the family first fills, reads do not refresh age, so a
+      // member born early and read hot can be first out at the first
+      // overflow and rebuilt on its next read. One rebuild per such member,
+      // once, against a per-read tax forever — and a member anybody actually
+      // watches is never evicted at all, whatever its age.
       if (members.size >= max) touch(id, existing)
       return existing.cell
     }

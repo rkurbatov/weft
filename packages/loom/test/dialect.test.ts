@@ -55,6 +55,59 @@ describe('the Loom dialect', () => {
     assert.equal(post.notes.peek().at(-1)?.state, 'done')
   })
 
+  test('the last resolution per subject wins: a put then a take leaves nothing', () => {
+    // Created and then deleted in one book — the subject must not stand on
+    // screen as a phantom. The overlay reads `placed` before `gone`, so a
+    // take that left the put behind used to lose to it.
+    const items = [{ id: 'a' }, { id: 'b' }]
+    const base = {
+      get: () => ({ items, order: ['a', 'b'] }),
+      asked: port(0),
+    }
+    const book = port<readonly Note[]>([])
+    const seen = laid(
+      base,
+      { notes: book, absorb: () => {} },
+      {
+        shape: {
+          rows: (s: { items: Array<{ id: string }> }) => s.items,
+          key: r => r.id,
+          lanes: (s: { order: string[] }) => [{ id: 'all', items: s.order }],
+        },
+        rules: {
+          add: (b, op: { id: string }) => b.put({ id: op.id }).place(op.id, 'all', 0),
+          drop: (b, op: { id: string }) => b.take(op.id),
+        },
+      },
+    )
+
+    // Create then delete: gone.
+    book.set([
+      { id: '1', name: 'add', args: { id: 'c' }, at: 0, attempts: 0, state: 'waiting' },
+      { id: '2', name: 'drop', args: { id: 'c' }, at: 1, attempts: 0, state: 'waiting' },
+    ])
+    assert.equal(seen.peek().rows.has('c'), false, 'created and deleted is deleted')
+    assert.equal(seen.peek().rows.size, 2)
+    assert.deepEqual(seen.peek().lanes[0]?.items, ['a', 'b'])
+
+    // Delete then create again: back.
+    book.set([
+      { id: '1', name: 'drop', args: { id: 'b' }, at: 0, attempts: 0, state: 'waiting' },
+      { id: '2', name: 'add', args: { id: 'b' }, at: 1, attempts: 0, state: 'waiting' },
+    ])
+    assert.equal(seen.peek().rows.has('b'), true, 'deleted and recreated is here')
+    assert.equal(seen.peek().rows.size, 2)
+
+    // An edit of a base row, then its deletion: gone, and the count says so.
+    book.set([
+      { id: '1', name: 'add', args: { id: 'a' }, at: 0, attempts: 0, state: 'waiting' },
+      { id: '2', name: 'drop', args: { id: 'a' }, at: 1, attempts: 0, state: 'waiting' },
+    ])
+    assert.equal(seen.peek().rows.has('a'), false)
+    assert.equal(seen.peek().rows.size, 1)
+    assert.equal([...seen.peek().rows.keys()].length, 1, 'the size agrees with the walk')
+  })
+
   test('laid assembles the void into nothing and keeps identity', () => {
     const base = {
       get: () => ({ items: [{ id: 'a' }, { id: 'b' }], order: ['a', 'b'] }),
@@ -297,6 +350,49 @@ describe('the Loom dialect', () => {
 })
 
 describe('truth by key, and a module that can be put down', () => {
+  test('a face outlives eviction by being reborn, not by going zombie', async () => {
+    // The family under truthBy evicts unwatched sources past its ceiling. A
+    // face cached by the business key used to survive that eviction and hand
+    // out a truth wired to the let-go source — one that asks the world
+    // nothing ever again. A face follows its source instead: evicted source,
+    // fresh face, and the question is asked anew.
+    const clock = world()
+    const asked: number[] = []
+    const detail = truthBy(
+      (id: number) => {
+        asked.push(id)
+        return Promise.resolve({ id, title: `task ${String(id)}` })
+      },
+      { name: 'reborn', timers: clock.timers, empty: { id: 0, title: '' }, keep: 1 },
+    )
+
+    const first = detail(1)
+    const stopOne = subscribe(first, () => {})
+    await settle(3)
+    assert.deepEqual(asked, [1])
+    stopOne() // unwatched: the member may be evicted now
+
+    const stopTwo = subscribe(detail(2), () => {})
+    await settle(3)
+    assert.deepEqual(asked, [1, 2], 'the ceiling of one let key 1 go')
+    stopTwo()
+
+    const again = detail(1)
+    assert.notEqual(again, first, 'a fresh face over the fresh source')
+    const stopAgain = subscribe(again, () => {})
+    await settle(3)
+    assert.deepEqual(asked, [1, 2, 1], 'and the question is asked anew, not never')
+    assert.equal(again.peek().title, 'task 1')
+    stopAgain()
+
+    // While a face IS watched, it is the same face on every call.
+    const held = detail(5)
+    const stopHeld = subscribe(held, () => {})
+    await settle(3)
+    assert.equal(detail(5), held, 'stability while watched')
+    stopHeld()
+  })
+
   test('each key is its own truth, asked once and let go together', async () => {
     const clock = world()
     const asked: number[] = []

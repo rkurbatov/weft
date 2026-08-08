@@ -9,11 +9,14 @@ import { expect, test } from '@playwright/test'
 import type { Page } from '@playwright/test'
 
 async function count(page: Page, label: string): Promise<number> {
-  const value = await page
+  const shown = page
     .locator('.count', { has: page.locator('span', { hasText: label }) })
     .locator('b')
-    .innerText()
-  return Number(value.replaceAll(/[^\d]/g, ''))
+  // Waited for on purpose, and with an end to the waiting: `innerText` on a
+  // missing element waits for ever, so a page that died halfway through used
+  // up the whole test timeout and reported nothing but the timeout.
+  await expect(shown, `the page shows "${label}"`).toBeVisible({ timeout: 15_000 })
+  return Number((await shown.innerText()).replaceAll(/[^\d]/g, ''))
 }
 
 /**
@@ -95,9 +98,17 @@ test.describe('a window onto a table in another thread', () => {
 
 // The whole-table page: the protocol under a real wire.
 test.describe('a whole table over a wire', () => {
+  let said: string[] = []
+
   test.beforeEach(async ({ page }) => {
+    said = trouble(page)
     await page.goto('/table/full/')
     await expect(page.locator('.jobs li').first()).toBeVisible({ timeout: 30_000 })
+    expect(said, 'the page loaded without throwing').toEqual([])
+  })
+
+  test.afterEach(() => {
+    expect(said, 'the page ran without throwing').toEqual([])
   })
 
   test('rows keep arriving while nobody touches the page', async ({ page }) => {
@@ -107,27 +118,39 @@ test.describe('a whole table over a wire', () => {
   })
 
   test('losing batches is noticed, and the catch-up puts it right', async ({ page }) => {
-    const before = await count(page, 'catch-ups')
+    const caughtUpBefore = await count(page, 'catch-ups')
 
     await page.click('button:has-text("lose batches")')
     await page.waitForTimeout(1500)
 
-    // What a lost batch costs is a catch-up, and that is what is counted here.
-    // The label is not: a catch-up is answered in a round trip, so 'a batch
-    // was lost' is on screen for a few milliseconds at a time and a test that
-    // waited for it would be waiting for a race to go its way.
-    expect(await count(page, 'catch-ups'), 'a lost batch is noticed').toBeGreaterThan(before)
+    // While the switch is on nothing of the table crosses, so there is nothing
+    // for this side to notice yet: what arrives stops arriving. The gap is
+    // found afterwards, not during.
+    //
+    // Counted by what actually landed here, not by the size of the table. The
+    // size is a cell of the other side and cells travel by their own kind of
+    // message, which the switch does not touch: the number on screen keeps
+    // climbing while not a single row is crossing.
+    const frozen = await count(page, 'rows and changes received')
+    await page.waitForTimeout(1000)
+    expect(
+      await count(page, 'rows and changes received'),
+      'nothing crossed while the switch was on',
+    ).toBe(frozen)
 
     await page.click('button:has-text("stop losing batches")')
     await page.waitForTimeout(2000)
 
+    // The first batch to arrive after the gap does not fit onto what this side
+    // holds; that is the moment the loss is noticed and a catch-up is asked
+    // for. The label saying so is up for a round trip, so what is checked is
+    // the count of catch-ups rather than the sight of it.
+    expect(await count(page, 'catch-ups'), 'the gap was noticed').toBeGreaterThan(caughtUpBefore)
     await expect(page.locator('.state')).toContainText('up to date')
-    const settled = await count(page, 'catch-ups')
-    await page.waitForTimeout(1500)
-    // Nothing is being lost any more, so nothing is being caught up on.
-    expect(await count(page, 'catch-ups'), 'the catching up stopped').toBe(settled)
-    // And the table on this side agrees with the one on the other side.
-    expect(await count(page, 'rows in the table')).toBeGreaterThan(0)
+    expect(
+      await count(page, 'rows and changes received'),
+      'and rows are crossing again',
+    ).toBeGreaterThan(frozen)
   })
 
   test('what crosses is changes, not the table', async ({ page }) => {

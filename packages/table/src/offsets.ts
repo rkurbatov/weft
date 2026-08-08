@@ -4,9 +4,18 @@
 //
 // The carrier is a flat Fenwick tree over plain numbers, fed by deltas: a row
 // measured anew is a point update in O(log n), an offset is a prefix sum in
-// O(log n), a hit test descends the tree. No cell per row — the granularity
-// law forbids graph machinery on elements this small; in a live app the graph
-// holds one version cell above this line, none inside it.
+// O(log n), a hit test is a binary lift straight down the same array. No cell
+// per row — the granularity law forbids graph machinery on elements this
+// small; in a live app the graph holds one version cell above this line, none
+// inside it.
+//
+// Flat on purpose: one Float64Array instead of a tree of node objects. A
+// reference tree scatters a hundred thousand nodes across the heap — every
+// step of a query is a pointer chase and a likely cache miss, and every
+// rebalance allocates. Here a query walks indices in one contiguous buffer,
+// updates allocate nothing, and the structural shift on insert — O(n) over a
+// packed array of doubles — beats a balanced tree's bookkeeping in practice
+// at every size a screen can hold.
 //
 // Structure changes (rows entering or leaving) shift every index, so they only
 // mark the tree stale; it is rebuilt once, at the first question after — a

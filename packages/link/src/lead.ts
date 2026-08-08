@@ -13,7 +13,19 @@ export interface Lock {
   hold(name: string, onHeld: () => void): () => void
 }
 
-/** The browser's own answer: a lock is released when the tab holding it dies. */
+/**
+ * The browser's own answer: a lock is released when the tab holding it dies.
+ *
+ * This is the whole reason the door is the Web Locks API and not a heartbeat
+ * in storage. A heartbeat has to pick a timeout, and every choice loses: too
+ * short and a throttled background tab is declared dead while alive — two
+ * leaders, one storage; too long and a crashed leader leaves the followers
+ * headless for the whole grace period. The lock delegates the death question
+ * to the browser, which actually knows: release is immediate on crash or
+ * close, and exclusivity is its contract, not a protocol we could get wrong.
+ * The unresolved promise below is the standard idiom — the lock is held for
+ * exactly as long as that promise is pending.
+ */
 export function webLocks(): Lock {
   const locks = (globalThis as { navigator?: { locks?: LockManagerish } }).navigator?.locks
   if (locks === undefined) throw new Error('weft: no Web Locks here')

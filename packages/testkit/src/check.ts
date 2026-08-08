@@ -4,6 +4,9 @@
 // before it says what is expected. These say what is expected.
 
 import assert from 'node:assert/strict'
+import { subscribe } from '#graph/graph.ts'
+import type { Watchable } from '#graph/graph.ts'
+import { until } from './lifetime.ts'
 
 interface Peekable<T> {
   peek(): T
@@ -49,5 +52,31 @@ export function wakings(): {
       seen++
     },
     is: (expected, why) => assert.equal(seen, expected, why ?? 'wakings'),
+  }
+}
+
+/**
+ * Follow a cell for the length of the test, keeping what it said.
+ *
+ * The shape it replaces, written by hand in every second reactivity test:
+ * `const seen = []; until(subscribe(cell, v => seen.push(v)))`. The
+ * subscription is registered for cleanup here, so a failing assertion cannot
+ * leave a live watcher behind.
+ */
+export function track<T>(cell: Watchable<T>): {
+  /** Everything the cell said since tracking began, in order. */
+  values(): readonly T[]
+  last(): T | undefined
+  count(): number
+  /** The record so far equals this, in order. */
+  said(expected: readonly T[], why?: string): void
+} {
+  const seen: T[] = []
+  until(subscribe(cell, value => seen.push(value)))
+  return {
+    values: () => seen,
+    last: () => seen.at(-1),
+    count: () => seen.length,
+    said: (expected, why) => assert.deepEqual(seen, expected, why ?? 'values seen'),
   }
 }

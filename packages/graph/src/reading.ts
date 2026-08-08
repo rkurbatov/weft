@@ -19,6 +19,15 @@ let tracking: Set<Source> | null = null
 export function track(source: Source): void {
   const consumer = active
   if (consumer === null) return
+  // The boundary check, at the one gate every read passes. Several engines
+  // can live in one isolate — one per session behind a shared worker — and a
+  // formula reaching into another engine through a closure would quietly
+  // stitch the two graphs together: its subscription would pin foreign nodes
+  // past their session's teardown, and its recomputes would leak one
+  // session's data into another's. Thrown here, at the read, the mistake
+  // names both engines while the stack still shows who reached; the one
+  // lawful bridge between engines is `adopt`, which carries values, not
+  // edges.
   if (source.engine !== consumer.engine) throw crossing(consumer, source)
   if (consumer.sources.has(source)) return
   consumer.sources.add(source)

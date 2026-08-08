@@ -109,9 +109,12 @@ export function relate(
     for (const sourceName of named) {
       const feed = feedOf(sources[sourceName] as Table<Row>)
       feed.version.peek()
-      const rows = new Map<Key, Row>()
-      feed.each(row => rows.set(feed.keyOf(row), row))
-      held[sourceName] = rows
+      // The live map, not a copy: a rebuild reads it synchronously and the
+      // one runner that needs a mutable map copies at that point. Rebuilding
+      // on every parameter change used to allocate a table-sized map first —
+      // a letter typed into a search box over a hundred thousand rows paid
+      // for a hash table nobody kept.
+      held[sourceName] = feed.asMap() as Map<Key, Row>
     }
     return held
   }

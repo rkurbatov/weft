@@ -6,6 +6,12 @@ import { notice } from '#data/notice.ts'
 // Kept apart on purpose: today the choice is a rule of thumb; a planner that
 // measures, or re-plans as a collection grows, replaces this file without
 // touching a fold's code or anyone's application.
+//
+// The scan plan lives here too, although scan itself is the relational
+// layer's word. Deliberate, not a leak: the empirics have one home, and the
+// dependency still points the right way — rel asks table, never the
+// reverse. Split by layer, the fold's thresholds and the scan's would drift
+// apart in two files nobody reads together.
 
 export type Carrier = 'running' | 'tree' | 'oracle'
 
@@ -67,7 +73,7 @@ export function planScan(name: string, traits: ScanTraits): ScanPlan {
   notice({
     kind: 'scan-plan',
     where: name,
-    level: 'note',
+    level: traits.named && traits.size >= STORED_CARRY_LIMIT ? 'warn' : 'note',
     message: `the scan "${name}" is carried by ${plan.carrier}, its carry ${plan.form}: ${plan.reason}`,
     detail: { carrier: plan.carrier, form: plan.form, reason: plan.reason, ...traits },
   })
@@ -75,15 +81,21 @@ export function planScan(name: string, traits: ScanTraits): ScanPlan {
 }
 
 function decideScan(traits: ScanTraits): ScanPlan {
-  // The form first: a carry nobody named is never written down, and a named
-  // one is dropped from the rows once the tail outgrows the screen — the
-  // answer stays reachable either way, through the view's own offsetOf.
-  const form: ScanForm = traits.named && traits.size < STORED_CARRY_LIMIT ? 'stored' : 'asked'
+  // The form is not the planner's to take away. A named carry is a field the
+  // builder's type promises on every row; the plan used to drop it past the
+  // limit, and the rows then lied against their own type — correct under
+  // 4096 rows in a test, `undefined` in production the day the table grew.
+  // An optimiser may choose HOW to answer, never WHAT: naming no field asks
+  // for the cheap form, naming one buys the field at its price — and past
+  // the limit the price is announced as a warning rather than paid silently.
+  const form: ScanForm = traits.named ? 'stored' : 'asked'
+  const dear = traits.named && traits.size >= STORED_CARRY_LIMIT
   const why = !traits.named
     ? 'no carry field named: nothing to write into rows'
-    : form === 'stored'
-      ? `${traits.size} rows: writing the carry into rows is still cheap`
-      : `${traits.size} rows: a stored carry would rewrite the tail on every edit`
+    : dear
+      ? `${traits.size} rows: the named carry is kept, though it rewrites the tail on every ` +
+        `edit — leave the field unnamed and read the view's offsetOf to trade it away`
+      : `${traits.size} rows: writing the carry into rows is still cheap`
 
   if (traits.forced !== undefined && traits.forced !== 'auto') {
     if (traits.forced === 'offsets' && !traits.numeric) {

@@ -61,6 +61,50 @@ describe('giving way', () => {
   })
 })
 
+describe('the message-channel path, as a browser walks it', () => {
+  // Node answers through `setImmediate`, so the branch a browser takes —
+  // where a channel is a platform object worth not making per call — is
+  // reached by hiding it for the length of the test.
+  async function withoutImmediate(work: () => Promise<void>): Promise<void> {
+    const box = globalThis as { setImmediate?: unknown }
+    const had = box.setImmediate
+    delete box.setImmediate
+    try {
+      await work()
+    } finally {
+      box.setImmediate = had
+    }
+  }
+
+  test('every waiter resumes, in waves and one by one', async () => {
+    await withoutImmediate(async () => {
+      // A wave: many runs yield in the same moment and all must wake.
+      let woken = 0
+      await Promise.all(
+        Array.from({ length: 50 }, async () => {
+          await giveWay()
+          woken++
+        }),
+      )
+      assert.equal(woken, 50)
+
+      // One by one: the channel is reused, not spent.
+      const order: string[] = []
+      for (let i = 0; i < 3; i++) {
+        await giveWay()
+        order.push(`turn ${String(i)}`)
+      }
+      assert.deepEqual(order, ['turn 0', 'turn 1', 'turn 2'])
+    })
+  })
+
+  // What is NOT asserted here: that a message on another port is heard
+  // between two of these turns. In a browser all ports share one task queue
+  // and that ordering holds; Node schedules each port on its own handle and
+  // promises nothing across them — a test of it here would measure Node's
+  // mood, not the library.
+})
+
 describe('what giving way must not do', () => {
   test('a message queued while the run waits is heard before it resumes', async () => {
     // The reason this matters: a worker searching a corpus hears "stop" as a

@@ -3,7 +3,7 @@
 
 export { projected } from './project.ts'
 export type { ProjectionSpec } from './project.ts'
-export { memoryStore, webStore, within } from './store.ts'
+export { memoryStore, pack, unpack, webStore, within } from './store.ts'
 export type { Store, Scope } from './store.ts'
 export { idbStore, bestStore } from './idb.ts'
 export type { IdbOptions } from './idb.ts'

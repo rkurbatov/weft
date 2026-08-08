@@ -211,6 +211,56 @@ describe('a standing handler', () => {
     await settle(2)
   })
 
+  test('queued: a body that throws does not tear the microtask queue', async () => {
+    // The queued run fires inside a promise's `finally`. A synchronous throw
+    // there used to escape as an UNHANDLED REJECTION — a crash in Node, a
+    // silent stop in a worker — instead of the uncaught exception the
+    // asynchronous branch deliberately raises. The test runner rightly fails
+    // a file on either, so the scene runs in a child process, where the two
+    // outcomes can be told apart: a rejection kills the child before its
+    // listener hears anything; the exception lands in the listener and the
+    // handler goes on to take the next value.
+    const scene = `
+      import { port } from '#graph'
+      import { whenever } from '#loom'
+      const landed = []
+      process.on('uncaughtException', error => landed.push(error.message))
+      const owed = port(0)
+      const started = []
+      let release = () => {}
+      whenever(
+        () => owed.get(),
+        value => {
+          started.push(value)
+          if (value === 2) throw new Error('thrown from the queue')
+          if (value === 1) return new Promise(resolve => { release = resolve })
+          return undefined
+        },
+        { now: false, whileRunning: 'queue' },
+      )
+      const turn = () => new Promise(resolve => setTimeout(resolve, 0))
+      owed.set(1); await turn()
+      owed.set(2); await turn() // queued behind the running 1
+      release(); await turn(); await turn()
+      owed.set(3); await turn() // the handler must still stand
+      console.log(JSON.stringify({ started, landed }))
+    `
+    const { execFile } = await import('node:child_process')
+    const answer = await new Promise<{ code: number | null; out: string }>(resolve => {
+      const child = execFile(
+        process.execPath,
+        ['--input-type=module', '--no-warnings', '-e', scene],
+        { cwd: process.cwd() },
+        (error, stdout) => resolve({ code: error === null ? 0 : 1, out: stdout }),
+      )
+      void child
+    })
+    assert.equal(answer.code, 0, 'the child survived the throw')
+    const seen = JSON.parse(answer.out) as { started: number[]; landed: string[] }
+    assert.deepEqual(seen.started, [1, 2, 3], 'the queue took the throw and stood')
+    assert.deepEqual(seen.landed, ['thrown from the queue'], 'the error came out where errors do')
+  })
+
   test('restart: what is running is told to stop, so an async body can quit early', async () => {
     const owed = port(0)
     const started: number[] = []

@@ -463,6 +463,52 @@ describe('the outbox', () => {
     assert.equal(box.owed.peek(), 0)
   })
 
+  test('a stuck head stops its lane; other lanes keep moving', async () => {
+    // Order is the lane's promise. A Create stuck and the Update behind it
+    // sent anyway lands an edit for a thing the server never saw — so a
+    // stuck head blocks its own lane until a person answers, and only its
+    // own: the lane next door is another story.
+    const clock = world()
+    const sent: string[] = []
+    const box = outbox({
+      key: 'k',
+      store: memoryStore(),
+      retry: 100,
+      maxAttempts: 2,
+      handlers: {
+        create: () => Promise.reject(new Error('the server keeps refusing')),
+        update: (args: unknown) => {
+          sent.push(`update:${String((args as { id: string }).id)}`)
+          return Promise.resolve()
+        },
+        save: (args: unknown) => {
+          sent.push(`save:${String((args as { doc: string }).doc)}`)
+          return Promise.resolve()
+        },
+      },
+      timers: clock.timers,
+      now: clock.now,
+      newId: ids(),
+    })
+    await box.ready
+
+    box.send('create', { id: 'x' }, { lane: 'cards', key: 'make-x' }).done.catch(() => {})
+    box.send('update', { id: 'x' }, { lane: 'cards' })
+    box.send('save', { doc: 'a' })
+    await settle()
+    await clock.advance(1000)
+
+    assert.equal(box.stuck.peek().length, 1, 'the create ran out of attempts')
+    assert.deepEqual(sent, ['save:a'], 'the update waited behind its stuck head')
+
+    // The person lets the head go — the lane carries on where it stood.
+    const head = box.stuck.peek()[0]
+    assert.ok(head !== undefined)
+    box.forget(head.id)
+    await clock.advance(10)
+    assert.deepEqual(sent, ['save:a', 'update:x'])
+  })
+
   test('order still holds within a lane', async () => {
     const clock = world()
     const sent: string[] = []

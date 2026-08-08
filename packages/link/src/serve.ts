@@ -70,6 +70,13 @@ export interface Surface {
 export interface ServeOptions {
   /** When to flush what has changed. Once a frame by default. */
   schedule?: Schedule
+  /**
+   * How many rows a list follower is remembered to have, per follower. Rows
+   * inside the bound are put back by order alone when a window returns to
+   * them; rows evicted past it are simply sent again. Tests shrink it to
+   * reach the eviction path without walking thousands of rows.
+   */
+  remember?: number
   /** Told when a value cannot be sent — usually because it is not cloneable. */
   onUnsendable?: (cell: string, error: unknown) => void
   /**
@@ -272,7 +279,7 @@ export function serve(surface: Surface, channel: Channel, options: ServeOptions 
    * not against what the list held a moment ago — so a follower that missed
    * nothing gets exactly the rows that changed for it.
    */
-  function followList(id: number, list: ListOffer, keep = 4096): void {
+  function followList(id: number, list: ListOffer, keep = options?.remember ?? 4096): void {
     let sentKeys = new Map<unknown, unknown>()
     let at = 0
     /**
@@ -310,9 +317,25 @@ export function serve(surface: Surface, channel: Channel, options: ServeOptions 
       // Nothing is dropped here: what left the window is kept on the far side
       // and put back by the order when it returns. The bound below is what
       // stops that from growing without end.
-      while (alreadySent.size > keep) {
+      //
+      // A key on screen right now is never the one to go. Insertion order is
+      // the age here, and a `set` on a key the map already holds does not
+      // move it — so a row sent early and sitting quietly in the window can
+      // be the oldest entry at the very moment the cache overflows. Evicting
+      // it sends `next: null`, and the far side deletes a row the person is
+      // looking at. Such a key is re-inserted instead, which both spares it
+      // and moves it to the young end, and the loop walks on.
+      let spared = 0
+      while (alreadySent.size - spared > keep) {
         const oldest = alreadySent.keys().next().value
         if (oldest === undefined) break
+        if (now.has(oldest)) {
+          const row = alreadySent.get(oldest)
+          alreadySent.delete(oldest)
+          alreadySent.set(oldest, row)
+          spared++
+          continue
+        }
         alreadySent.delete(oldest)
         changes.push({ key: oldest, next: null })
       }

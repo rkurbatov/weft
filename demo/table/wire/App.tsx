@@ -5,7 +5,7 @@
 // crossed grows by a screenful, not by a table; and an edit half-typed
 // survives its row scrolling out of sight and back.
 
-import { useRef } from 'react'
+import { useEffect, useRef } from 'react'
 import type { ReactNode } from 'react'
 import { useLive } from '#loom/react'
 import { desk } from './main.tsx'
@@ -27,14 +27,25 @@ function Row({ task }: { task: Task }): ReactNode {
   const station = desk.get()
   const draft = useLive(() => station.draft(task.id).get())
   const editing = draft !== ''
+  const box = useRef<HTMLInputElement>(null)
+
+  // Focus, but never scroll. A row being edited leaves the window and comes
+  // back — the same field is born again — and plain autofocus asks the browser
+  // to bring it into view. The window is placed by a transform that the wire
+  // updates a moment later, so at that instant the field is still drawn where
+  // the old rows were, and the browser scrolls the list back there: a jump to
+  // the top undone by the page's own field.
+  useEffect(() => {
+    box.current?.focus({ preventScroll: true })
+  }, [editing])
 
   return (
     <div className="row" style={{ height: ROW }}>
       <span className="no">{task.id}</span>
       {editing ? (
         <input
+          ref={box}
           value={draft}
-          autoFocus
           onChange={event => station.draft(task.id).set(event.target.value)}
           onKeyDown={event => {
             if (event.key === 'Enter') {

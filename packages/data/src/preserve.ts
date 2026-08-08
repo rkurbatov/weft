@@ -60,17 +60,31 @@ export function preserve<T>(prev: T, next: T, limit: number = PRESERVE_LIMIT): T
   }
   if (typeof prev !== 'object' || typeof next !== 'object' || prev === null || next === null)
     return next
+  // A date has no enumerable properties, so the object walk below would call
+  // any two dates the same — and hand back the OLD one when only a timestamp
+  // moved. A date is its one value: same instant, keep the old identity;
+  // another instant, take the new object.
+  if (prev instanceof Date || next instanceof Date) {
+    if (!(prev instanceof Date) || !(next instanceof Date)) return next
+    return (prev.getTime() === next.getTime() ? prev : next) as T
+  }
+  if (prev instanceof RegExp || next instanceof RegExp) {
+    if (!(prev instanceof RegExp) || !(next instanceof RegExp)) return next
+    return (prev.source === next.source && prev.flags === next.flags ? prev : next) as T
+  }
   if (prev instanceof Map || next instanceof Map) {
     if (!(prev instanceof Map) || !(next instanceof Map)) return next
     if (tooBig((next as Map<unknown, unknown>).size, limit)) return next
     const merged = new Map<unknown, unknown>()
     let same = prev.size === next.size
     for (const [key, value] of next as Map<unknown, unknown>) {
-      const kept = (prev as Map<unknown, unknown>).has(key)
-        ? preserve((prev as Map<unknown, unknown>).get(key), value, limit)
-        : value
+      const had = (prev as Map<unknown, unknown>).has(key)
+      const kept = had ? preserve((prev as Map<unknown, unknown>).get(key), value, limit) : value
       merged.set(key, kept)
-      if (!Object.is(kept, (prev as Map<unknown, unknown>).get(key))) same = false
+      // Presence first: a key the old map lacked reads as `undefined` too, and
+      // a new entry holding `undefined` would otherwise count as no change —
+      // the old map would be handed back with the entry missing.
+      if (!had || !Object.is(kept, (prev as Map<unknown, unknown>).get(key))) same = false
     }
     return (same ? prev : merged) as T
   }
@@ -97,9 +111,13 @@ export function preserve<T>(prev: T, next: T, limit: number = PRESERVE_LIMIT): T
   const merged: Record<string, unknown> = {}
   let same = names.length === Object.keys(before).length
   for (const name of names) {
-    const kept = name in before ? preserve(before[name], after[name], limit) : after[name]
+    const had = name in before
+    const kept = had ? preserve(before[name], after[name], limit) : after[name]
     merged[name] = kept
-    if (!Object.is(kept, before[name])) same = false
+    // Presence first, as with maps: a key the old object lacked also reads as
+    // `undefined`, so a fresh `x: undefined` matched the void and the OLD
+    // object came back — a schema change swallowed whole.
+    if (!had || !Object.is(kept, before[name])) same = false
   }
   return (same ? prev : merged) as T
 }

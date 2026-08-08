@@ -53,6 +53,18 @@ import type {
  */
 export type RowOf<B> = B extends Rel<infer R> ? R : never
 
+/**
+ * A row type, resolved flat.
+ *
+ * Every joining step used to answer with an intersection — `R & { c: T }` —
+ * which TypeScript keeps folded and unfolds lazily. Five steps deep that is a
+ * nested tower the IDE has to expand on every hover and every mistake, and
+ * the error under it names the tower, not the row. Mapping the keys forces
+ * the compiler to resolve the shape once, at the step that made it: hovers
+ * answer at once, and an error names a plain object type.
+ */
+type Flat<T> = { [K in keyof T]: T[K] } & {}
+
 // ── fold toolkit: the carrier of the row type ────────────────────────────
 
 declare const ANSWER: unique symbol
@@ -137,7 +149,7 @@ export class Rel<R> {
   with<N extends string, T>(
     name: N & MustBeFree<R, N>,
     of: Expr | RowFn,
-  ): Rel<R & { [K in N]: T }> {
+  ): Rel<Flat<R & { [K in N]: T }>> {
     return this.grow(pureNode(this.node, { fields: { [name]: of } }))
   }
 
@@ -158,7 +170,7 @@ export class Rel<R> {
       residual?: Expr | RowFn
       keeping?: Keep
     },
-  ): Rel<R & { [K in A]: Keep extends true ? T | null : T }> {
+  ): Rel<Flat<R & { [K in A]: Keep extends true ? T | null : T }>> {
     // The types above have already said whether the pairs are lawful; here
     // they are just pairs of names.
     const on = spec.on as readonly [string, string] | ReadonlyArray<readonly [string, string]>
@@ -210,7 +222,9 @@ export class Rel<R> {
       as: A
       key: ReadonlyArray<keyof (FieldType<R, F> extends readonly (infer E)[] ? E : never) & string>
     },
-  ): Rel<Omit<R, F> & { [K in A]: FieldType<R, F> extends readonly (infer E)[] ? E : never }> {
+  ): Rel<
+    Flat<Omit<R, F> & { [K in A]: FieldType<R, F> extends readonly (infer E)[] ? E : never }>
+  > {
     return this.grow(
       expandNode(this.node, { field, as: spec.as, key: spec.key as readonly string[] }),
     ) as never
@@ -229,7 +243,7 @@ export class Rel<R> {
     as?: N & MustBeFree<R, N>
     through?: T & MustBeFree<R, T>
     from?: number
-  }): Rel<R & { [K in N | T]: number }> {
+  }): Rel<Flat<R & { [K in N | T]: number }>> {
     const order = (typeof spec.by === 'string' ? [spec.by] : spec.by) as ReadonlyArray<
       string | { field: string; down?: boolean }
     >

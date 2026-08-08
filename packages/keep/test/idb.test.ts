@@ -2,7 +2,7 @@
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { IDBFactory } from 'fake-indexeddb'
-import { idbStore, webStore } from '#keep'
+import { idbStore, pack, unpack, webStore } from '#keep'
 
 describe('the browser database, and the shelf that picks it', () => {
   /** Each test gets a database world of its own. */
@@ -128,6 +128,49 @@ describe('the shelf a browser offers', () => {
       if (was === undefined) delete (globalThis as { localStorage?: unknown }).localStorage
       else (globalThis as { localStorage?: unknown }).localStorage = was
     }
+  })
+
+  test('what goes in comes back as it was, through text', () => {
+    // The keep layer promises "a Date stays a Date". Bare JSON broke that
+    // silently on the fallback shelf: a date came back a string, a map an
+    // empty object — and the TypeError landed at the NEXT launch, in whoever
+    // read the value, far from the write that corrupted it.
+    const value = {
+      at: new Date(1234567890),
+      tags: new Set(['a', 'b']),
+      byId: new Map<number, { n: number }>([
+        [1, { n: 10 }],
+        [2, { n: 20 }],
+      ]),
+      bytes: Uint8Array.from([1, 2, 250]),
+      floats: Float64Array.from([0.5, -1.5]),
+      plain: { text: 'kept', list: [1, null, 'x'], flag: true },
+    }
+    const back = unpack(pack(value)) as typeof value
+    assert.ok(back.at instanceof Date)
+    assert.equal(back.at.getTime(), 1234567890)
+    assert.ok(back.tags instanceof Set)
+    assert.deepEqual([...back.tags], ['a', 'b'])
+    assert.ok(back.byId instanceof Map)
+    assert.deepEqual(back.byId.get(2), { n: 20 })
+    assert.ok(back.bytes instanceof Uint8Array)
+    assert.deepEqual([...back.bytes], [1, 2, 250])
+    assert.ok(back.floats instanceof Float64Array)
+    assert.deepEqual([...back.floats], [0.5, -1.5])
+    assert.deepEqual(back.plain, value.plain)
+
+    // A date inside a map inside an array: the envelopes nest.
+    const deep = unpack(pack([new Map([['k', new Date(7)]])])) as Array<Map<string, Date>>
+    assert.equal(deep[0]?.get('k')?.getTime(), 7)
+
+    // A value that forges the envelope's tag survives as itself — and so
+    // does one that forges the escape.
+    const forged = { '#weft.packed': 'date', at: 'not really' }
+    assert.deepEqual(unpack(pack(forged)), forged)
+    const doubly = { '#weft.packed~': 1, '#weft.packed': { nested: new Date(5) } }
+    const round = unpack(pack(doubly)) as typeof doubly
+    assert.equal(round['#weft.packed~'], 1)
+    assert.equal((round['#weft.packed'] as { nested: Date }).nested.getTime(), 5)
   })
 
   test('where there is no such storage, it is memory rather than a crash', async () => {

@@ -39,6 +39,112 @@ export function memoryStore(seed: Record<string, unknown> = {}): Store {
 }
 
 /**
+ * The kinds of value the keep layer promises to return as they went in, over
+ * a store that can only hold text.
+ *
+ * `JSON.stringify` on its own breaks that promise silently: a Date comes back
+ * a string, a Map or a Set an empty object, a typed array a dictionary of
+ * indices — and the corruption shows up not at the write but at the reload,
+ * as a TypeError in whatever read the value back. So each such value travels
+ * as a tagged envelope and is unfolded on the way out. A plain object that
+ * happens to carry the tag key is wrapped once, so no user value can forge an
+ * envelope.
+ */
+const TAG = '#weft.packed'
+/** The tag itself, or the tag under any depth of escaping. */
+const FORGED = /^#weft\.packed~*$/
+const ESCAPED = /^#weft\.packed~+$/
+
+const VIEWS: Record<string, (numbers: number[]) => ArrayBufferView | ArrayBuffer> = {
+  Int8Array: n => Int8Array.from(n),
+  Uint8Array: n => Uint8Array.from(n),
+  Uint8ClampedArray: n => Uint8ClampedArray.from(n),
+  Int16Array: n => Int16Array.from(n),
+  Uint16Array: n => Uint16Array.from(n),
+  Int32Array: n => Int32Array.from(n),
+  Uint32Array: n => Uint32Array.from(n),
+  Float32Array: n => Float32Array.from(n),
+  Float64Array: n => Float64Array.from(n),
+  ArrayBuffer: n => Uint8Array.from(n).buffer,
+}
+
+/** Pack a structured-clone-shaped value into JSON text. */
+export function pack(value: unknown): string {
+  return JSON.stringify(value, function (this: unknown, key: string, folded: unknown) {
+    // `toJSON` has already run by the time a replacer is called — a Date
+    // arrives here as a string — so the original is taken off the holder.
+    const raw = (this as Record<string, unknown>)[key]
+    if (raw instanceof Date) return { [TAG]: 'date', at: raw.getTime() }
+    if (raw instanceof Map) return { [TAG]: 'map', entries: [...raw.entries()] }
+    if (raw instanceof Set) return { [TAG]: 'set', items: [...raw.values()] }
+    if (raw instanceof ArrayBuffer) {
+      return { [TAG]: 'bulk', kind: 'ArrayBuffer', numbers: [...new Uint8Array(raw)] }
+    }
+    if (ArrayBuffer.isView(raw) && raw.constructor.name in VIEWS) {
+      return {
+        [TAG]: 'bulk',
+        kind: raw.constructor.name,
+        numbers: [...new Uint8Array(raw.buffer, raw.byteOffset, raw.byteLength)],
+      }
+    }
+    // A user object carrying the tag key must not read as an envelope. It is
+    // not boxed — a box would itself carry the tag and send the walk into a
+    // loop — the key is escaped instead: one tilde on, one tilde off.
+    if (
+      typeof raw === 'object' &&
+      raw !== null &&
+      !Array.isArray(raw) &&
+      Object.keys(raw).some(name => FORGED.test(name))
+    ) {
+      const shifted: Record<string, unknown> = {}
+      for (const [name, inner] of Object.entries(raw)) {
+        shifted[FORGED.test(name) ? `${name}~` : name] = inner
+      }
+      return shifted
+    }
+    return folded
+  })
+}
+
+/** Unfold what pack folded. */
+export function unpack(text: string): unknown {
+  return JSON.parse(text, (key: string, value: unknown) => {
+    if (typeof value !== 'object' || value === null) return value
+    if (!(TAG in value)) {
+      // The escape, undone: a key that is the tag under tildes loses one.
+      if (!Array.isArray(value) && Object.keys(value).some(name => ESCAPED.test(name))) {
+        const shifted: Record<string, unknown> = {}
+        for (const [name, inner] of Object.entries(value)) {
+          shifted[ESCAPED.test(name) ? name.slice(0, -1) : name] = inner
+        }
+        return shifted
+      }
+      return value
+    }
+    const box = value as Record<string, unknown>
+    switch (box[TAG]) {
+      case 'date':
+        return new Date(box['at'] as number)
+      case 'map':
+        return new Map(box['entries'] as Array<[unknown, unknown]>)
+      case 'set':
+        return new Set(box['items'] as unknown[])
+      case 'bulk': {
+        const bytes = Uint8Array.from(box['numbers'] as number[])
+        const make = VIEWS[box['kind'] as string]
+        if (make === undefined) return bytes
+        if (box['kind'] === 'ArrayBuffer') return bytes.buffer
+        const view = make([]) as ArrayBufferView
+        const Kind = view.constructor as new (b: ArrayBuffer) => ArrayBufferView
+        return new Kind(bytes.buffer)
+      }
+      default:
+        return value
+    }
+  })
+}
+
+/**
  * Browser storage for the case without a worker; otherwise an in-memory
  * stand-in. Text packing is this adapter's own detail; rubbish it cannot read
  * is its own to clear.
@@ -54,7 +160,7 @@ export function webStore(area: 'local' | 'session' = 'local'): Store {
       const text = backing.getItem(key)
       if (text === null) return Promise.resolve(undefined)
       try {
-        return Promise.resolve(JSON.parse(text) as unknown)
+        return Promise.resolve(unpack(text))
       } catch {
         backing.removeItem(key)
         return Promise.resolve(undefined)
@@ -64,7 +170,7 @@ export function webStore(area: 'local' | 'session' = 'local'): Store {
       // A full or blocked store is a refusal, not a shrug: the caller turns it
       // into a visible "not saving", so it must not be swallowed.
       try {
-        backing.setItem(key, JSON.stringify(value))
+        backing.setItem(key, pack(value))
         return Promise.resolve()
       } catch (error) {
         return Promise.reject(error as Error)

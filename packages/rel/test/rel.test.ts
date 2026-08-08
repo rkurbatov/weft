@@ -536,6 +536,40 @@ describe('the relational layer', () => {
     docs.dispose()
   })
 
+  test('a named carry survives the table outgrowing the stored-carry limit', () => {
+    // The builder's type promises the named field on every row. The planner
+    // used to trade it away past the limit — correct on test-sized data,
+    // `undefined` in production the day the table grew. The plan may pick the
+    // carrier; the field itself is not its to take, and past the limit the
+    // price is a warning on the notice channel, not a silent lie.
+    const warned: string[] = []
+    until(
+      onNotice(what => {
+        if (what.kind === 'scan-plan' && what.level === 'warn') warned.push(what.where)
+      }),
+    )
+    const rows = table<Row>({ key: r => r['id'] as Key })
+    const many: Row[] = []
+    for (let i = 0; i < 5000; i++) many.push({ id: i, rank: i, height: 10 })
+    rows.put(many)
+    const live = living(
+      scan(source('rows', ['id']), {
+        order: [{ field: 'rank' }],
+        step: field('height'),
+        as: 'offset',
+      }),
+      { rows },
+    )
+    until(subscribe(live.all, () => {}))
+    until(() => live.dispose())
+
+    assert.equal((live.row(0).peek() as Row)['offset'], 0)
+    assert.equal((live.row(4999).peek() as Row)['offset'], 4999 * 10, 'the promised field is real')
+    rows.put({ id: 2500, rank: 2500, height: 20 })
+    assert.equal((live.row(4999).peek() as Row)['offset'], 4999 * 10 + 10, 'and stays real on edit')
+    assert.equal(warned.includes('scan.offset'), true, 'the price was said aloud')
+  })
+
   test('scan parity: a running total in order, against the oracle at every step', () => {
     const rows = feed('rows')
     const tree = scan(source('rows', ['id']), {

@@ -69,12 +69,51 @@ export function orderedOver<R>(
     entries.sort(order)
   }
 
+  /**
+   * Past this many changes, splicing one by one loses to merging.
+   *
+   * A splice shifts the tail, so a batch of K over N entries costs K×N moves —
+   * an initial sync of five thousand rows onto five thousand held ones is
+   * twenty-five million shifts, and the thread freezes. One filtering pass
+   * and one merge of two sorted runs costs N + K·logK instead. The same
+   * threshold, for the same reason, as the relational scan's.
+   */
+  const BATCH = 8
+
+  const applyMany = (changes: readonly Change<R>[]): void => {
+    // One resolution per key, the last one in the batch: a batch may carry
+    // the same key twice — two puts of one row arrive as two changes — and
+    // splicing them in turn replaces, while a naive merge would keep both.
+    const finals = new Map<Key, R | undefined>()
+    for (const c of changes) finals.set(c.key, c.next)
+    const kept = entries.filter(e => !finals.has(e.key))
+    const fresh: Note[] = []
+    for (const [key, row] of finals) if (row !== undefined) fresh.push({ key, row })
+    fresh.sort(order)
+    const merged: Note[] = Array.from({ length: kept.length + fresh.length })
+    let a = 0
+    let b = 0
+    let at = 0
+    while (a < kept.length && b < fresh.length) {
+      merged[at++] = (
+        order(kept[a] as Note, fresh[b] as Note) <= 0 ? kept[a++] : fresh[b++]
+      ) as Note
+    }
+    while (a < kept.length) merged[at++] = kept[a++] as Note
+    while (b < fresh.length) merged[at++] = fresh[b++] as Note
+    entries = merged
+  }
+
   const ensure = follow(feed, {
     first: rebuild,
     apply(changes) {
-      for (const c of changes) {
-        if (c.prev !== undefined) remove(c.key, c.prev)
-        if (c.next !== undefined) insert(c.key, c.next)
+      if (changes.length >= BATCH) {
+        applyMany(changes)
+      } else {
+        for (const c of changes) {
+          if (c.prev !== undefined) remove(c.key, c.prev)
+          if (c.next !== undefined) insert(c.key, c.next)
+        }
       }
       v++
     },
@@ -155,7 +194,18 @@ export function whereOver<R>(
     return fresh
   }
 
-  /** Take the rebuilt picture, but tell followers only the difference. */
+  /**
+   * Take the rebuilt picture, but tell followers only the difference.
+   *
+   * This is what keeps a live predicate from being a wrecking ball. Typing a
+   * letter into a search box changes the filter globally — the honest new
+   * answer is a rebuild — but a rebuild HANDED ON as a new collection would
+   * reset every structure downstream: the sort re-sorts everything, the
+   * offsets line rebuilds, the wire sends a table instead of a delta, and
+   * memoised rows all redraw. Diffed here against what followers already
+   * hold, the global change travels as the handful of rows that actually
+   * entered or left, and everything downstream keeps its incremental price.
+   */
   const settleTo = (fresh: Map<Key, R>): void => {
     const mine: Change<R>[] = []
     for (const [key, row] of fresh) {
@@ -219,6 +269,7 @@ export function whereOver<R>(
       for (const row of state.values()) fn(row)
     },
     count: () => state.size,
+    asMap: () => state,
     changesSince: seen => log.since(seen, v),
   }
 

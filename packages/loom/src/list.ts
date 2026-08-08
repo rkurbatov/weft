@@ -109,6 +109,12 @@ export function listsBy<R, F extends ScalarField<R>, Whole extends string = neve
         shelves.set(value, made)
         return made
       }
+      // A proxy, so the set of shelves is the DATA's business, not the
+      // code's. The type names the keys the field can hold, but the values
+      // actually arriving decide which shelves exist: a status added to the
+      // corpus tomorrow gets its window on first access with no edit here or
+      // on the screen — and a status nobody's screen asks for never builds
+      // one, so the price tracks what is shown, not what is possible.
       return new Proxy(
         {},
         {

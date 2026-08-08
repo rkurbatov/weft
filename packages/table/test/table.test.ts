@@ -231,6 +231,60 @@ describe('tables', () => {
     }
   })
 
+  test('a batch bigger than the merge threshold lands in the right order', () => {
+    // Big batches take the merge path rather than splice-per-change; the two
+    // must agree to the row. Puts over existing keys, fresh keys and drops in
+    // one batch, checked against a sort from scratch — and then a batch the
+    // size of an initial sync, which is what used to freeze the thread.
+    const chance = seeded(11)
+    const t = table<Row>({ key: r => r.id })
+    const model = new Map<number, Row>()
+    const ordered = t.orderBy((a, b) => a.score - b.score || a.id - b.id)
+
+    const check = (): void => {
+      const sorted = [...model.values()].toSorted((a, b) => a.score - b.score || a.id - b.id)
+      assert.deepEqual(
+        ordered
+          .slice(0, Math.max(1, model.size))
+          .peek()
+          .map(r => r.id),
+        sorted.map(r => r.id),
+      )
+    }
+
+    const seed: Row[] = []
+    for (let id = 0; id < 500; id++) {
+      seed.push(row(id, id % 2 === 0 ? 'even' : 'odd', Math.floor(chance() * 1000)))
+    }
+    t.put(seed)
+    for (const r of seed) model.set(r.id, r)
+    check()
+
+    for (let round = 0; round < 20; round++) {
+      const puts: Row[] = []
+      const size = 8 + Math.floor(chance() * 60) // always past the threshold
+      for (let i = 0; i < size; i++) {
+        const id = Math.floor(chance() * 700)
+        puts.push(row(id, id % 2 === 0 ? 'even' : 'odd', Math.floor(chance() * 1000)))
+      }
+      const drops: number[] = []
+      for (let i = 0; i < 5; i++) drops.push(Math.floor(chance() * 700))
+      t.apply({ put: puts, drop: drops })
+      for (const r of puts) model.set(r.id, r)
+      for (const id of drops) model.delete(id)
+      check()
+    }
+
+    // The initial-sync shape: thousands at once onto thousands held.
+    const flood: Row[] = []
+    for (let id = 1000; id < 4000; id++) {
+      flood.push(row(id, id % 2 === 0 ? 'even' : 'odd', Math.floor(chance() * 1000)))
+    }
+    t.put(flood)
+    for (const r of flood) model.set(r.id, r)
+    check()
+  })
+
   test('a page that travelled slowly loses to the event that overtook it', () => {
     interface Versioned {
       id: number
@@ -341,6 +395,37 @@ describe('tables', () => {
 })
 
 describe('sameness by value', () => {
+  test('a row that moved only in its date is a changed row', () => {
+    // A date has no enumerable keys, so a key walk calls any two dates equal —
+    // and an update touching only `updatedAt` would never wake a screen.
+    assert.equal(alike(new Date(1000), new Date(1000)), true)
+    assert.equal(alike(new Date(1000), new Date(2000)), false)
+    assert.equal(
+      alike({ id: 1, updatedAt: new Date(1000) }, { id: 1, updatedAt: new Date(2000) }),
+      false,
+    )
+    assert.equal(alike(new Date(1000), { getTime: () => 1000 }), false)
+    assert.equal(alike(/ab/g, /ab/g), true)
+    assert.equal(alike(/ab/g, /ab/i), false)
+  })
+
+  test('a value with a cycle is compared, not crashed on', () => {
+    // Cycles survive structured cloning, so they are legal in a cell — and a
+    // depth-first walk without a visited set dies on them by stack overflow.
+    interface Loop {
+      n: number
+      self?: Loop
+    }
+    const a: Loop = { n: 1 }
+    a.self = a
+    const b: Loop = { n: 1 }
+    b.self = b
+    assert.equal(alike(a, b), true)
+    const c: Loop = { n: 2 }
+    c.self = c
+    assert.equal(alike(a, c), false)
+  })
+
   test('what alike counts as the same row', () => {
     assert.equal(alike({ id: 1, title: 'a' }, { id: 1, title: 'a' }), true)
     assert.equal(alike({ id: 1, title: 'a' }, { id: 1, title: 'b' }), false)

@@ -2,7 +2,16 @@
 // match the identity, a title matches the screen, a socket subscription matches
 // the row on show. The rule is to watch the value itself rather than the events
 // that might have changed it — then there is no list of triggers to go stale.
+//
+// Watching the goal instead of the events is also what makes races
+// unrepresentable rather than handled. An event pipeline has to decide what
+// a stale in-flight sync means — cancel it, let it finish, dedupe it — and
+// every answer is code that can be wrong; here a newer value simply aborts
+// the run for the world that no longer exists (`abandon` below), and the
+// only state ever pushed outward is the current one. Take-latest is not a
+// policy bolted on, it is the shape of the primitive.
 
+import { backoff } from '#data'
 import { derived, port, untracked, watch } from '#graph/graph.ts'
 import type { Readable } from '#graph/graph.ts'
 import { wallClock } from '#graph/time.ts'
@@ -127,7 +136,7 @@ export function reconcile<T>(
             timer = null
             void pump()
           },
-          Math.min(retry * 2 ** Math.max(0, attempt - 1), retryCap),
+          backoff(attempt, retry, retryCap),
         )
       }
     } finally {

@@ -49,7 +49,18 @@ const clock = (): number => (typeof performance !== 'undefined' ? performance.no
 
 let hushed = false
 
-/** Writes made in here are the probe's own plumbing: no probe sees itself. */
+/**
+ * Writes made in here are the probe's own plumbing: no probe sees itself.
+ *
+ * The observer effect this closes off: a journal that keeps its record IN
+ * the graph — so a panel can show it — writes cells, every write is a tick,
+ * and every tick makes the journal write again. The flag mutes the tap for
+ * the length of the probe's own bookkeeping, so instruments may live inside
+ * the thing they measure without feeding back into it. And the price of the
+ * whole facility when nobody listens is the one `probe === null || hushed`
+ * comparison on the hot path — a branch that always goes the same way and
+ * predicts itself away.
+ */
 export function quietly(work: () => void): void {
   const was = hushed
   hushed = true

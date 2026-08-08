@@ -12,6 +12,7 @@ export type { World } from './world.ts'
 // Two more checks lived here — by one field, and by count — and in two
 // campaigns no test wanted them: what tests actually compare is either a list
 // of ids or a whole value. Brought back the day something needs them.
-export { hasIds, holds, wakings } from './check.ts'
+export { hasIds, holds, track, wakings } from './check.ts'
+export { setupWire } from './wire.ts'
 export { slowStore } from './store.ts'
 export { onBus } from './bus.ts'

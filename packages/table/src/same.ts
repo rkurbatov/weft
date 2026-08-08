@@ -44,16 +44,54 @@ function sameBulk(a: ArrayBufferView | ArrayBuffer, b: ArrayBufferView | ArrayBu
   return true
 }
 
-/** Structural sameness over JSON-shaped values. */
+/**
+ * Past this depth the walk starts writing down where it has been.
+ *
+ * A value that survives structured cloning may hold a cycle — the clone
+ * algorithm tracks visited objects — so `alike` cannot treat recursion depth
+ * as bounded, or a self-referencing row kills the engine with a stack
+ * overflow on its first write. Tracking every pair from the start would put
+ * an allocation on the hottest comparison in the library; rows are shallow,
+ * so the set is bought only by the values that could actually need it. A
+ * cycle cannot help crossing this depth, because a cycle is what makes depth
+ * grow without end.
+ */
+const CYCLE_WATCH = 32
+
+/** Structural sameness over structured-clone-shaped values. */
 export function alike(a: unknown, b: unknown): boolean {
+  return alikeAt(a, b, 0, undefined)
+}
+
+function alikeAt(a: unknown, b: unknown, depth: number, seen: Set<object> | undefined): boolean {
   if (Object.is(a, b)) return true
   if (typeof a !== 'object' || typeof b !== 'object' || a === null || b === null) return false
   // Buffers first: none of the shapes below fit one.
   if (isBulk(a) || isBulk(b)) return isBulk(a) && isBulk(b) && sameBulk(a, b)
+  // A date has no enumerable properties, so the walk below would call any two
+  // dates the same and a row where only `updatedAt` moved would never wake a
+  // screen. Compared by the one value a date is.
+  if (a instanceof Date || b instanceof Date) {
+    return a instanceof Date && b instanceof Date && a.getTime() === b.getTime()
+  }
+  // The same trap: a regexp is keyless too.
+  if (a instanceof RegExp || b instanceof RegExp) {
+    return (
+      a instanceof RegExp && b instanceof RegExp && a.source === b.source && a.flags === b.flags
+    )
+  }
+  if (depth >= CYCLE_WATCH) {
+    seen ??= new Set()
+    // A pair already on the path above is a cycle met the second time: report
+    // sameness for this link and let the rest of the walk decide — exactly
+    // what the clone algorithm does when it writes a back-reference.
+    if (seen.has(a)) return true
+    seen.add(a)
+  }
   if (a instanceof Map || b instanceof Map) {
     if (!(a instanceof Map) || !(b instanceof Map) || a.size !== b.size) return false
     for (const [key, value] of a) {
-      if (!b.has(key) || !alike(value, b.get(key))) return false
+      if (!b.has(key) || !alikeAt(value, b.get(key), depth + 1, seen)) return false
     }
     return true
   }
@@ -64,13 +102,13 @@ export function alike(a: unknown, b: unknown): boolean {
   }
   if (Array.isArray(a) || Array.isArray(b)) {
     if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false
-    return a.every((item, i) => alike(item, b[i]))
+    return a.every((item, i) => alikeAt(item, b[i], depth + 1, seen))
   }
   const left = a as Record<string, unknown>
   const right = b as Record<string, unknown>
   const names = Object.keys(left)
   if (names.length !== Object.keys(right).length) return false
-  return names.every(n => n in right && alike(left[n], right[n]))
+  return names.every(n => n in right && alikeAt(left[n], right[n], depth + 1, seen))
 }
 
 export const sameItems = (a: readonly unknown[], b: readonly unknown[]): boolean =>

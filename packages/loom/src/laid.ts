@@ -132,11 +132,20 @@ export function laid<S, R>(
         },
         take(id) {
           gone.add(id)
+          // The last resolution per subject wins, so a take erases the put
+          // before it. Left in place, the put would win at assembly — the
+          // overlay reads `placed` first — and a subject created and then
+          // deleted in one book would stand on screen as a phantom.
+          placed.delete(id)
           lanes = laneDrop(laneItems(), id)
           return b
         },
         put(row) {
-          placed.set(spec.shape.key(row), row)
+          const id = spec.shape.key(row)
+          placed.set(id, row)
+          // The mirror of take: a put revives what an earlier take condemned,
+          // the same way place already does.
+          gone.delete(id)
           return b
         },
       }

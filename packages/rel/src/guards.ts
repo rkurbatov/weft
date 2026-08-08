@@ -8,6 +8,12 @@
 
 import type { Row } from './expr.ts'
 
+// Scalars only, and on purpose. `where`, orderings and join keys admit just
+// these four kinds because everything else compares by reference in
+// JavaScript: an object or array field in a predicate would match only its
+// own instance — `{} !== {}` — and rows would silently fall out of answers
+// with no error anywhere. Ruling those fields out at the type level turns a
+// runtime mystery into a named compile error.
 export type Scalar = string | number | boolean | null
 export type ScalarField<R> = { [K in keyof R & string]: R[K] extends Scalar ? K : never }[keyof R &
   string]

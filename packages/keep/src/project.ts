@@ -36,6 +36,13 @@ export function projected<S>(
         const apply = spec.apply[entry.name]
         return apply === undefined ? state : apply(state, entry.args as never)
       }, start)
+      // The reduce above rebuilds the whole state object even when the book
+      // touched one row of it — declarative replay is worth exactly that
+      // much. `preserve` then wins the price back: every piece the replay
+      // did not actually change is handed on as the very object from last
+      // time, so reference equality — what memoised screens and cell
+      // equality actually check — survives the rebuild, and one note redraws
+      // one row rather than every list that can see the state.
       const kept = previous === undefined ? laid : preserve(previous, laid)
       previous = kept
       return kept
