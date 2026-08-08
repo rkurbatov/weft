@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
 import { port } from '#weft'
 import { Timeout, when, whenever } from '#loom'
-import { settle, until, world } from '#testkit'
+import { settle, until, wait, world } from '#testkit'
 
 describe('waiting for the state to say so', () => {
   test('a condition already true is not waiting at all', async () => {
@@ -230,7 +230,9 @@ describe('a standing handler', () => {
     owed.set(1)
     await settle()
     owed.set(2)
-    await settle(4)
+    // Time, not turns: the bodies sleep on a real timer, and a run that has not
+    // woken yet has not looked at its signal either.
+    await wait(30)
 
     assert.deepEqual(started, [1, 2])
     assert.deepEqual(quit, [1], 'the first run learned it was abandoned')
@@ -255,7 +257,10 @@ describe('a standing handler', () => {
     assert.equal(standing.running, true)
 
     standing.stop()
-    await settle(4)
+    // The body sleeps five milliseconds and only then reads the signal, so what
+    // has to pass here is time, not turns of the queue. Waiting turns made this
+    // green on one machine and red on another.
+    await wait(30)
     assert.equal(aborted, true)
 
     owed.set(2)

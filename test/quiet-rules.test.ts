@@ -132,4 +132,26 @@ describe('rules that break quietly', () => {
     }
     assert.deepEqual(wrong, [], 'count in a watcher, not in a formula')
   })
+
+  test('a test whose body sleeps on a real timer waits for time, not turns', async () => {
+    // `settle(n)` runs n turns of the queue; a body that sleeps five
+    // milliseconds has not woken after any number of turns. Such a test passes
+    // on one machine and fails on another, which is worse than failing.
+    const wrong: string[] = []
+    for (const dir of ['packages', 'test', 'demo']) {
+      for (const path of await sources(dir)) {
+        if (!path.endsWith('.test.ts')) continue
+        const text = await readFile(path, 'utf8')
+        const lines = text.split('\n')
+        for (const [i, line] of lines.entries()) {
+          if (!/await new Promise<?[^>]*>?\(resolve => setTimeout\(resolve, \d/.test(line)) continue
+          const after = lines.slice(i, i + 25).join('\n')
+          if (!/await settle\(/.test(after)) continue
+          if (/await wait\(/.test(after)) continue
+          wrong.push(`${path}:${String(i + 1)}`)
+        }
+      }
+    }
+    assert.deepEqual(wrong, [], 'use wait(ms) after a body that sleeps')
+  })
 })
