@@ -39,6 +39,11 @@
 .stack {
   flex: 1;
   overflow-y: auto;
+  /* The same rule as the desk's scroller: a virtualised list draws its own
+     scroll position, and scroll anchoring would move it back whenever the
+     rows under it are replaced. Here the row kept in place is the library's
+     business (`useKeepRow`), and two of them deciding is one too many. */
+  overflow-anchor: none;
 }
 
 .card {

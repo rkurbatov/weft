@@ -1,3 +1,22 @@
+# Installed, built, or produced by a run: a command puts it back, so history
+# has no business holding it.
+
 node_modules/
-.idea/
+
+# The stands, built (demo:build → demo:preview), and what the browser lane
+# leaves behind.
 dist-demo/
+test-results/
+playwright-report/
+blob-report/
+
+# The compiler's cache, should tsc ever be asked to keep one on disk.
+*.tsbuildinfo
+
+# Local surroundings: environment, editors, systems.
+.env
+.env.*
+.idea/
+.vscode/
+*.log
+.DS_Store

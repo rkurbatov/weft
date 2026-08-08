@@ -54,6 +54,14 @@
   border: 1px solid #ddd;
   border-radius: 6px;
   position: relative;
+  /* The browser must not help. Scroll anchoring keeps whatever was on screen
+     on screen when the content above it changes size — which is every frame
+     here, because the rows under the scroller are replaced as the window
+     moves. Left on, a jump to the top is undone by the browser a moment
+     later: the position asked for is 0 and the position kept is where the
+     old rows were. A virtualised list draws its own scroll position and
+     wants no second opinion. */
+  overflow-anchor: none;
 }
 .desk .tall {
   position: relative;
