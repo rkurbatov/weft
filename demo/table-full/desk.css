@@ -1,0 +1,119 @@
+/* Plain: what this page shows is a protocol behaving, not a design. */
+.desk {
+  max-width: 52rem;
+  margin: 2rem auto;
+  padding: 0 1rem;
+  font:
+    15px/1.5 system-ui,
+    sans-serif;
+  color: #222;
+}
+.desk h1 {
+  font-size: 1.4rem;
+  margin-bottom: 8px;
+}
+.desk .story {
+  color: #444;
+  margin: 8px 0 16px;
+}
+.desk .story.small {
+  font-size: 13px;
+  color: #777;
+  margin-top: 20px;
+  border-top: 1px solid #eee;
+  padding-top: 12px;
+}
+.desk .counts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  gap: 12px;
+  margin: 16px 0;
+  padding: 12px 0;
+  border-top: 1px solid #eee;
+  border-bottom: 1px solid #eee;
+}
+.desk .count {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.desk .count b {
+  font-size: 1.15rem;
+  font-variant-numeric: tabular-nums;
+}
+.desk .count span {
+  font-size: 12px;
+  color: #777;
+}
+.desk .story.what {
+  margin: 0 0 16px 1.1rem;
+  padding: 0;
+  color: #444;
+}
+.desk .story.what li {
+  margin-bottom: 4px;
+}
+.desk .controls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.desk button {
+  padding: 8px 12px;
+  font: inherit;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+}
+.desk button.on {
+  background: #c33;
+  border-color: #c33;
+  color: #fff;
+}
+.desk .state {
+  font-size: 13px;
+  color: #777;
+}
+.desk .state.catching {
+  color: #c33;
+}
+
+/* The last two dozen rows: enough to see them arriving and changing. */
+.desk .jobs {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-family: ui-monospace, monospace;
+  font-size: 13px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  overflow: hidden;
+}
+.desk .jobs li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 3px 12px;
+  border-bottom: 1px solid #f4f4f4;
+}
+.desk .jobs .no {
+  width: 4rem;
+  color: #aaa;
+}
+.desk .jobs .state-name {
+  margin-left: auto;
+  font-size: 12px;
+}
+.desk .jobs li.waiting .state-name {
+  color: #999;
+}
+.desk .jobs li.running .state-name {
+  color: #a70;
+}
+.desk .jobs li.done .state-name {
+  color: #4a7;
+}

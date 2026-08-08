@@ -26,6 +26,7 @@ export default defineConfig({
         kanbanTabs: resolve(import.meta.dirname, 'demo/kanban-tabs/index.html'),
         engine: resolve(import.meta.dirname, 'demo/engine/index.html'),
         tableWire: resolve(import.meta.dirname, 'demo/table-wire/index.html'),
+        tableFull: resolve(import.meta.dirname, 'demo/table-full/index.html'),
       },
     },
   },

@@ -59,3 +59,44 @@ test('a half-typed edit survives its row scrolling away', async ({ page }) => {
 
   await expect(page.locator('.row input')).toHaveValue('half typed')
 })
+
+// The whole-table page: the protocol under a real wire.
+test.describe('a whole table over a wire', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/table-full/')
+    await expect(page.locator('.rows li').first()).toBeVisible({ timeout: 30_000 })
+  })
+
+  test('rows keep arriving while nobody touches the page', async ({ page }) => {
+    const before = await count(page, 'rows in the table')
+    await page.waitForTimeout(1500)
+    expect(await count(page, 'rows in the table')).toBeGreaterThan(before)
+  })
+
+  test('losing batches is noticed, and the catch-up puts it right', async ({ page }) => {
+    await page.click('button:has-text("lose batches")')
+    await page.waitForTimeout(1500)
+
+    // The rows on screen are the last good ones, and the page says so.
+    await expect(page.locator('.state')).toContainText('lost')
+
+    await page.click('button:has-text("stop losing batches")')
+    await page.waitForTimeout(2000)
+
+    await expect(page.locator('.state')).toContainText('up to date')
+    // And the table on this side agrees with the one on the other side.
+    const size = await count(page, 'rows in the table')
+    expect(size).toBeGreaterThan(0)
+  })
+
+  test('what crosses is changes, not the table', async ({ page }) => {
+    const size = await count(page, 'rows in the table')
+    const before = await count(page, 'rows and changes received')
+
+    await page.click('button:has-text("edit 200 rows")')
+    await page.waitForTimeout(1000)
+
+    const crossed = (await count(page, 'rows and changes received')) - before
+    expect(crossed).toBeLessThan(size)
+  })
+})

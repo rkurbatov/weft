@@ -37,14 +37,18 @@ export interface Offering {
    *
    * For a window onto something big. Scrolling by one row sends one row.
    */
-  lists?: Readonly<
-    Record<
-      string,
-      // The least a list must be, not `never[]`: a list of rows is not a list
-      // of nevers, and asking for one would make every station cast its own.
-      ListOffer
-    >
-  >
+  // Built with `listed()`: the least a list must be, not `never[]`, so a
+  // station keeps its own row type and never casts.
+  lists?: Readonly<Record<string, ListOffer>>
+  /**
+   * Tables followed whole: a snapshot, then batches of what changed.
+   *
+   * For a table a panel shows all of — a corpus being filled and edited while
+   * it is watched. A window onto something bigger is a `list` instead, and the
+   * difference is real: a table travels with its own change log, a list with
+   * the order it is to be shown in.
+   */
+  tables?: Readonly<Record<string, { readonly name: string }>>
 }
 
 export interface OfferOptions extends ServeOptions {
@@ -71,6 +75,7 @@ export function offer(handles: Offering, channel: Channel, options: OfferOptions
       cells,
       ...(handles.facts === undefined ? {} : { facts: handles.facts }),
       ...(handles.lists === undefined ? {} : { lists: handles.lists }),
+      ...(handles.tables === undefined ? {} : { tables: handles.tables }),
       ...(handles.acts === undefined ? {} : { commands: handles.acts }),
     },
     channel,
@@ -92,6 +97,13 @@ export interface Adopted {
    * For a window onto something big — scrolling by one row costs one row.
    */
   list<R>(name: string): Mirrored<R>
+  /**
+   * A table the station publishes whole: a snapshot, then what changed.
+   *
+   * Read the same way as a list; what differs is what crosses and how a lost
+   * batch is made up for.
+   */
+  table<R>(name: string): Mirrored<R>
   /** The station's facts: write-through. */
   write(fact: string, value: unknown): void
   /** The station's acts. */
@@ -109,6 +121,7 @@ export function adopt(channel: Channel, options: LinkOptions = {}): Adopted {
   // Names are declared by the station, so this map is as big as the face and no
   // bigger; the mirrors under it are let go on their own when nobody looks.
   const list = <R>(name: string): Mirrored<R> => wire.table<R>(name)
+  const followed = <R>(name: string): Mirrored<R> => wire.table<R>(name)
 
   const view = <T>(name: string): Watchable<T | undefined> => {
     const known = faces.get(name)
@@ -134,6 +147,7 @@ export function adopt(channel: Channel, options: LinkOptions = {}): Adopted {
   return {
     view,
     list,
+    table: followed,
     write: (fact, value) => wire.write(fact, value),
     act: name => wire.command(name),
     warm(names) {

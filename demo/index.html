@@ -71,6 +71,15 @@
         counter says how few crossed. An edit half-typed survives its row scrolling out of sight,
         because the draft is a cell of its own rather than a field of the row.
       </p>
+      <h1>A whole table, followed over a wire</h1>
+      <p>
+        <a href="./table-full/"
+          >The protocol underneath: a snapshot, then batches of what changed.</a
+        >
+        A worker keeps pouring rows in and editing them; a switch on the page makes the wire drop
+        batches, and the follower notices instead of quietly showing the wrong thing — the last good
+        rows stay up, labelled, until the catch-up lands.
+      </p>
     </main>
   </body>
 </html>

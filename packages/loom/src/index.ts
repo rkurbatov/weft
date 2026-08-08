@@ -9,7 +9,17 @@ export { counters, every, family, giveWay, hurried, listed, overWire, wirePair }
 // `Port` is the language's word for the one kind of cell that is written to,
 // and a station has to name those: `cell(value)` makes one, and this is what
 // it is called.
-export type { Family, Hurried, Port, Schedule, Tally, Watchable, Wire, WirePair } from '#weft'
+export type {
+  Family,
+  Hurried,
+  Mirrored,
+  Port,
+  Schedule,
+  Tally,
+  Watchable,
+  Wire,
+  WirePair,
+} from '#weft'
 
 export { cell } from './cell.ts'
 export type { Cell } from './cell.ts'

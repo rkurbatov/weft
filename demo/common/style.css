@@ -136,7 +136,10 @@ body {
        looks like an empty sheet rather than a hole. */
   background-image: repeating-linear-gradient(to bottom, transparent 0 24px, var(--line) 24px 25px);
 }
-.rows {
+/* Scoped to the grid on purpose: `.rows` and `.row` are names any page might
+   use, and a globally positioned `.rows` once laid an invisible layer over
+   another page's buttons. */
+.viewport .rows {
   position: absolute;
   top: 0;
   left: 0;
@@ -144,7 +147,7 @@ body {
   will-change: transform;
 }
 
-.row {
+.viewport .row {
   display: flex;
   height: 25px;
 }
