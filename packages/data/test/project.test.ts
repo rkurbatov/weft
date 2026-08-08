@@ -7,10 +7,9 @@ import { port } from '#graph'
 import { projected } from '#keep'
 import { PRESERVE_LIMIT, preserve } from '#data'
 import { forgetNotices, onNotice } from '#data'
-import { laneDrop, laneFind, lanePlace } from '#data'
-import type { Lanes } from '#data'
+import { laneDrop, laneFind, lanePlace } from '#keep'
+import type { Lanes } from '#keep'
 import type { Note } from '#keep'
-import { laneAppend } from '#data'
 
 const entry = (name: string, args: unknown, state: Note['state'] = 'waiting'): Note => ({
   id: `${name}-${JSON.stringify(args)}`,
@@ -222,20 +221,6 @@ describe('the ceiling on keeping identity', () => {
     assert.equal(preserve(before, after, 1), after)
     // The same two rows under the ordinary limit keep what they had.
     assert.equal(preserve(before, after).get('a'), before.get('a'))
-  })
-})
-
-describe('arranging by hand', () => {
-  test('append puts a subject at the end of a lane, and only in one lane', () => {
-    const lanes = { todo: ['a', 'b'], done: ['c'] }
-    const after = laneAppend(lanes, 'c', 'todo')
-    assert.deepEqual(after['todo'], ['a', 'b', 'c'])
-    assert.deepEqual(after['done'], [], 'a subject stands in one place, not two')
-  })
-
-  test('appending what is already at the end changes nothing anybody can see', () => {
-    const lanes = { todo: ['a', 'b'] }
-    assert.deepEqual(laneAppend(lanes, 'b', 'todo')['todo'], ['a', 'b'])
   })
 })
 

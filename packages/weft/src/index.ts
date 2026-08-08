@@ -8,22 +8,12 @@
 //
 // Behind this door the units are separate packages already — data, graph,
 // table, remote, keep, link — and anyone who wants only a part takes that part
-// directly. React does not exist here: hooks live in '#react', the dialect in
+// directly. React does not exist here: hooks live in '#loom/react', the dialect in
 // '#loom'.
 
-export {
-  PRESERVE_LIMIT,
-  forgetNotices,
-  laneAppend,
-  laneDrop,
-  laneFind,
-  lanePlace,
-  notice,
-  onNotice,
-  preserve,
-} from '#data'
+export { PRESERVE_LIMIT, forgetNotices, notice, onNotice, preserve } from '#data'
 
-export type { Key, Lanes, Level, Notice } from '#data'
+export type { Key, Level, Notice } from '#data'
 
 export {
   Derived,
@@ -77,15 +67,13 @@ export type {
   WhileRunning,
 } from '#graph'
 
-export { alike, blocks, offsets, table } from '#table'
+export { alike, table } from '#table'
+export { blocks, offsets } from '#line'
 
 export type {
-  BlockOptions,
-  Blocks,
   Carrier,
   Change,
   FoldSpec,
-  Offsets,
   Ordered,
   Patch,
   Plan,
@@ -94,6 +82,7 @@ export type {
   Table,
   TableOptions,
 } from '#table'
+export type { BlockOptions, Blocks, Offsets } from '#line'
 
 export {
   EMPTY,
@@ -130,6 +119,10 @@ export {
   idbStore,
   keepInput,
   keepSource,
+  laneAppend,
+  laneDrop,
+  laneFind,
+  lanePlace,
   memoryStore,
   outbox,
   projected,
@@ -143,6 +136,7 @@ export type {
   IdbOptions,
   KeepOptions,
   Kept,
+  Lanes,
   Note,
   NoteState,
   Outbox,

@@ -6,7 +6,7 @@
 // threshold the plan takes the materialisation away and answers offsets on
 // demand instead.
 
-import { offsets } from '#table/offsets.ts'
+import { offsets } from '#line'
 import { planScan } from '#table/plan.ts'
 import type { ScanCarrier, ScanForm } from '#table/plan.ts'
 import type { Change, Key } from '#table/table.ts'

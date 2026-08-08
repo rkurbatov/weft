@@ -18,15 +18,15 @@ import { describe, test } from 'node:test'
 
 /** Bottom first: a package may use the ones before it, never the ones after. */
 const stack = [
-  'data', // keys, structural sharing, arrangement, the notice channel
+  'data', // keys, structural sharing, backoff, the notice channel
   'graph', // cells, engines, regions, ticks, the journal
+  'line', // a measured line: offsets along it, answers over ranges of it
   'remote', // the shape of an answer from elsewhere, sources, queries, reconciling
   'table', // rows with a key, live views, folds, carriers and the planner
   'rel', // the relational layer: trees as data, runners, the builder
-  'keep', // disk, kept values, the outbox and the projection over it
+  'keep', // disk, kept values, the outbox, its lanes and the projection over it
   'link', // transport, addressing, the tab protocol, serving and mirroring
   'weft', // the front door: everything above, in one import
-  'react', // hooks over the door
   'loom', // the dialect
 ] as const
 

@@ -2,6 +2,13 @@
 // queues all share. The verbs below are the whole vocabulary an applier
 // needs — absolute, total, void and idempotent by construction, so a replay
 // on any base is safe. Untouched lanes keep their identity.
+//
+// Beside the outbox, not in the foundation. These verbs depend on nothing,
+// which is why they sat at the bottom of the stack for a while — but that is
+// a rule about dependencies, not a statement of kinship. Their subject is an
+// intent replayed over a base, and their two callers are the outbox's
+// projection and the dialect's overlay. A layer holds what belongs together,
+// not everything that happens to fit under it.
 
 import type { Key } from '#data/key.ts'
 

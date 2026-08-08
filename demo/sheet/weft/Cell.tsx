@@ -3,7 +3,7 @@
 // bookkeeping.
 
 import { memo } from 'react'
-import { useCell } from '#react'
+import { useCell } from '#loom/react'
 import { CellFrame } from '#sheet/ui.tsx'
 import { countCellRender } from '#demo'
 import type { CellProps } from '#sheet/ui.tsx'

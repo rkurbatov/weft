@@ -14,7 +14,7 @@ import { Component, StrictMode, Suspense, act, createElement as h, useRef, useSt
 import type { ReactNode } from 'react'
 import { port } from '#weft'
 import { source } from '#weft'
-import { useCell, useField, useKeepRow, useSourceValue } from '#react'
+import { useCell, useField, useKeepRow, useSourceValue } from '#loom/react'
 import { useLive } from '#loom/react'
 import { wait } from '#testkit'
 

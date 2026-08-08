@@ -3,10 +3,6 @@
 // Nothing here knows about relational trees — that is the layer above.
 
 export type { Carrier, Plan, ScanPlan } from './plan.ts'
-export { blocks } from './blocks.ts'
-export type { Blocks, BlockOptions } from './blocks.ts'
-export { offsets } from './offsets.ts'
-export type { Offsets } from './offsets.ts'
 export { table, alike } from './table.ts'
 export type { Table, SourceTable, TableOptions, Ordered, FoldSpec, Patch, Change } from './table.ts'
 
