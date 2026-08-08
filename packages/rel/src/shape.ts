@@ -4,6 +4,23 @@
 // worker, written into a scenario file and executed by another implementation
 // in another language. That is the whole reason the layer describes what to
 // compute rather than closing over how.
+//
+// The shape is not this library's invention: it is the IR of the Warp
+// language, carried over — eight of its fourteen primitives under the same
+// names (source, pure, filter, join, union, expand, agg, scan), the oracle
+// as its C1, `keeping` as its outer join, `whyRow` as provenance on demand,
+// and the node hash as its correspondence rule. The six that are absent are
+// absent for four different reasons: `opaque` dissolves into an ordinary
+// derived over a whole view, and `probe` is what `subscribe` already is (so
+// the word `probe` stays reserved for that meaning); `lens` died in the
+// language itself; `foreign` is meaningless where every function is host
+// code and purity is not enforced; `fix` and `mend` are genuine trades —
+// recursion lacks the type-checked monotonicity that makes it safe there,
+// and per-row annotations, which is what `mend` rides on, would cost an
+// object per row, so one semiring (Z, differences) is built as machinery
+// instead: the change log. Disputes about this layer's design are settled in
+// the language corpus; settling them anew here means diverging from the
+// source.
 
 /** The escape hatch: any expression may be a function instead. */
 
