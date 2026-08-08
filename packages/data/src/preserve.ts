@@ -44,7 +44,28 @@ const tooBig = (size: number, limit: number): boolean => {
 /** Anything backed by a buffer: a million numbers are not a million fields. */
 const isBulk = (value: object): boolean => ArrayBuffer.isView(value) || value instanceof ArrayBuffer
 
+/**
+ * Past this depth the walk starts writing down where it has been — the same
+ * guard, for the same reason, as the equality walk in the table layer: a
+ * value that survives structured cloning may hold a cycle, and a depth-first
+ * walk without a visited set dies on it by stack overflow. Rows are shallow,
+ * so the set is bought only by values that could actually need it; a cycle
+ * cannot help crossing this depth, because a cycle is what makes depth grow
+ * without end.
+ */
+const CYCLE_WATCH = 32
+
 export function preserve<T>(prev: T, next: T, limit: number = PRESERVE_LIMIT): T {
+  return preserveAt(prev, next, limit, 0, undefined)
+}
+
+function preserveAt<T>(
+  prev: T,
+  next: T,
+  limit: number,
+  depth: number,
+  seen: Set<object> | undefined,
+): T {
   if (Object.is(prev, next)) return next
   // Bulk data is handed on as it is. Not for speed — comparing it is cheap —
   // but because there is nothing inside a buffer whose identity could be kept:
@@ -72,6 +93,26 @@ export function preserve<T>(prev: T, next: T, limit: number = PRESERVE_LIMIT): T
     if (!(prev instanceof RegExp) || !(next instanceof RegExp)) return next
     return (prev.source === next.source && prev.flags === next.flags ? prev : next) as T
   }
+  // An error is keyless the same way: two different stories read as two
+  // empty shapes, and the walk would keep the old one. Same story — same
+  // object; another story — the new one. The stack does not count, for the
+  // reason it does not count in `alike`.
+  if (prev instanceof Error || next instanceof Error) {
+    if (!(prev instanceof Error) || !(next instanceof Error)) return next
+    const same =
+      prev.name === next.name &&
+      prev.message === next.message &&
+      Object.is(preserveAt(prev.cause, next.cause, limit, depth + 1, seen), prev.cause)
+    return (same ? prev : next) as T
+  }
+  if (depth >= CYCLE_WATCH) {
+    seen ??= new Set()
+    // A pair met the second time on this path is a cycle: descending again
+    // never ends. The new value is handed back as it is — identity is not
+    // kept inside a cycle, which costs a redraw and no correctness.
+    if (seen.has(prev as object)) return next
+    seen.add(prev as object)
+  }
   if (prev instanceof Map || next instanceof Map) {
     if (!(prev instanceof Map) || !(next instanceof Map)) return next
     if (tooBig((next as Map<unknown, unknown>).size, limit)) return next
@@ -79,7 +120,9 @@ export function preserve<T>(prev: T, next: T, limit: number = PRESERVE_LIMIT): T
     let same = prev.size === next.size
     for (const [key, value] of next as Map<unknown, unknown>) {
       const had = (prev as Map<unknown, unknown>).has(key)
-      const kept = had ? preserve((prev as Map<unknown, unknown>).get(key), value, limit) : value
+      const kept = had
+        ? preserveAt((prev as Map<unknown, unknown>).get(key), value, limit, depth + 1, seen)
+        : value
       merged.set(key, kept)
       // Presence first: a key the old map lacked reads as `undefined` too, and
       // a new entry holding `undefined` would otherwise count as no change —
@@ -98,7 +141,9 @@ export function preserve<T>(prev: T, next: T, limit: number = PRESERVE_LIMIT): T
   if (Array.isArray(prev) || Array.isArray(next)) {
     if (!Array.isArray(prev) || !Array.isArray(next)) return next
     if (tooBig(next.length, limit)) return next
-    const merged = next.map((item, i) => (i < prev.length ? preserve(prev[i], item, limit) : item))
+    const merged = next.map((item, i) =>
+      i < prev.length ? preserveAt(prev[i], item, limit, depth + 1, seen) : item,
+    )
     return (
       merged.length === prev.length && merged.every((item, i) => Object.is(item, prev[i]))
         ? prev
@@ -112,7 +157,7 @@ export function preserve<T>(prev: T, next: T, limit: number = PRESERVE_LIMIT): T
   let same = names.length === Object.keys(before).length
   for (const name of names) {
     const had = name in before
-    const kept = had ? preserve(before[name], after[name], limit) : after[name]
+    const kept = had ? preserveAt(before[name], after[name], limit, depth + 1, seen) : after[name]
     merged[name] = kept
     // Presence first, as with maps: a key the old object lacked also reads as
     // `undefined`, so a fresh `x: undefined` matched the void and the OLD

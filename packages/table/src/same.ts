@@ -80,6 +80,20 @@ function alikeAt(a: unknown, b: unknown, depth: number, seen: Set<object> | unde
       a instanceof RegExp && b instanceof RegExp && a.source === b.source && a.flags === b.flags
     )
   }
+  // And an error: `message` is not enumerable, so the walk below saw two
+  // empty shapes — a row whose error field changed its story never woke a
+  // screen. Compared by what an error means: kind, message, and its cause.
+  // Not by stack — two equal errors raised in two places carry different
+  // stacks, and sameness here is about meaning, not about the address.
+  if (a instanceof Error || b instanceof Error) {
+    return (
+      a instanceof Error &&
+      b instanceof Error &&
+      a.name === b.name &&
+      a.message === b.message &&
+      alikeAt(a.cause, b.cause, depth + 1, seen)
+    )
+  }
   if (depth >= CYCLE_WATCH) {
     seen ??= new Set()
     // A pair already on the path above is a cycle met the second time: report

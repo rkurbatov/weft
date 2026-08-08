@@ -10,8 +10,8 @@ import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
 import { MessageChannel } from 'node:worker_threads'
 import { atOnce, handedOver, handOver, link, overWire, serve } from '#link'
-import { heldOf, port, subscribe, wirePair } from '#weft'
-import { settle, until } from '#testkit'
+import { heldOf, port, subscribe } from '#weft'
+import { settle, setupWire, until } from '#testkit'
 
 describe('declaring that a value may be handed over', () => {
   test('the wrapper says so about the value, not about the cell', () => {
@@ -49,9 +49,7 @@ describe('declaring that a value may be handed over', () => {
     const numbers = new Float64Array([1, 2, 3])
     const hist = port<unknown>(handOver(numbers), { name: 'hist' })
 
-    const wire = wirePair()
-    until(serve({ cells: { hist } }, wire.graph, { schedule: atOnce }))
-    const watcher = link(wire.watcher)
+    const { watcher } = setupWire({ cells: { hist } })
     until(watcher.close)
     const mirror = watcher.derived<Float64Array>('hist')
     until(subscribe(mirror, () => {}))

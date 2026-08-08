@@ -93,7 +93,10 @@ export function family<K, T>(
       // member born early and read hot can be first out at the first
       // overflow and rebuilt on its next read. One rebuild per such member,
       // once, against a per-read tax forever — and a member anybody actually
-      // watches is never evicted at all, whatever its age.
+      // watches is never evicted at all, whatever its age. The query cache in
+      // the remote layer chooses the other way for the opposite reason: a
+      // read there is a request over a wire, so the reordering is free beside
+      // it.
       if (members.size >= max) touch(id, existing)
       return existing.cell
     }

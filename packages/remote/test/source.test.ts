@@ -2,7 +2,7 @@ import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { derived, subscribe } from '#graph'
 import { arrivalOf, source } from '#remote'
-import { settle, until, world } from '#testkit'
+import { settle, track, until, world } from '#testkit'
 
 describe('sources', () => {
   /** A clock and a timer queue the test drives by hand. */
@@ -30,11 +30,10 @@ describe('sources', () => {
   test('the first watcher starts it: empty, in flight, value', async () => {
     const clock = world()
     const feed = source(async () => 'v', { now: clock.now, timers: clock.timers })
-    const seen: string[] = []
-    until(subscribe(feed.state, s => seen.push(s.kind)))
+    const seen = track(feed.state, s => s.kind)
     assert.equal(feed.state.peek().kind, 'loading')
     await settle()
-    assert.deepEqual(seen, ['loading', 'value'])
+    seen.said(['loading', 'value'])
     const held = feed.state.peek()
     assert.equal(held.kind === 'value' ? held.value : undefined, 'v')
     assert.equal(held.kind === 'value' ? held.at : 0, 1000)

@@ -4,7 +4,7 @@ import { derived, port, subscribe } from '#graph'
 import { outbox, projected } from '#keep'
 import { memoryStore } from '#keep'
 import type { Note, Handler } from '#keep'
-import { settle, until, world } from '#testkit'
+import { settle, track, until, world } from '#testkit'
 
 describe('the outbox', () => {
   function ids() {
@@ -263,14 +263,13 @@ describe('the outbox', () => {
       },
     })
     const label = derived(() => (book.owed.get() === 0 ? 'saved' : `${book.owed.get()} unsent`))
-    const seen: string[] = []
-    until(subscribe(label, value => seen.push(value)))
+    const seen = track(label)
     const { done } = book.send('slow', {})
     assert.equal(label.peek(), '1 unsent')
     release()
     await done
     assert.equal(label.peek(), 'saved')
-    assert.deepEqual(seen, ['1 unsent', 'saved'])
+    seen.said(['1 unsent', 'saved'])
   })
 
   test('an unknown outcome never counts toward poison: the entry is repeated as a matter of course', async () => {

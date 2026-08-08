@@ -6,7 +6,7 @@ import { atOnce } from '#link'
 import { overWire, wirePair } from '#link'
 import { link, Unknown } from '#link'
 import { serve } from '#link'
-import { settle, until } from '#testkit'
+import { settle, setupWire, until } from '#testkit'
 
 describe('the wire', () => {
   /** A little world on the graph's side, with a source that knows who wants it. */
@@ -42,9 +42,7 @@ describe('the wire', () => {
 
   test('a mirrored cell shows what the other side holds, and follows it', async () => {
     const { surface, count } = world()
-    const wire = wirePair()
-    until(serve(surface, wire.graph, { schedule: atOnce }))
-    const seen = link(wire.watcher)
+    const { watcher: seen } = setupWire(surface)
 
     const mirror = seen.derived<number>('count')
     until(subscribe(mirror, () => {}))
@@ -58,9 +56,7 @@ describe('the wire', () => {
 
   test('nothing is known until somebody watches', async () => {
     const { surface } = world()
-    const wire = wirePair()
-    until(serve(surface, wire.graph, { schedule: atOnce }))
-    const seen = link(wire.watcher)
+    const { watcher: seen } = setupWire(surface)
 
     const mirror = seen.derived<number>('count')
     assert.equal(mirror.peek().kind, 'empty')
@@ -70,9 +66,7 @@ describe('the wire', () => {
 
   test('demand crosses the boundary: the source wakes and sleeps with the watcher', async () => {
     const { surface, awake } = world()
-    const wire = wirePair()
-    until(serve(surface, wire.graph, { schedule: atOnce }))
-    const seen = link(wire.watcher)
+    const { watcher: seen } = setupWire(surface)
 
     const stop = until(subscribe(seen.derived<number>('doubled'), () => {}))
     await settle()
@@ -119,9 +113,7 @@ describe('the wire', () => {
 
   test('a family is watched by name and key', async () => {
     const { surface } = world()
-    const wire = wirePair()
-    until(serve(surface, wire.graph, { schedule: atOnce }))
-    const seen = link(wire.watcher)
+    const { watcher: seen } = setupWire(surface)
 
     const mirror = seen.derived<{ id: number; title: string }>('row', 1)
     until(subscribe(mirror, () => {}))
@@ -131,9 +123,7 @@ describe('the wire', () => {
 
   test('a command runs on the other side and its answer comes back', async () => {
     const { surface, count } = world()
-    const wire = wirePair()
-    until(serve(surface, wire.graph, { schedule: atOnce }))
-    const seen = link(wire.watcher)
+    const { watcher: seen } = setupWire(surface)
 
     const add = seen.command<[number], number>('add')
     assert.equal(await add(4), 5)
@@ -145,9 +135,7 @@ describe('the wire', () => {
 
   test('asking for a cell the other side does not have says so', async () => {
     const { surface } = world()
-    const wire = wirePair()
-    until(serve(surface, wire.graph, { schedule: atOnce }))
-    const seen = link(wire.watcher)
+    const { watcher: seen } = setupWire(surface)
 
     const mirror = seen.derived<number>('nonesuch')
     until(subscribe(mirror, () => {}))
@@ -204,9 +192,7 @@ describe('the wire', () => {
 
   test('a mirrored value keeps its shape through the wire', async () => {
     const rows = port([{ id: 1, tags: ['a', 'b'], at: new Date(0) }])
-    const wire = wirePair()
-    until(serve({ cells: { rows } }, wire.graph, { schedule: atOnce }))
-    const seen = link(wire.watcher)
+    const { watcher: seen } = setupWire({ cells: { rows } })
 
     const mirror = seen.derived<Array<{ id: number; tags: string[]; at: Date }>>('rows')
     until(subscribe(mirror, () => {}))
@@ -239,9 +225,7 @@ describe('the wire', () => {
 
   test('a mirror forgets what it knew when the last watcher goes', async () => {
     const { surface } = world()
-    const wire = wirePair()
-    until(serve(surface, wire.graph, { schedule: atOnce }))
-    const seen = link(wire.watcher)
+    const { watcher: seen } = setupWire(surface)
 
     const mirror = seen.derived<number>('count')
     const stop = until(subscribe(mirror, () => {}))
@@ -311,9 +295,7 @@ describe('the wire', () => {
 
   test('closing the link lets the graph go: unwatch for every mirror still watched', async () => {
     const { surface, awake } = world()
-    const wire = wirePair()
-    until(serve(surface, wire.graph, { schedule: atOnce }))
-    const seen = link(wire.watcher)
+    const { watcher: seen } = setupWire(surface)
 
     until(subscribe(seen.derived<number>('count'), () => {}))
     await settle()

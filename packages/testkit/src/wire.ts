@@ -14,9 +14,12 @@ import { closing, until } from './lifetime.ts'
 export function setupWire(
   surface: Surface,
   options: ServeOptions = {},
-): { watcher: ReturnType<typeof link> } {
+): { watcher: ReturnType<typeof link>; wire: ReturnType<typeof wirePair> } {
   const wire = wirePair()
   until(serve(surface, wire.graph, { schedule: atOnce, ...options }))
   const watcher = closing(link(wire.watcher))
-  return { watcher }
+  // The pair comes back too: a test that pokes the channel itself — sending
+  // nonsense down it, counting what crosses — needs the ends, and having to
+  // build the whole thing by hand for that is what this file exists against.
+  return { watcher, wire }
 }

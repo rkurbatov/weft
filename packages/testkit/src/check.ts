@@ -63,16 +63,23 @@ export function wakings(): {
  * subscription is registered for cleanup here, so a failing assertion cannot
  * leave a live watcher behind.
  */
-export function track<T>(cell: Watchable<T>): {
+export function track<T, V = T>(
+  cell: Watchable<T>,
+  of?: (value: T) => V,
+): {
   /** Everything the cell said since tracking began, in order. */
-  values(): readonly T[]
-  last(): T | undefined
+  values(): readonly V[]
+  last(): V | undefined
   count(): number
   /** The record so far equals this, in order. */
-  said(expected: readonly T[], why?: string): void
+  said(expected: readonly V[], why?: string): void
 } {
-  const seen: T[] = []
-  until(subscribe(cell, value => seen.push(value)))
+  const seen: V[] = []
+  // What to keep, when the whole value is not what the test is about: the
+  // kind of an answer rather than the answer, an id rather than a row. Kept
+  // rather than mapped at the assertion, so the record reads as the question.
+  const keep = of ?? ((value: T): V => value as unknown as V)
+  until(subscribe(cell, value => seen.push(keep(value))))
   return {
     values: () => seen,
     last: () => seen.at(-1),

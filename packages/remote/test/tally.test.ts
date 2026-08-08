@@ -9,7 +9,7 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
 import { heldOf, source, subscribe } from '#weft'
-import { settle, until, world } from '#testkit'
+import { settle, track, until, world } from '#testkit'
 
 describe('a source counts what it did', () => {
   test('asked, answered, published', async () => {
@@ -112,11 +112,10 @@ describe('a source counts what it did', () => {
       timers: clock.timers,
       now: clock.now,
     })
-    const seen: number[] = []
-    until(subscribe(feed.tally.asked, value => seen.push(value)))
+    const seen = track(feed.tally.asked)
     until(subscribe(feed.state, () => {}))
     await settle(3)
 
-    assert.deepEqual(seen, [1], 'it woke the watcher when it changed')
+    seen.said([1], 'it woke the watcher when it changed')
   })
 })

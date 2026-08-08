@@ -10,7 +10,7 @@ import { describe, test } from 'node:test'
 import { batch, derived, heldOf, port, subscribe, wirePair } from '#weft'
 import { onNotice } from '#data'
 import { atOnce, link, serve } from '#link'
-import { settle, until } from '#testkit'
+import { settle, setupWire, track, until } from '#testkit'
 
 describe('a batch at the scale a real edit has', () => {
   test('three hundred writes wake a watcher once, not three hundred times', () => {
@@ -41,8 +41,7 @@ describe('a batch at the scale a real edit has', () => {
     // The invariant a subtree edit has: the two move together, and a watcher
     // that sees them apart would be seeing a state that never existed.
     const sum = derived(() => left.get() + right.get())
-    const seen: number[] = []
-    until(subscribe(sum, value => seen.push(value)))
+    const seen = track(sum)
 
     batch(() => {
       left.set(10)
@@ -52,7 +51,7 @@ describe('a batch at the scale a real edit has', () => {
 
     // A subscription reports changes, not the value it started with: what a
     // watcher saw here is one state, the finished one.
-    assert.deepEqual(seen, [20])
+    seen.said([20])
   })
 
   test('through the wire, the same edit is one message', async () => {
@@ -133,9 +132,7 @@ describe('the engine works while it is watched, and only then', () => {
     // A stand-in for Retex's engine: it does its work while somebody looks.
     const beat = port(0, { name: 'beat', onDemand: () => ticks++, onIdle: () => ticks-- })
 
-    const wire = wirePair()
-    until(serve({ cells: { beat } }, wire.graph, { schedule: atOnce }))
-    const watcher = link(wire.watcher)
+    const { watcher } = setupWire({ cells: { beat } })
     until(watcher.close)
 
     assert.equal(ticks, 0, 'nobody is looking yet, on either side')
@@ -220,9 +217,7 @@ describe('a fact a panel writes and reads back', () => {
     )
 
     const needle = port('a', { name: 'needle' })
-    const wire = wirePair()
-    until(serve({ cells: { needle }, facts: { needle } }, wire.graph, { schedule: atOnce }))
-    const watcher = link(wire.watcher)
+    const { watcher } = setupWire({ cells: { needle }, facts: { needle } })
     until(watcher.close)
     until(subscribe(watcher.derived<string>('needle'), () => {}))
     await settle(3)

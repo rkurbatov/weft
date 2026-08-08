@@ -407,6 +407,15 @@ describe('sameness by value', () => {
     assert.equal(alike(new Date(1000), { getTime: () => 1000 }), false)
     assert.equal(alike(/ab/g, /ab/g), true)
     assert.equal(alike(/ab/g, /ab/i), false)
+    // An error is keyless the same way: its message is not enumerable.
+    assert.equal(alike(new Error('no'), new Error('no')), true)
+    assert.equal(alike(new Error('no'), new Error('still no')), false)
+    assert.equal(alike(new TypeError('no'), new Error('no')), false)
+    assert.equal(
+      alike({ id: 1, fault: new Error('a') }, { id: 1, fault: new Error('b') }),
+      false,
+      'a row whose error changed its story is a changed row',
+    )
   })
 
   test('a value with a cycle is compared, not crashed on', () => {

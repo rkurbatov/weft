@@ -7,7 +7,7 @@ import { owned, port, subscribe, wirePair } from '#weft'
 import { adopt, cell, laid, listed, notes, offer, region, sends, truth, truthBy, will } from '#loom'
 import type { Note } from '#weft'
 import type { Channel as Wire } from '#weft'
-import { settle, until, wait, world } from '#testkit'
+import { settle, track, until, wait, world } from '#testkit'
 
 describe('the Loom dialect', () => {
   test('truth reads plain; flight, fault and asked stand beside as adjectives', async () => {
@@ -467,19 +467,18 @@ describe('a truth that reports as it goes', () => {
       { name: 'run', empty: 0, timers: clock.timers },
     )
 
-    const seen: number[] = []
-    until(subscribe(found, value => seen.push(value)))
+    const seen = track(found)
     await settle(3)
-    assert.deepEqual(seen.at(-1), 1, 'a real answer over part of the work')
+    assert.deepEqual(seen.last(), 1, 'a real answer over part of the work')
 
     step?.()
     await settle(3)
-    assert.deepEqual(seen.at(-1), 2)
+    assert.deepEqual(seen.last(), 2)
     step?.()
     await settle(3)
     step?.()
     await settle(3)
-    assert.equal(seen.at(-1), 99, 'and the return is the finished one')
+    assert.equal(seen.last(), 99, 'and the return is the finished one')
   })
 
   test('a body that ignores both handles works exactly as it did', async () => {

@@ -36,6 +36,33 @@ test('preserve: a date that moved is a new value, a date that did not keeps its 
   assert.equal(preserve(prev, { id: 1, at: new Date(1000) }), prev)
 })
 
+test('preserve: an error that changed its story is a new value', () => {
+  const was = new Error('no')
+  assert.equal(preserve(was, new Error('no')), was)
+  const worse = new Error('still no')
+  assert.equal(preserve(was, worse), worse)
+  const kept = preserve({ id: 1, fault: was }, { id: 1, fault: new Error('still no') })
+  assert.equal((kept as { fault: Error }).fault.message, 'still no')
+})
+
+test('preserve: a value with a cycle is walked, not crashed on', () => {
+  // Cycles survive structured cloning, so they are legal in a kept value —
+  // and the sibling walk in `alike` already learned this lesson.
+  interface Loop {
+    n: number
+    self?: Loop
+  }
+  const a: Loop = { n: 1 }
+  a.self = a
+  const b: Loop = { n: 2 }
+  b.self = b
+  const kept = preserve(a, b)
+  assert.equal(kept.n, 2, 'the new value made it through')
+  const same: Loop = { n: 1 }
+  same.self = same
+  assert.equal(preserve(a, same).n, 1)
+})
+
 test('preserve: a key the old object lacked is a change even when it holds undefined', () => {
   // Absence and `undefined` read the same through an index — so a schema
   // change swapping one key for another used to hand the OLD object back.

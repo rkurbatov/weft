@@ -78,6 +78,14 @@ export function query<K, T>(
     const known = held.get(name)
     if (known !== undefined) {
       // Freshen its place in insertion order, so eviction drops the coldest.
+      //
+      // Unconditionally, unlike the cell family next door, which only
+      // reorders once its ceiling is in sight. Both are right where they
+      // stand and the difference is the cost of a read: asking here means a
+      // request over a wire, so a delete and an insert beside it are free —
+      // in a family a read is a cached formula on a hot path, and the same
+      // pair of operations showed up whole in a profile. Named in both
+      // places so neither reads as an oversight.
       held.delete(name)
       held.set(name, known)
       return known.feed
