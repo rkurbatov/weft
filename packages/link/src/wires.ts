@@ -40,7 +40,13 @@ export function wirePair(clone: boolean = true): WirePair {
 
 /** Anything that posts and receives messages: a Worker, a MessagePort, `self`. */
 export interface Wire {
-  postMessage(message: unknown): void
+  /**
+   * `transfer` is optional and deliberately loose: a Worker asks for
+   * `Transferable[]`, a MessagePort for something else again, and a wire that
+   * cannot hand ownership over at all takes one argument. What matters here is
+   * that a second argument is allowed to exist.
+   */
+  postMessage(message: unknown, transfer?: never): void
   addEventListener(kind: 'message', handler: (event: { data: unknown }) => void): void
   removeEventListener(kind: 'message', handler: (event: { data: unknown }) => void): void
   start?(): void
@@ -49,7 +55,12 @@ export interface Wire {
 export function overWire(port: Wire): Channel {
   port.start?.()
   return {
-    send: message => port.postMessage(message),
+    send: (message, handOver) => {
+      // A wire can hand ownership over: the buffers named here are not copied,
+      // and are empty on this side afterwards.
+      if (handOver === undefined || handOver.length === 0) port.postMessage(message)
+      else port.postMessage(message, [...handOver] as never)
+    },
     listen: handler => {
       const onMessage = (event: { data: unknown }): void => handler(event.data)
       port.addEventListener('message', onMessage)

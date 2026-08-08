@@ -6,6 +6,7 @@ import { subscribe, untracked, watch } from '#graph/graph.ts'
 import type { Watchable } from '#graph/graph.ts'
 import { perFrame } from './channel.ts'
 import type { Channel, Schedule, ToGraph } from './channel.ts'
+import { handedOver } from './handover.ts'
 import { feedOf, follow } from '#table'
 import type { Table } from '#table'
 
@@ -81,6 +82,24 @@ export interface ServeOptions {
   onBroken?: (error: unknown) => void
 }
 
+/**
+ * A value declared as handed over travels as its own contents.
+ *
+ * The wrapper is the application's way of saying "this one is one-off"; what
+ * crosses is the value itself, so the far side reads it as it would any other.
+ */
+const unwrap = (value: unknown): unknown => (handedOver(value) ? value.value : value)
+
+/** Buffers to hand over with this batch, if any were declared. */
+function buffersIn(batch: readonly { value: unknown }[]): readonly ArrayBufferLike[] {
+  const found: ArrayBufferLike[] = []
+  for (const one of batch) {
+    if (!handedOver(one.value)) continue
+    for (const buffer of one.value.buffers) found.push(buffer)
+  }
+  return found
+}
+
 export function serve(surface: Surface, channel: Channel, options: ServeOptions = {}): () => void {
   const schedule = options.schedule ?? perFrame
   const watching = new Map<number, () => void>()
@@ -95,9 +114,14 @@ export function serve(surface: Surface, channel: Channel, options: ServeOptions 
   function flush(): void {
     flushing = false
     if (pending.size === 0 || broken) return
-    const changed = [...pending].map(([id, value]) => ({ id, value }))
+    const wrapped = [...pending].map(([id, value]) => ({ id, value }))
+    // Buffers are taken from the values as they came, before the wrapper is
+    // stripped: unwrapping first left the list empty, and the send quietly
+    // copied instead of handing over.
+    const handing = buffersIn(wrapped)
+    const changed = wrapped.map(one => ({ id: one.id, value: unwrap(one.value) }))
     try {
-      channel.send({ kind: 'values', changed })
+      channel.send({ kind: 'values', changed }, handing)
       // Cleared only now, and only what was actually sent: a value written
       // again while this was in flight stays pending on its own account.
       for (const one of changed) settled(one)
@@ -122,7 +146,10 @@ export function serve(surface: Surface, channel: Channel, options: ServeOptions 
 
   function sendAlone(one: { id: number; value: unknown }): boolean {
     try {
-      channel.send({ kind: 'values', changed: [one] })
+      channel.send(
+        { kind: 'values', changed: [{ id: one.id, value: unwrap(one.value) }] },
+        buffersIn([one]),
+      )
       settled(one)
       return true
     } catch (error) {

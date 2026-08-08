@@ -8,6 +8,7 @@
 //   pnpm demo:wire --buckets=100000 --pace=100
 
 import { MessageChannel } from 'node:worker_threads'
+import { handOver, overWire } from '#weft'
 
 /** The middle of a set of timings: one run in twenty is noise, not a number. */
 const median = (values: number[]): number =>
@@ -26,6 +27,8 @@ interface Row {
   readonly bytes: number
   readonly copy: number
   readonly handed: number
+  /** Handed over the way an application says it: `handOver(value)`. */
+  readonly declared: number
 }
 
 async function measure(buckets: number): Promise<Row> {
@@ -49,6 +52,18 @@ async function measure(buckets: number): Promise<Row> {
     handed.push(performance.now() - started)
   }
 
+  // The same, through the library rather than through a raw port: what an
+  // application actually gets when it says `handOver(value)`.
+  const throughWeft: number[] = []
+  for (let i = 0; i < rounds; i++) {
+    const value = source.slice()
+    const wire = overWire(port1 as never)
+    const given = handOver(value)
+    const started = performance.now()
+    wire.send({ kind: 'values', changed: [{ id: 1, value: given.value }] }, given.buffers)
+    throughWeft.push(performance.now() - started)
+  }
+
   port1.close()
   port2.close()
   return {
@@ -56,6 +71,7 @@ async function measure(buckets: number): Promise<Row> {
     bytes: buckets * 8,
     copy: median(copies),
     handed: median(handed),
+    declared: median(throughWeft),
   }
 }
 
@@ -87,6 +103,7 @@ for (const row of rows) {
       mb(row.bytes).padStart(10),
       ms(row.copy).padStart(12),
       ms(row.handed).padStart(13),
+      ms(row.declared).padStart(12),
       `${perSecond.toFixed(0)} of 1000 ms`.padStart(18),
     ].join(''),
   )

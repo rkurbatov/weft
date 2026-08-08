@@ -6,7 +6,14 @@ import { wallClock } from '#graph'
 import type { Timers } from '#graph'
 
 export interface Channel {
-  send(message: unknown): void
+  /**
+   * Send a message.
+   *
+   * `handOver` names buffers whose ownership goes with the message: after the
+   * send they are empty on this side. A channel that cannot do that ignores the
+   * list and copies, which is correct — slower, never wrong.
+   */
+  send(message: unknown, handOver?: readonly ArrayBufferLike[]): void
   /** Returns the way to stop listening. */
   listen(handler: (message: unknown) => void): () => void
   /** A channel that owns its transport closes it here; borrowed ones omit this. */
