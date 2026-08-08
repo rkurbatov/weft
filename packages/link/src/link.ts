@@ -53,11 +53,13 @@ const faceOfTable = (made: {
   cold: Port<boolean>
   catchingUp: Port<boolean>
   received: Port<number>
+  caughtUp: Port<number>
 }): Mirrored<unknown> => ({
   rows: made.rows,
   cold: made.cold,
   catchingUp: made.catchingUp,
   received: made.received,
+  caughtUp: made.caughtUp,
 })
 
 /** A table on this side of a wire: rows, and whether they are behind. */
@@ -77,6 +79,15 @@ export interface Mirrored<R> {
    * counting something else entirely.
    */
   readonly received: Watchable<number>
+  /**
+   * How many times this side had to be caught up: a batch was lost, and the
+   * station answered with everything rather than with changes that would not
+   * fit.
+   *
+   * Worth showing beside `received`, or the count of rows looks inexplicably
+   * high: one catch-up costs a whole table.
+   */
+  readonly caughtUp: Watchable<number>
 }
 
 export interface LinkOptions {
@@ -187,6 +198,7 @@ export function link(channel: Channel, options: LinkOptions = {}): Link {
           // side is not in, and applying them would quietly corrupt the rows.
           // What is on screen stays there, labelled, until the catch-up lands.
           made.catchingUp.set(true)
+          made.caughtUp.set(made.caughtUp.peek() + 1)
           channel.send({ kind: 'catchUp', id: message.id, since: made.at })
           return
         }
@@ -306,6 +318,7 @@ export function link(channel: Channel, options: LinkOptions = {}): Link {
       cold: Port<boolean>
       catchingUp: Port<boolean>
       received: Port<number>
+      caughtUp: Port<number>
       held: Map<unknown, unknown>
       at: number
     }
@@ -336,6 +349,7 @@ export function link(channel: Channel, options: LinkOptions = {}): Link {
       cold: port(true, { name: `${name}.cold` }),
       catchingUp: port(false, { name: `${name}.catchingUp` }),
       received: port(0, { name: `${name}.received` }),
+      caughtUp: port(0, { name: `${name}.caughtUp` }),
       held: new Map<unknown, unknown>(),
       at: 0,
     }

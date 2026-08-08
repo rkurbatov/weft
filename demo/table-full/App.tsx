@@ -31,6 +31,7 @@ export function App(): ReactNode {
   const received = useLive(() => station.jobs.received.get())
   const cold = useLive(() => station.jobs.cold.get())
   const catchingUp = useLive(() => station.jobs.catchingUp.get())
+  const caughtUp = useLive(() => station.jobs.caughtUp.get()) ?? 0
   const losing = useLive(() => station.losing.get())
 
   const shown = rows.slice(-25) as Job[]
@@ -49,6 +50,7 @@ export function App(): ReactNode {
         <Count label="rows poured in" value={poured.toLocaleString('en')} />
         <Count label="rows edited in place" value={edited.toLocaleString('en')} />
         <Count label="rows and changes received" value={(received ?? 0).toLocaleString('en')} />
+        <Count label="catch-ups" value={caughtUp.toLocaleString('en')} />
         <Count label="formulas recomputed there" value={recomputed?.toLocaleString('en') ?? '—'} />
         <Count label="watchers woken there" value={woken?.toLocaleString('en') ?? '—'} />
       </div>

@@ -142,10 +142,10 @@ describe('rules that break quietly', () => {
       for (const path of await sources(dir)) {
         if (!path.endsWith('.test.ts')) continue
         const text = await readFile(path, 'utf8')
-        const lines = text.split('\n')
-        for (const [i, line] of lines.entries()) {
+        const rows = text.split('\n')
+        for (const [i, line] of rows.entries()) {
           if (!/await new Promise<?[^>]*>?\(resolve => setTimeout\(resolve, \d/.test(line)) continue
-          const after = lines.slice(i, i + 25).join('\n')
+          const after = rows.slice(i, i + 25).join('\n')
           if (!/await settle\(/.test(after)) continue
           if (/await wait\(/.test(after)) continue
           wrong.push(`${path}:${String(i + 1)}`)
