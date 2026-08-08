@@ -65,6 +65,8 @@ export function App(): ReactNode {
   const span = useLive(() => station.span.get()) ?? 20
   const rows = useLive(() => station.window.rows.get())
   const received = useLive(() => station.received.get()) ?? 0
+  const recomputed = useLive(() => station.recomputed.get())
+  const woken = useLive(() => station.woken.get())
   const scroller = useRef<HTMLDivElement>(null)
 
   return (
@@ -82,6 +84,8 @@ export function App(): ReactNode {
         <Count label="rows on screen" value={rows.length} />
         <Count label="rows that crossed the wire" value={received.toLocaleString('en')} />
         <Count label="rows a whole-table mirror would send" value={size.toLocaleString('en')} />
+        <Count label="formulas recomputed there" value={recomputed?.toLocaleString('en') ?? '—'} />
+        <Count label="watchers woken there" value={woken?.toLocaleString('en') ?? '—'} />
       </div>
 
       <div

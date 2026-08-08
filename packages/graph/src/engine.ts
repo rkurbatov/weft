@@ -326,6 +326,16 @@ export class Core {
   /** The probe of this engine: waves of one session are not mixed with another's. */
   readonly tap = new TickTap()
 
+  /** How many watchers are alive here — screens, not rows. */
+  get watching(): number {
+    return this.watchers.size
+  }
+
+  /** How many nodes are queued for the settling going on right now. */
+  get queued(): number {
+    return this.pending.size
+  }
+
   // ── End of life ────────────────────────────────────────────────────────────
 
   dispose(): void {

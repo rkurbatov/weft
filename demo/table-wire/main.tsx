@@ -16,6 +16,9 @@ export interface Desk {
   readonly window: { rows: { get(): readonly Task[] } }
   /** Rows that actually arrived over the wire — counted where they land. */
   readonly received: { get(): number }
+  /** What the graph on the other side is doing, counted by the library. */
+  readonly recomputed: { get(): number | undefined }
+  readonly woken: { get(): number | undefined }
   readonly draft: (key: number) => { get(): string; set(value: string): void }
   readonly rename: (id: number, title: string) => Promise<void>
 }
@@ -51,6 +54,8 @@ function start(): Desk {
     // by one row costs one row on the wire.
     window: mirror,
     received: mirror.received,
+    recomputed: station.view<number>('recomputed'),
+    woken: station.view<number>('woken'),
 
     draft,
     rename: station.act<[number, string]>('rename'),
