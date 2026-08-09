@@ -2,17 +2,10 @@
 // the words it offers outward. Kept apart from the machinery because five
 // files here implement pieces of the same contract, and a contract read from
 // inside one implementation is a contract nobody reads.
-import type { Key } from '#data'
+import type { Change, Feed, Follower, Key } from '#feed'
 import type { Equal, Watchable } from '#graph'
 
-export type { Key }
-
-/** One key's move: insert (no prev), update (both sides), removal (no next). */
-export interface Change<R> {
-  key: Key
-  prev?: R
-  next?: R
-}
+export type { Change, Feed, Follower, Key }
 
 export interface Patch<R> {
   put?: readonly R[]
@@ -98,33 +91,4 @@ export interface TableOptions<R> {
   onDemand?: () => void
   /** Last live watcher left. Whatever feeds the table may rest. */
   onIdle?: () => void
-}
-
-// What a derived thing needs from what it follows. State reads are only valid
-// after reading version: the read is what brings the follower up to date.
-export interface Feed<R> {
-  readonly name: string
-  readonly version: Watchable<number>
-  keyOf(row: R): Key
-  get(key: Key): R | undefined
-  each(fn: (row: R) => void): void
-  count(): number
-  /**
-   * The rows as the map they already are, read-only and live.
-   *
-   * For a consumer that needs the whole collection at once — a relational
-   * rebuild, a served snapshot. Walking `each` into a fresh map copied a
-   * hundred thousand entries to hand over what the table was holding in
-   * exactly that shape; the reference is live, so take it for a synchronous
-   * look and copy only what outlives the call.
-   */
-  asMap(): ReadonlyMap<Key, R>
-  /** Changes after the given version, or null when they are no longer remembered. */
-  changesSince(v: number): Change<R>[] | null
-}
-
-export interface Follower<R> {
-  first(): void
-  apply(changes: readonly Change<R>[]): void
-  resync(): void
 }

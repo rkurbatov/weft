@@ -4,11 +4,12 @@
 // previous right index, then the right side against the already-updated left —
 // the derivative of a product, which is also what makes a self-join behave.
 
-import type { Change, Key } from '#table/table.ts'
+import type { Change } from '#feed'
+import type { Key } from '#feed'
 import type { Row } from '../expr.ts'
 import { keyOfRow, mergedRow, onKeyOf, passesResidual, oracle } from '../node.ts'
 import type { JoinNode } from '../node.ts'
-import { notice } from '#data/notice.ts'
+import { notice } from '#graph'
 import { diffInto } from './runner.ts'
 import type { Make, Runner } from './runner.ts'
 

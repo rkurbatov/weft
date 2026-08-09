@@ -6,11 +6,11 @@
 // goes quiet by itself — the answer for the old key lands in its own cell,
 // which nobody is looking at.
 
-import { source, tally } from './source.ts'
-import type { Source, SourceOptions } from './source.ts'
+import { supply, tally } from './supply.ts'
+import type { Supply, SupplyPassport } from './supply.ts'
 import type { Tally } from './shape.ts'
 
-export interface QueryOptions<K> extends SourceOptions {
+export interface QueryOptions<K> extends SupplyPassport {
   /** How a key becomes a map key. Required for object keys. */
   keyOf?: (key: K) => string
   /**
@@ -22,7 +22,7 @@ export interface QueryOptions<K> extends SourceOptions {
 
 export interface Query<K, T> {
   /** The source for this key — the same one for the same key, while it lives. */
-  (key: K): Source<T>
+  (key: K): Supply<T>
   readonly size: number
   /**
    * What the question has done across every key.
@@ -42,12 +42,12 @@ export function query<K, T>(
   load: (key: K, asked: { signal: AbortSignal; soFar: (value: T) => void }) => Promise<T>,
   options: QueryOptions<K>,
 ): Query<K, T> {
-  const { keyOf, max, ...perSource } = options
+  const { keyOf, max, ...perSupply } = options
   // One set of counters for the whole family: a panel asks what the question
   // has done, not what the current key has done — and a run called off because
   // the key changed belongs to the family, not to the key that replaced it.
-  const shared = tally(`${perSource.name ?? 'query'}.tally`)
-  const held = new Map<string, { key: K; feed: Source<T> }>()
+  const shared = tally(`${perSupply.name ?? 'query'}.tally`)
+  const held = new Map<string, { key: K; feed: Supply<T> }>()
 
   const nameOf = (key: K): string => {
     if (keyOf !== undefined) return keyOf(key)
@@ -73,7 +73,7 @@ export function query<K, T>(
     }
   }
 
-  const ask = ((key: K): Source<T> => {
+  const ask = ((key: K): Supply<T> => {
     const name = nameOf(key)
     const known = held.get(name)
     if (known !== undefined) {
@@ -90,10 +90,10 @@ export function query<K, T>(
       held.set(name, known)
       return known.feed
     }
-    const feed = source<T>(asked => load(key, asked), {
-      ...perSource,
+    const feed = supply<T>(asked => load(key, asked), {
+      ...perSupply,
       tally: shared,
-      name: `${perSource.name ?? 'query'}:${name}`,
+      name: `${perSupply.name ?? 'query'}:${name}`,
     })
     held.set(name, { key, feed })
     makeRoom()

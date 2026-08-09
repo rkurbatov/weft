@@ -8,7 +8,7 @@
 
 import { link, serve } from '#link'
 import type { ServeOptions, Surface } from '#link'
-import { atOnce, wirePair } from '#link'
+import { atOnce, wirePair } from '#wire'
 import { closing, until } from './lifetime.ts'
 
 export function setupWire(

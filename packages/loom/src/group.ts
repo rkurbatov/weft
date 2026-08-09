@@ -12,8 +12,8 @@ import {
 } from '#rel'
 import type { Expr, FoldDecl, RelNode, Row } from '#rel'
 import type { Table } from '#weft'
-import { tableOfFeed } from './feed.ts'
-import type { Feed } from './feed.ts'
+import { tableOfLive } from './live.ts'
+import type { Live } from './live.ts'
 import { keyFieldsOf } from './keys.ts'
 import type { Answers, FieldType, NumericField, Piece, ScalarField, ScanBy } from './fields.ts'
 import type { Part } from './shape.ts'
@@ -91,7 +91,7 @@ export const partsOf = <R, S extends Record<string, Piece<unknown>>>(
 
 /** Rows grouped by a field; the form describes one group. */
 export function byEach<R, F extends ScalarField<R>, S extends Record<string, Piece<unknown>>>(
-  feed: Feed<R>,
+  feed: Live<R>,
   by: F,
   form: (g: Group<R>) => S,
   where?: Expr | ((row: R) => boolean),
@@ -100,7 +100,7 @@ export function byEach<R, F extends ScalarField<R>, S extends Record<string, Pie
 }
 
 export function fold<R>(
-  feed: Feed<R>,
+  feed: Live<R>,
   form: (g: Group<R>) => Piece<unknown> | Record<string, Piece<unknown>>,
   where?: Expr | ((row: R) => boolean),
 ): Part<Watchable<unknown>> {
@@ -125,7 +125,7 @@ export function fold<R>(
 }
 
 export function group<R, S extends Record<string, Piece<unknown>>>(
-  feed: Feed<R>,
+  feed: Live<R>,
   by: readonly string[],
   form: (g: Group<R>) => S,
   where?: Expr | ((row: R) => boolean),
@@ -139,7 +139,7 @@ export function group<R, S extends Record<string, Piece<unknown>>>(
         node = filterNode(node, where as Expr | ((row: Row) => unknown))
       }
       node = aggNode(node, { by, folds })
-      const live = relate(node, { [source]: tableOfFeed(feed) as Table<Row> }, { name })
+      const live = relate(node, { [source]: tableOfLive(feed) as Table<Row> }, { name })
       return derived(() => live.all.get() as Array<Answers<S>>, { name: `${name}.rows` })
     },
   }

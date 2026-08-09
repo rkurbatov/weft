@@ -1,13 +1,13 @@
 // A table: rows with a key, and the live views over them.
 //
 // The pieces live beside this file — the contract in shape.ts, sameness in
-// same.ts, the change log in log.ts, views in views.ts, folds in fold.ts —
+// same.ts, the change log in the feed package, views in views.ts, folds in fold.ts —
 // and this one puts them together and hands out the surface.
 
 import { port } from '#graph'
-import type { Key } from '#data'
+import type { Key } from '#feed'
 import { alike } from './same.ts'
-import { changeLog, KEEP } from './log.ts'
+import { changeLog, KEEP } from '#feed'
 import { tableOver } from './over.ts'
 import { remember } from './feeds.ts'
 import type { Change, Feed, Patch, SourceTable, TableOptions } from './shape.ts'
@@ -25,7 +25,7 @@ export type {
   Key,
 } from './shape.ts'
 export { alike } from './same.ts'
-export { follow } from './log.ts'
+export { follow } from '#feed'
 export { feedOf } from './feeds.ts'
 
 /** The reading surface every table shares, source and derived alike. */

@@ -12,25 +12,27 @@
 // exists — which looks exactly like "it stopped working".
 
 import type { ReactNode } from 'react'
-import { adopt, cell, overWire } from '#loom'
-import type { Adopted } from '#loom'
+import { loom, cell, worker } from '#loom'
+import type { Loomed } from '#loom'
 import { mount } from '#demo/mount.tsx'
 import { App } from './App.tsx'
 import './engine.css'
 
 interface Station {
-  readonly engine: Adopted
+  readonly engine: Loomed
   readonly stop: () => void
 }
 
 function start(): Station {
-  const worker = new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' })
-  const engine = adopt(overWire(worker))
+  // The engine lives in a worker; this side is a window onto it. `loom` says
+  // that in one line — the pair, the link and the mirrors are underneath.
+  const thread = new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' })
+  const engine = loom({ name: 'engine' }, { wire: worker(thread) })
   return {
     engine,
     stop: () => {
-      engine.close()
-      worker.terminate()
+      engine.stop()
+      thread.terminate()
     },
   }
 }

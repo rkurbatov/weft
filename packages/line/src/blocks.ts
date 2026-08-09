@@ -19,7 +19,7 @@
 // own type, since a blockwise answer is only the same answer as a left-to-right
 // one when it is. `zero` is the identity — the answer for an empty range.
 
-import { family } from '#graph/family.ts'
+import { family } from '#graph'
 
 export interface BlockOptions<T> {
   /** One element's contribution to the answer. */

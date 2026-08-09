@@ -30,8 +30,9 @@ import {
 import type { FoldDecl, RelNode, RowFn } from './node.ts'
 import { relate } from './live.ts'
 import type { RelateOptions, Relation } from './live.ts'
-import type { Key, Table } from '#table/table.ts'
-import type { Watchable } from '#graph/graph.ts'
+import type { Table } from '#table'
+import type { Key } from '#feed'
+import type { Watchable } from '#graph'
 import type {
   FieldType,
   MustBeAField,

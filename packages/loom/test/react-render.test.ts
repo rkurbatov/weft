@@ -13,8 +13,8 @@ GlobalRegistrator.register()
 import { Component, StrictMode, Suspense, act, createElement as h, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { port } from '#weft'
-import { source } from '#weft'
-import { useCell, useField, useKeepRow, useSourceValue } from '#loom/react'
+import { supply } from '#weft'
+import { useCell, useField, useKeepRow, useSupplyValue } from '#loom/react'
 import { useLive } from '#loom/react'
 import { wait } from '#testkit'
 
@@ -106,9 +106,9 @@ describe('the React seam, rendered', () => {
     shown.unmount()
   })
 
-  test('useSourceValue: a cold start suspends and asks once — under StrictMode', async () => {
+  test('useSupplyValue: a cold start suspends and asks once — under StrictMode', async () => {
     let asked = 0
-    const feed = source(
+    const feed = supply(
       () => {
         asked++
         return new Promise<string>(resolve => setTimeout(() => resolve('answer'), 15))
@@ -116,7 +116,7 @@ describe('the React seam, rendered', () => {
       { name: 'feed' },
     )
     function Shows(): ReactNode {
-      return h('b', null, useSourceValue(feed))
+      return h('b', null, useSupplyValue(feed))
     }
     const shown = mount(
       h(StrictMode, null, h(Suspense, { fallback: h('i', null, 'wait') }, h(Shows))),
@@ -142,14 +142,14 @@ describe('the React seam, rendered', () => {
     shown.unmount()
   })
 
-  test('useSourceValue: a refusal with empty hands lands in the boundary once patience runs out', async () => {
-    const sour = source(() => Promise.reject(new Error('the world is down')), {
+  test('useSupplyValue: a refusal with empty hands lands in the boundary once patience runs out', async () => {
+    const sour = supply(() => Promise.reject(new Error('the world is down')), {
       name: 'sour',
       retry: 1,
     })
     function Shows(): ReactNode {
       // No patience asked for: the first refusal is the answer.
-      return h('b', null, useSourceValue(sour, { patience: 0 }))
+      return h('b', null, useSupplyValue(sour, { patience: 0 }))
     }
     const shown = mount(
       h(Boundary, null, h(Suspense, { fallback: h('i', null, 'wait') }, h(Shows))),
@@ -173,14 +173,14 @@ describe('the React seam, rendered', () => {
     shown.unmount()
   })
 
-  test('useSourceValue: a refusal that will be tried again keeps waiting, and the retry shows', async () => {
+  test('useSupplyValue: a refusal that will be tried again keeps waiting, and the retry shows', async () => {
     let up = false
-    const flaky = source(
+    const flaky = supply(
       () => (up ? Promise.resolve('here') : Promise.reject(new Error('down for now'))),
       { name: 'flaky', retry: 5 },
     )
     function Shows(): ReactNode {
-      return h('b', null, useSourceValue(flaky))
+      return h('b', null, useSupplyValue(flaky))
     }
     const shown = mount(
       h(Boundary, null, h(Suspense, { fallback: h('i', null, 'wait') }, h(Shows))),

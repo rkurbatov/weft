@@ -7,9 +7,10 @@
 // demand instead.
 
 import { offsets } from '#line'
-import { planScan } from '#table/plan.ts'
-import type { ScanCarrier, ScanForm } from '#table/plan.ts'
-import type { Change, Key } from '#table/table.ts'
+import { planScan } from '#table'
+import type { ScanCarrier, ScanForm } from '#table'
+import type { Change } from '#feed'
+import type { Key } from '#feed'
 import type { Row } from '../expr.ts'
 import { orderCompare, stepOf } from '../node.ts'
 import type { ScanNode } from '../node.ts'

@@ -8,7 +8,8 @@
 
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
-import { atOnce, every, hurried, link, serve } from '#link'
+import { link, serve } from '#link'
+import { atOnce, every, hurried } from '#wire'
 import { heldOf, port, subscribe, wirePair } from '#weft'
 import { settle, until, world } from '#testkit'
 

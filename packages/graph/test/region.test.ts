@@ -11,9 +11,9 @@ import {
   subscribe,
   watch,
 } from '#graph'
-import { outbox } from '#keep'
-import { memoryStore } from '#keep'
-import { source } from '#remote'
+import { outbox } from '#outbox'
+import { memoryStore } from '#store'
+import { supply } from '#remote'
 import { held, until, wakings, world } from '#testkit'
 
 describe('a region owns what is born inside it', () => {
@@ -42,7 +42,7 @@ describe('a region owns what is born inside it', () => {
     let asked = 0
     const box = held(
       region('mod', () => {
-        const feed = source(
+        const feed = supply(
           () => {
             asked++
             return Promise.resolve(asked)

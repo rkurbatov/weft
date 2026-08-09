@@ -15,10 +15,13 @@
 // dA⋈B + (A+dA)⋈dB, which sums to exactly the derivative, self-joins
 // included, with no pair counted twice.
 
-import { untracked, watch } from '#graph/graph.ts'
-import type { Watchable } from '#graph/graph.ts'
-import { table, feedOf, follow } from '#table/table.ts'
-import type { Table, Change, Patch, Key } from '#table/table.ts'
+import { untracked, watch } from '#graph'
+import type { Watchable } from '#graph'
+import { table, feedOf } from '#table'
+import { follow } from '#feed'
+import type { Table, Patch } from '#table'
+import type { Change } from '#feed'
+import type { Key } from '#feed'
 
 import { canonNode, checkNode, keyOfRow, paramsOfNode, substituteNode, whyRow } from './node.ts'
 import type { RelNode } from './node.ts'

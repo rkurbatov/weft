@@ -3,7 +3,7 @@
 
 import { derived } from '#weft'
 import type { Key, Watchable } from '#weft'
-import type { Feed } from './feed.ts'
+import type { Live } from './live.ts'
 import type { FieldType, ScalarField } from './fields.ts'
 import type { Part } from './shape.ts'
 
@@ -41,7 +41,7 @@ export interface ListSpec<R> {
  * shelf a person scrolls is not small, and its answer is the window — so it is
  * stated here rather than left to the caller to slice afterwards.
  */
-export function list<R>(feed: Feed<R>, spec: ListSpec<R>): Part<ListView<R>> {
+export function list<R>(feed: Live<R>, spec: ListSpec<R>): Part<ListView<R>> {
   return {
     build(name) {
       const part = spec.where === undefined ? feed : feed.only(spec.where, `${name}.only`)
@@ -82,7 +82,7 @@ export function list<R>(feed: Feed<R>, spec: ListSpec<R>): Part<ListView<R>> {
  * so a value nobody looks at costs nothing.
  */
 export function listsBy<R, F extends ScalarField<R>, Whole extends string = never>(
-  feed: Feed<R>,
+  feed: Live<R>,
   field: F,
   spec: Omit<ListSpec<R>, 'where'> & {
     /**

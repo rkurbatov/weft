@@ -6,7 +6,8 @@
 // this, and a quiet winner would be a bug nobody could see.
 
 import type { UnionNode } from '../node.ts'
-import type { Change, Key } from '#table/table.ts'
+import type { Change } from '#feed'
+import type { Key } from '#feed'
 import type { Row } from '../expr.ts'
 import type { Make, Runner } from './runner.ts'
 

@@ -1,7 +1,7 @@
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { derived, port, subscribe } from '#graph'
-import { source } from '#remote'
+import { supply } from '#remote'
 import { reconcile } from '#remote'
 import { settle, until, world } from '#testkit'
 
@@ -64,7 +64,7 @@ describe('reconciling the world', () => {
   test('following is cold: a source is not woken by being reconciled', async () => {
     const clock = world()
     let calls = 0
-    const feed = source(async () => ++calls, { now: clock.now, timers: clock.timers })
+    const feed = supply(async () => ++calls, { now: clock.now, timers: clock.timers })
     const job = reconcile(feed.state, () => {}, { timers: clock.timers })
     await settle()
     assert.equal(calls, 0)

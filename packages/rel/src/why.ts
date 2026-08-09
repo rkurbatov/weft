@@ -6,7 +6,7 @@
  *  nowhere. A join splits its composite key back into its parents'; a keeping
  *  phantom, whose right half is all null, names only its left parent. */
 
-import type { Key } from '#data/key.ts'
+import type { Key } from '#feed'
 import type { Row } from './expr.ts'
 import type { RelNode } from './shape.ts'
 import { keyPaths } from './keys.ts'

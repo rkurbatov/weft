@@ -9,7 +9,7 @@ import { createElement as h, useEffect, useMemo, useReducer, useState } from 're
 import type { ReactNode } from 'react'
 import { onNotice } from '#weft'
 import type { Notice } from '#weft'
-import { journal, trace } from '#weft'
+import { gauge, trace } from '#weft'
 import type { Trace, TickSummary, Watchable } from '#weft'
 
 export type Inspectable = Watchable<unknown> & { readonly name?: string }
@@ -63,7 +63,7 @@ export function TicksPanel({
   inspect?: readonly Inspectable[]
 }): ReactNode {
   const [, bump] = useReducer((x: number) => x + 1, 0)
-  const [book] = useState(() => journal(128, () => bump()))
+  const [book] = useState(() => gauge({ keep: 128, onTick: () => bump() }))
   const [live, setLive] = useState(true)
   const [filter, setFilter] = useState('')
   const [opened, setOpened] = useState<number | null>(null)
@@ -111,7 +111,7 @@ export function TicksPanel({
       name,
     )
 
-  const tail = book
+  const tail = book.log
     .ticks()
     .filter(tick => touched(tick, filter))
     .slice(-limit)
@@ -136,7 +136,7 @@ export function TicksPanel({
         'button',
         {
           onClick: () => {
-            book.clear()
+            book.log.clear()
             bump()
           },
         },

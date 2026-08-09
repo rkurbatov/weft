@@ -4,7 +4,7 @@
 
 /** The oracle: the whole answer, recounted from the sources. */
 
-import type { Key } from '#data/key.ts'
+import type { Key } from '#feed'
 import type { Row } from './expr.ts'
 import type { RelNode } from './shape.ts'
 import { keyOfRow } from './keys.ts'

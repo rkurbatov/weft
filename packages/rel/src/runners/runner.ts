@@ -3,7 +3,8 @@
 // fallen too far behind. Each operation's runner lives in its own file beside
 // this one; only the orchestrator knows which is which.
 
-import type { Change, Key } from '#table/table.ts'
+import type { Change } from '#feed'
+import type { Key } from '#feed'
 import type { Row } from '../expr.ts'
 import type { RelNode } from '../node.ts'
 
@@ -38,6 +39,20 @@ export interface Runner {
 /** How a runner asks for the runner of its own input, without knowing the tree. */
 export type Make = (node: RelNode) => Runner
 
+/**
+ * The difference between two pictures of one node, coalesced into a batch
+ * being assembled.
+ *
+ * Looks like the two other places that walk two maps and emit changes, and is
+ * not the same thing — a reader who unified them would break two of the
+ * three. Here the batch may already hold a change for a key from an earlier
+ * step of the same round, so the FIRST `prev` wins and the LAST `next` does:
+ * what leaves this function is one change per key describing the whole round.
+ * The view layer's settle diffs a rebuilt picture against the state it holds
+ * and keeps no such history; the table's replace also arbitrates — a snapshot
+ * may lose to what it holds, by the caller's own rule — which neither of the
+ * others does. Three answers to three questions that share a shape.
+ */
 export const diffInto = (
   out: Map<Key, Change<Row>>,
   before: Map<Key, Row>,

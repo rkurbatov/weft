@@ -7,7 +7,7 @@
 
 import { passesFilter, pureRow, oracle } from '../node.ts'
 import type { FilterNode, PureNode } from '../node.ts'
-import type { Change } from '#table/table.ts'
+import type { Change } from '#feed'
 import type { Row } from '../expr.ts'
 import type { Make, Runner } from './runner.ts'
 

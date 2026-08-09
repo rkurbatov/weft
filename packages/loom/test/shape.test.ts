@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
 import { subscribe } from '#weft'
-import { byEach, cell, feed, fold, keyedBy, list, listsBy, shape } from '#loom'
+import { byEach, cell, live, fold, keyedBy, list, listsBy, shape } from '#loom'
 import { hasIds, until } from '#testkit'
 import type { ListView } from '#loom'
 
@@ -14,7 +14,7 @@ describe('the shape of an answer', () => {
   }
 
   const make = () => {
-    const games = feed<Game>({ name: 'games', key: g => g.id })
+    const games = live<Game>({ name: 'games', key: g => g.id })
     games.take(
       { id: 1, status: 'live', start: 20, goals: 3 },
       { id: 2, status: 'live', start: 10, goals: 1 },
@@ -73,7 +73,7 @@ describe('the shape of an answer', () => {
   })
 
   test('the whole-collection fold lives even over nothing', () => {
-    const games = feed<Game>({ name: 'games', key: g => g.id })
+    const games = live<Game>({ name: 'games', key: g => g.id })
     const totals = shape({ all: fold(games, g => ({ n: g.count() })) })
     const stop = subscribe(totals.all, () => {})
     assert.deepEqual(totals.all.peek(), { n: 0 })
@@ -100,7 +100,7 @@ describe('shelves taken from the data', () => {
   })
 
   test('one shelf per value of a field, built on first look and kept after', () => {
-    const tickets = feed<Ticket>({ name: 'tickets', key: t => t.id })
+    const tickets = live<Ticket>({ name: 'tickets', key: t => t.id })
     const board = shape(
       { shelves: listsBy(tickets, 'state', { order: 'at', whole: 'all' }) },
       { name: 'board' },
@@ -121,7 +121,7 @@ describe('shelves taken from the data', () => {
   })
 
   test('a value nobody has seen yet gets its shelf when it arrives', () => {
-    const tickets = feed<Ticket>({ name: 'tickets', key: t => t.id })
+    const tickets = live<Ticket>({ name: 'tickets', key: t => t.id })
     const board = shape({ shelves: listsBy(tickets, 'state', { order: 'at' }) }, { name: 'later' })
     until(subscribe(board.shelves.done.size, () => {}))
     tickets.take(ticket(1, 'open', 3, 10))
@@ -132,7 +132,7 @@ describe('shelves taken from the data', () => {
   })
 
   test('a measure of one’s own, over a shelf’s worth of rows', () => {
-    const tickets = feed<Ticket>({ name: 'tickets', key: t => t.id })
+    const tickets = live<Ticket>({ name: 'tickets', key: t => t.id })
     const board = shape(
       {
         weight: fold(
@@ -157,7 +157,7 @@ describe('a single list, and keys stated by hand', () => {
   }
 
   test('a window moves with the cell that says where it starts', () => {
-    const rows = feed<Row>({ name: 'rows', key: r => r.id })
+    const rows = live<Row>({ name: 'rows', key: r => r.id })
     const from = cell(0)
     const board = shape(
       { page: list(rows, { order: 'at', window: { from, size: 2 } }) },
@@ -184,7 +184,7 @@ describe('a single list, and keys stated by hand', () => {
     // Nothing to learn from `key`, so the fields are named — and then the
     // shelves work as if they had been learnt.
     const rows = keyedBy(
-      feed<Row>({ name: 'rows', key: r => `${r.lane}/${String(r.id)}`.toUpperCase() }),
+      live<Row>({ name: 'rows', key: r => `${r.lane}/${String(r.id)}`.toUpperCase() }),
       'id',
     )
     const board = shape({ byLane: listsBy(rows, 'lane', { order: 'at' }) }, { name: 'stated' })

@@ -8,7 +8,8 @@
 
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
-import { attachProbe, graph, subscribe } from '#weft'
+import { subscribe } from '#weft'
+import { attachProbe, graph } from '#graph'
 import type { TickSummary } from '#weft'
 
 describe('the border of a failure', () => {

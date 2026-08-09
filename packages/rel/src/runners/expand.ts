@@ -8,7 +8,8 @@
 import { diffInto } from './runner.ts'
 import { expandRows, keyOfRow, oracle } from '../node.ts'
 import type { ExpandNode } from '../node.ts'
-import type { Change, Key } from '#table/table.ts'
+import type { Change } from '#feed'
+import type { Key } from '#feed'
 import type { Row } from '../expr.ts'
 import type { Make, Runner } from './runner.ts'
 

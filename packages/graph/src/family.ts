@@ -7,7 +7,7 @@ import type { Derived } from './graph.ts'
 export interface FamilyOptions<K, T> {
   name?: string
   /** How a key becomes a map key. Required for object keys; numbers and strings work as they are. */
-  keyOf?: (key: K) => string
+  nameOf?: (key: K) => string
   /** Ceiling on unwatched members. Watched ones are never evicted and do not count against it. */
   max?: number
   equal?: (a: T, b: T) => boolean
@@ -36,13 +36,13 @@ interface Member<K, T> {
   readonly cell: Derived<T>
 }
 
-function defaultKeyOf<K>(key: K): string {
+function defaultNameOf<K>(key: K): string {
   const kind = typeof key
   if (kind === 'string' || kind === 'number' || kind === 'boolean' || kind === 'bigint') {
     return `${kind}:${String(key)}`
   }
   throw new TypeError(
-    'weft: family needs keyOf for keys that are not string, number, boolean or bigint',
+    'weft: family needs nameOf for keys that are not string, number, boolean or bigint',
   )
 }
 
@@ -51,7 +51,7 @@ export function family<K, T>(
   options: FamilyOptions<K, T> = {},
 ): Family<K, T> {
   const name = options.name ?? 'family'
-  const keyOf = options.keyOf ?? defaultKeyOf<K>
+  const nameOf = options.nameOf ?? defaultNameOf<K>
   const max = options.max ?? 1024
   const equal = options.equal
 
@@ -83,7 +83,7 @@ export function family<K, T>(
   }
 
   const get = (key: K): Derived<T> => {
-    const id = keyOf(key)
+    const id = nameOf(key)
     const existing = members.get(id)
     if (existing !== undefined) {
       // Reordering costs a delete and an insert on every read; it only earns
@@ -119,10 +119,10 @@ export function family<K, T>(
   })
 
   api.keys = () => [...members.values()].map(m => m.key)
-  api.has = (key: K) => members.has(keyOf(key))
+  api.has = (key: K) => members.has(nameOf(key))
 
   api.evict = (key: K) => {
-    const id = keyOf(key)
+    const id = nameOf(key)
     const member = members.get(id)
     if (member === undefined || member.cell.observed) return false
     member.cell.dispose()

@@ -3,8 +3,8 @@
 
 import { derived, port } from './graph.ts'
 import type { Port, Readable } from './graph.ts'
-import { wallClock } from './time.ts'
-import type { Timers } from './time.ts'
+import { wallClock } from '#core'
+import type { Timers } from '#core'
 
 export type CommandState<T> =
   | { readonly kind: 'idle' }

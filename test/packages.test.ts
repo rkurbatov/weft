@@ -18,14 +18,17 @@ import { describe, test } from 'node:test'
 
 /** Bottom first: a package may use the ones before it, never the ones after. */
 const stack = [
-  'data', // keys, structural sharing, backoff, the notice channel
+  'core', // the machine room: structural sharing, backoff, the clock, the notice channel
   'graph', // cells, engines, regions, ticks, the journal
+  'feed', // a stream of keyed changes: the key, the contract, following one
   'line', // a measured line: offsets along it, answers over ranges of it
-  'remote', // the shape of an answer from elsewhere, sources, queries, reconciling
+  'remote', // the shape of an answer from elsewhere, supplies, queries, reconciling
   'table', // rows with a key, live views, folds, carriers and the planner
   'rel', // the relational layer: trees as data, runners, the builder
-  'keep', // disk, kept values, the outbox, its lanes and the projection over it
-  'link', // transport, addressing, the tab protocol, serving and mirroring
+  'store', // disk: the places a value can be kept, and what a cell does with one
+  'outbox', // intents written down before they are sent, their lanes and the projection
+  'wire', // what a message travels on: channels, pairs, broadcast, leadership
+  'link', // the protocol: serving a surface, mirroring it, handing it over
   'weft', // the front door: everything above, in one import
   'loom', // the dialect
 ] as const
@@ -170,5 +173,127 @@ describe('the packages', () => {
       }
     }
     assert.deepEqual(wrong, [], 'reach the neighbour by its door')
+  })
+
+  test('the machine room stays in the machine room', async () => {
+    // What `#core` holds — structural sharing, backoff arithmetic, the clock,
+    // the notice channel — is what the library is made of, not what it offers.
+    // The front door does not import it, and neither does a stand: an
+    // application asks for what the machinery buys, never for the mechanism.
+    // A name that does belong outside reaches the door through whoever owns
+    // its subject — `onNotice` comes out through the graph, which owns the
+    // subject of explaining decisions — never straight out of here.
+    const outside = [
+      'packages/weft/src/index.ts',
+      ...(await sources('demo')),
+      ...(await sources('browser')),
+    ]
+    const guilty: string[] = []
+    for (const file of outside) {
+      const text = await readFile(file, 'utf8').catch(() => '')
+      if (/from '#core(\/[^']*)?'/.test(text)) guilty.push(file)
+    }
+    assert.deepEqual(guilty, [], 'take it from the layer that owns the subject')
+  })
+
+  test('one name means one thing across the library', async () => {
+    // A name that means two things is a debugging evening for whoever meets
+    // both. There is no exception list on purpose: when a collision is real,
+    // one of the two is renamed rather than excused — the relational `source`
+    // and the delivery that used to share its name are how this rule was paid
+    // for once already.
+    const seen = new Map<string, string>()
+    const twice: string[] = []
+    for (const name of stack) {
+      for (const file of await sources(`packages/${name}/src`)) {
+        const text = await readFile(file, 'utf8')
+        for (const m of text.matchAll(
+          /^export (?:async )?(?:function|const|class|interface|type|enum) (\w+)/gm,
+        )) {
+          const exported = m[1] as string
+          const before = seen.get(exported)
+          if (before !== undefined && before !== name)
+            twice.push(`${exported}: ${before} and ${name}`)
+          else seen.set(exported, name)
+        }
+      }
+    }
+    assert.deepEqual(twice, [], 'rename one of the two')
+  })
+
+  test('the front door holds no machinery', async () => {
+    // The door is a decision, not a sum. What is behind it exists to build the
+    // library, not to write an application with: the classes behind cells, the
+    // engine and its probe, the clock, the transports under the wire, the
+    // planner's vocabulary, the constructors of an answer's states. Each is
+    // reachable through the door of the package that owns it — this test says
+    // only that the front door is not that door.
+    //
+    // A type may share a name with machinery and still belong here: `Port` as
+    // a type is what a cell is, while `Port` as a class is how one is made.
+    const machinery = [
+      'attachProbe',
+      'graph',
+      'owned',
+      'regionName',
+      'quietly',
+      'wallClock',
+      'notice',
+      'Watcher',
+      'Engine',
+      'EngineOptions',
+      'Probe',
+      'Timers',
+      'EMPTY',
+      'loading',
+      'arrived',
+      'refused',
+      'busHub',
+      'busChannel',
+      'localBroadcast',
+      'openBroadcast',
+      'overBus',
+      'sharedWorkerHub',
+      'sharedWorkerChannel',
+      'sharedWorkersExist',
+      'webLocks',
+      'leadOrFollow',
+      'Hub',
+      'HubOptions',
+      'KeepAliveOptions',
+      'Lock',
+      'LeadOptions',
+      'Broadcast',
+      'BusLike',
+      'SharedScope',
+      'ToGraph',
+      'ToWatcher',
+      'planFold',
+      'planScan',
+      'Carrier',
+      'Plan',
+      'ScanPlan',
+      'ScanCarrier',
+      'ScanForm',
+      'preserve',
+      'PRESERVE_LIMIT',
+      'backoff',
+    ]
+    const door = await sources('packages/weft/src')
+    const offered = new Set<string>()
+    for (const file of door) {
+      const text = await readFile(file, 'utf8')
+      for (const m of text.matchAll(/export (?:type )?\{([^}]*)\}/gs)) {
+        for (const name of (m[1] as string).split(',')) {
+          const clean = name.trim()
+          if (clean !== '') offered.add(clean)
+        }
+      }
+    }
+    assert.deepEqual(
+      machinery.filter(name => offered.has(name)),
+      [],
+      'reach it through the door of the package that owns it',
+    )
   })
 })

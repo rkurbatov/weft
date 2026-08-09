@@ -47,3 +47,6 @@ export type {
 
 export { field, lit, param, cmp, and, or, not, math, some, evalExpr, canonExpr } from './expr.ts'
 export type { Expr, Row } from './expr.ts'
+// The field types: which fields may be compared, ordered or added up. The
+// dialect passes them through rather than declaring a second copy.
+export type { Scalar, ScalarField, NumericField, FieldType } from './guards.ts'

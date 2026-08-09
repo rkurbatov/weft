@@ -4,7 +4,7 @@
 // need it, and a shared piece kept inside one of them would make a circle.
 
 import { derived, family } from '#graph'
-import type { Key } from '#data'
+import type { Key } from '#feed'
 import { remember } from './feeds.ts'
 import { foldOver } from './fold.ts'
 import { orderedOver, whereOver } from './views.ts'

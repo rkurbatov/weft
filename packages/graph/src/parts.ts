@@ -35,7 +35,7 @@ export function markOf(value: unknown): NodeKind | undefined {
   return kind === 'input' || kind === 'cell' || kind === 'watcher' ? kind : undefined
 }
 
-export interface Source extends Marked {
+export interface Node extends Marked {
   readonly engine: Core
   readonly name: string
   readonly observers: Set<Consumer>
@@ -52,7 +52,7 @@ export interface Consumer extends Marked {
   /** Leaf of the graph. A plain field: the hot path asks this on every mark. */
   readonly leaf: boolean
   state: State
-  readonly sources: Set<Source>
+  readonly sources: Set<Node>
   readonly observers: Set<Consumer>
   /** 1 if links made by this consumer carry demand upward, 0 otherwise. */
   contribution(): number

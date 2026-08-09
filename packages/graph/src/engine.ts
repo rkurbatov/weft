@@ -10,11 +10,11 @@
 
 import { TickTap } from './ticks.ts'
 import { CLEAN, CHECK, DIRTY } from './parts.ts'
-import type { Consumer, EngineOptions, RegionOf, Source } from './parts.ts'
+import type { Consumer, EngineOptions, RegionOf, Node } from './parts.ts'
 import { asReader, untracked } from './reading.ts'
 
 export * from './parts.ts'
-export { track, untracked } from './reading.ts'
+export { observe, untracked } from './reading.ts'
 
 /** Anything the engine takes down when it goes: watchers, and regions' teardowns. */
 interface Mortal {
@@ -151,7 +151,7 @@ export class Core {
   // ── Work ───────────────────────────────────────────────────────────────────
 
   /**
-   * Source lifecycle hooks run after the graph is quiet, never inside a
+   * Node lifecycle hooks run after the graph is quiet, never inside a
    * formula: an adapter is free to write its own cell from them.
    */
   notice(fn: () => void): void {
@@ -226,7 +226,7 @@ export class Core {
     return false
   }
 
-  detach(node: Consumer, sources: Iterable<Source>): void {
+  detach(node: Consumer, sources: Iterable<Node>): void {
     const carried = node.contribution()
     for (const s of sources) {
       s.observers.delete(node)

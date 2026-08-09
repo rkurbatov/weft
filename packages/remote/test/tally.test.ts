@@ -8,13 +8,13 @@
 
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
-import { heldOf, source, subscribe } from '#weft'
+import { heldOf, supply, subscribe } from '#weft'
 import { settle, track, until, world } from '#testkit'
 
 describe('a source counts what it did', () => {
   test('asked, answered, published', async () => {
     const clock = world()
-    const feed = source(() => Promise.resolve('answer'), {
+    const feed = supply(() => Promise.resolve('answer'), {
       name: 'plain',
       timers: clock.timers,
       now: clock.now,
@@ -31,7 +31,7 @@ describe('a source counts what it did', () => {
 
   test('a run that reports as it goes publishes more than it answers', async () => {
     const clock = world()
-    const feed = source<number>(
+    const feed = supply<number>(
       async ({ soFar }) => {
         for (let i = 1; i <= 4; i++) soFar(i)
         return 5
@@ -48,7 +48,7 @@ describe('a source counts what it did', () => {
   test('a run called off is counted, even if the body never looks at the signal', async () => {
     const clock = world()
     let step: (() => void) | undefined
-    const feed = source<number>(
+    const feed = supply<number>(
       async () => {
         // Deliberately careless: no check of the signal anywhere.
         await new Promise<void>(resolve => {
@@ -74,7 +74,7 @@ describe('a source counts what it did', () => {
 
   test('a finished run whose question is dropped is not called off', async () => {
     const clock = world()
-    const feed = source(() => Promise.resolve('answer'), {
+    const feed = supply(() => Promise.resolve('answer'), {
       name: 'quick',
       timers: clock.timers,
       now: clock.now,
@@ -92,7 +92,7 @@ describe('a source counts what it did', () => {
 
   test('a refusal is counted as a refusal, not as an answer', async () => {
     const clock = world()
-    const feed = source(() => Promise.reject(new Error('no')), {
+    const feed = supply(() => Promise.reject(new Error('no')), {
       name: 'sour',
       timers: clock.timers,
       now: clock.now,
@@ -107,7 +107,7 @@ describe('a source counts what it did', () => {
 
   test('the counters are cells: a screen watches them like anything else', async () => {
     const clock = world()
-    const feed = source(() => Promise.resolve(1), {
+    const feed = supply(() => Promise.resolve(1), {
       name: 'watched',
       timers: clock.timers,
       now: clock.now,

@@ -12,10 +12,10 @@
 // will may lay over any number of truths, each absorbing what concerns it.
 
 import { derived, watch } from '#weft'
+import { preserve } from '#core'
 import type { Watchable } from '#weft'
 import { laneDrop, lanePlace } from '#weft'
 import type { Lanes } from '#weft'
-import { preserve } from '#weft'
 import type { Note } from '#weft'
 
 export interface Lane {

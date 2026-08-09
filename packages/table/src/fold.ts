@@ -6,7 +6,7 @@
 import { derived } from '#graph'
 import type { Derived } from '#graph'
 import { carrierFor } from './carriers/index.ts'
-import { follow } from './log.ts'
+import { follow } from '#feed'
 import { planFold, TREE_WORTH_IT } from './plan.ts'
 import type { FoldTraits } from './plan.ts'
 import type { Feed, FoldSpec } from './shape.ts'

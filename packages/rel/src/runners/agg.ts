@@ -4,9 +4,10 @@
 // with an inverse runs as a running total, one without is recounted over its
 // own group — not over the whole collection.
 
-import { alike } from '#table/table.ts'
-import type { Change, Key } from '#table/table.ts'
-import { planFold } from '#table/plan.ts'
+import { alike } from '#table'
+import type { Change } from '#feed'
+import type { Key } from '#feed'
+import { planFold } from '#table'
 
 import type { Row } from '../expr.ts'
 import { foldOf, foldOne, groupOf, keyOfRow } from '../node.ts'

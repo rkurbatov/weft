@@ -9,8 +9,11 @@
 // that runs whenever what it reads changes — for the work that follows the
 // state rather than the calendar.
 
-import { owned, subscribe, untracked, wallClock } from '#weft'
-import type { Timers, Watchable } from '#weft'
+import { subscribe, untracked } from '#weft'
+import { wallClock } from '#core'
+import { owned } from '#graph'
+import type { Watchable } from '#weft'
+import type { Timers } from '#core'
 
 export interface WhenOptions {
   /**
@@ -102,7 +105,7 @@ function watchValue<T>(read: () => T, see: (value: T) => void, demand = false): 
   return stop
 }
 
-export type WhileRunning = 'drop' | 'restart' | 'queue'
+export type Overlap = 'drop' | 'restart' | 'queue'
 
 export interface WheneverOptions {
   /**
@@ -111,7 +114,7 @@ export interface WheneverOptions {
    * `queue` runs it after. Without a choice here, an application ends up with
    * the flags and booleans this word exists to remove.
    */
-  whileRunning?: WhileRunning
+  whileRunning?: Overlap
   /** Run once at once, on the value the state has now. On by default. */
   now?: boolean
   name?: string

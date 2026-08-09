@@ -5,7 +5,7 @@
 // over a row that records what it is asked for.
 
 import type { Key } from '#weft'
-import type { Feed } from './feed.ts'
+import type { Live } from './live.ts'
 
 /**
  * Which fields make a row's key.
@@ -22,7 +22,7 @@ import type { Feed } from './feed.ts'
  */
 export const keyFields = new WeakMap<object, readonly string[]>()
 
-export function keyedBy<R>(feed: Feed<R>, ...fields: Array<keyof R & string>): Feed<R> {
+export function keyedBy<R>(feed: Live<R>, ...fields: Array<keyof R & string>): Live<R> {
   keyFields.set(feed as unknown as object, fields)
   return feed
 }

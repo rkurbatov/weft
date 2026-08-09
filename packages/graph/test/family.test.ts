@@ -153,10 +153,10 @@ describe('families of cells', () => {
     assert.equal(seen, 1)
   })
 
-  test('object keys need keyOf, and then behave like any other', () => {
+  test('object keys need nameOf, and then behave like any other', () => {
     type At = { row: number; col: number }
-    assert.throws(() => family((k: At) => k.row)({ row: 1, col: 1 }), /keyOf/)
-    const at = family((k: At) => `${k.row}/${k.col}`, { keyOf: k => `${k.row}:${k.col}` })
+    assert.throws(() => family((k: At) => k.row)({ row: 1, col: 1 }), /nameOf/)
+    const at = family((k: At) => `${k.row}/${k.col}`, { nameOf: k => `${k.row}:${k.col}` })
     assert.equal(at({ row: 1, col: 2 }), at({ row: 1, col: 2 }))
     assert.equal(at({ row: 1, col: 2 }).peek(), '1/2')
     assert.equal(at.size, 1)

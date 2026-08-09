@@ -1,7 +1,7 @@
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { derived, subscribe } from '#graph'
-import { source, fresh } from '#remote'
+import { supply, fresh } from '#remote'
 import { settle, until, world } from '#testkit'
 import type { World } from '#testkit'
 
@@ -9,7 +9,7 @@ describe('freshness requirements', () => {
   /** A source that counts how many times the world was asked. */
   function counting(clock: World, options: Record<string, unknown> = {}) {
     let calls = 0
-    const feed = source(async () => ++calls, { now: clock.now, timers: clock.timers, ...options })
+    const feed = supply(async () => ++calls, { now: clock.now, timers: clock.timers, ...options })
     return { feed, calls: () => calls }
   }
 

@@ -7,7 +7,7 @@ import assert from 'node:assert/strict'
 import { batch, derived, port, subscribe, trace, wallClock } from '#graph'
 import { attachProbe } from '#graph'
 import type { TickSummary } from '#graph'
-import { journal } from '#graph'
+import { gauge } from '#graph'
 import type { Port } from '#weft'
 import { until } from '#testkit'
 
@@ -91,8 +91,7 @@ describe('waves and the journal', () => {
 
     const lived = build()
     const looking = subscribe(lived.total, () => {}) // watched: it computes inside the waves
-    const book = journal()
-    book.start()
+    const book = gauge()
     try {
       lived.price.set(5)
       lived.count.set(3)
@@ -105,14 +104,14 @@ describe('waves and the journal', () => {
       book.stop()
       looking()
     }
-    assert.equal(book.ticks().length, 3)
+    assert.equal(book.log.ticks().length, 3)
     assert.equal(lived.total.peek(), 77)
 
     const reborn = build()
-    book.replay(node => reborn.registry.get(node) as Port<unknown> | undefined)
+    book.log.replay(node => reborn.registry.get(node) as Port<unknown> | undefined)
     assert.equal(reborn.total.peek(), 77) // inputs are the whole entropy
 
-    const why = book.why('total')
+    const why = book.log.why('total')
     assert.ok(why !== undefined)
     assert.deepEqual(why.writes.map(w => w.node).toSorted(), ['count', 'price']) // the wave that last touched it, triggers included
   })

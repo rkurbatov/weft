@@ -6,7 +6,7 @@
 import assert from 'node:assert/strict'
 import { cleanupWith } from './lifetime.ts'
 import { settle } from './world.ts'
-import type { Store } from '#keep/store.ts'
+import type { Store } from '#store'
 
 export interface SlowStore {
   readonly store: Store

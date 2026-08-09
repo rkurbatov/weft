@@ -2,15 +2,15 @@
 // writer is the wire, and watching it is what asks the other side for it:
 // demand crosses the boundary by itself, so nothing has to be released by hand.
 
-import { port, untracked } from '#graph/graph.ts'
-import type { Port, Watchable } from '#graph/graph.ts'
-import { EMPTY, arrived, heldOf, refused } from '#remote/remote.ts'
-import { preserve } from '#data/preserve.ts'
-import type { Remote } from '#remote/remote.ts'
-import { wallClock } from '#graph/time.ts'
-import type { Timers } from '#graph/time.ts'
-import type { Channel, ToWatcher } from './channel.ts'
-import { notice } from '#data'
+import { port, untracked } from '#graph'
+import type { Port, Watchable } from '#graph'
+import { EMPTY, arrived, heldOf, refused } from '#remote'
+import { preserve } from '#core'
+import type { Remote } from '#remote'
+import { wallClock } from '#graph'
+import type { Timers } from '#graph'
+import type { Channel, ToWatcher } from '#wire'
+import { notice } from '#graph'
 
 /**
  * The third outcome of an ask, told apart from a refusal: no answer came and

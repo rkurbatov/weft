@@ -9,7 +9,8 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
 import { MessageChannel } from 'node:worker_threads'
-import { atOnce, handedOver, handOver, link, overWire, serve } from '#link'
+import { handedOver, handOver, link, serve } from '#link'
+import { atOnce, overWire } from '#wire'
 import { heldOf, port, subscribe } from '#weft'
 import { settle, setupWire, until } from '#testkit'
 

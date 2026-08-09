@@ -1,8 +1,8 @@
-// The async package: the shape of an answer from elsewhere, sources with their
+// The async package: the shape of an answer from elsewhere, supplies with their
 // pace and freshness, parametric queries, reconciliation.
 
-export { source, fresh, arrivalOf } from './source.ts'
-export type { Source, SourceOptions } from './source.ts'
+export { supply, fresh, arrivalOf } from './supply.ts'
+export type { Supply, SupplyPassport } from './supply.ts'
 export { query } from './query.ts'
 export type { Query, QueryOptions } from './query.ts'
 export {

@@ -34,7 +34,7 @@ import {
 import type { Row } from '#rel'
 import { relate } from '#rel'
 import { CROWDED_KEY } from '#rel/runners/join.ts'
-import { onNotice } from '#data'
+import { onNotice } from '#graph'
 import { held as owned, until } from '#testkit'
 
 describe('the relational layer', () => {

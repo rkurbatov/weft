@@ -8,15 +8,15 @@
 // own for these is an open question in the register.
 import { command, watch } from '#weft'
 import type { Command, Port, Watchable } from '#weft'
-import { feed, fold, listsBy, cell, shape, truthBy } from '#loom'
-import type { Feed, ListView, Truth } from '#loom'
+import { live, fold, listsBy, cell, shape, truthBy } from '#loom'
+import type { Live, ListView, Truth } from '#loom'
 import type { Game, GameDetails, GameOdds, RailServer, Status } from './server.ts'
 
 export type Shelf = Status | 'all'
 export const PAGE = 40
 
 export interface Rail {
-  games: Feed<Game>
+  games: Live<Game>
   shelf: Port<Shelf>
   shelves: Record<Shelf, ListView<Game>>
   /** Goals across everything live right now. A fold, not a oracle. */
@@ -44,7 +44,7 @@ export function rail(server: RailServer): Rail {
 
   /** Everything the client knows. Feeding follows the first look; a slow page
    *  loses to the live event that overtook it. */
-  const games = feed<Game>({
+  const games = live<Game>({
     name: 'games',
     key: g => g.id,
     wins: (next, standing) => next.rev >= standing.rev,

@@ -4,8 +4,8 @@
 // before it says what is expected. These say what is expected.
 
 import assert from 'node:assert/strict'
-import { subscribe } from '#graph/graph.ts'
-import type { Watchable } from '#graph/graph.ts'
+import { subscribe } from '#graph'
+import type { Watchable } from '#graph'
 import { until } from './lifetime.ts'
 
 interface Peekable<T> {

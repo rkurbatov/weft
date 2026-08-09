@@ -1,6 +1,6 @@
 // The desk's side: build it, put its face on the wire, wait.
 
-import { counters, listed, offer, overWire } from '#loom'
+import { gauge, listed, offer, overWire } from '#loom'
 import { desk } from './state.ts'
 
 const held = desk()
@@ -8,7 +8,7 @@ const held = desk()
 // What the graph on this side is doing, as cells. Not counted by hand here:
 // the library keeps these, and a page that counted them itself is how two
 // bugs got in.
-const busy = counters()
+const busy = gauge().counts
 
 offer(
   {

@@ -4,7 +4,7 @@
 
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
-import { source } from '#weft'
+import { supply } from '#weft'
 import { arrivalOf } from '#loom/react'
 import { world } from '#testkit'
 
@@ -12,7 +12,7 @@ describe('the React seam', () => {
   test('asking for the arrival is what starts the load; the demand leaves with it', async () => {
     const clock = world()
     let asked = 0
-    const feed = source(
+    const feed = supply(
       () => {
         asked++
         return Promise.resolve('answer')
@@ -37,7 +37,7 @@ describe('the React seam', () => {
 
   test('the first refusal settles the arrival', async () => {
     const clock = world()
-    const feed = source(() => Promise.reject(new Error('down')), {
+    const feed = supply(() => Promise.reject(new Error('down')), {
       name: 'sour',
       timers: clock.timers,
       now: clock.now,

@@ -8,8 +8,9 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
 import { batch, derived, heldOf, port, subscribe, wirePair } from '#weft'
-import { onNotice } from '#data'
-import { atOnce, link, serve } from '#link'
+import { onNotice } from '#graph'
+import { link, serve } from '#link'
+import { atOnce } from '#wire'
 import { settle, setupWire, track, until } from '#testkit'
 
 describe('a batch at the scale a real edit has', () => {

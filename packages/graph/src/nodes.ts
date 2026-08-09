@@ -7,9 +7,9 @@
 // Building them — in which engine, owned by which region — is the business of
 // graph.ts next door; here is only what they are.
 
-import { CHECK, CLEAN, coreForBuild, DIRTY, markOf, NODE, track } from './engine.ts'
+import { CHECK, CLEAN, coreForBuild, DIRTY, markOf, NODE, observe } from './engine.ts'
 import type { Core } from './engine.ts'
-import type { Consumer, NodeKind, Source, State } from './engine.ts'
+import type { Consumer, NodeKind, Node, State } from './engine.ts'
 
 export type Equal<T> = (a: T, b: T) => boolean
 
@@ -26,7 +26,7 @@ export interface PortOptions<T> extends DerivedOptions<T> {
 }
 
 /** Port cell: the only thing that can be written, by its single writer. */
-export class Port<T> implements Source {
+export class Port<T> implements Node {
   // Mark and shape live on the prototype, not on every node: a table can hold
   // a cell per row, and three extra slots per node are three too many.
   get [NODE](): NodeKind {
@@ -69,7 +69,7 @@ export class Port<T> implements Source {
   }
 
   get(): T {
-    track(this)
+    observe(this)
     return this.current
   }
 
@@ -97,7 +97,7 @@ export class Port<T> implements Source {
 }
 
 /** Derived cell: a formula. Nobody writes it; it recomputes when its inputs move. */
-export class Derived<T> implements Source, Consumer {
+export class Derived<T> implements Node, Consumer {
   get [NODE](): NodeKind {
     return 'cell'
   }
@@ -107,7 +107,7 @@ export class Derived<T> implements Source, Consumer {
   }
   readonly engine: Core
   state: State = DIRTY
-  readonly sources = new Set<Source>()
+  readonly sources = new Set<Node>()
   readonly observers = new Set<Consumer>()
   readonly name: string
   demand = 0
@@ -147,7 +147,7 @@ export class Derived<T> implements Source, Consumer {
   }
 
   get(): T {
-    track(this)
+    observe(this)
     this.stabilize()
     if (this.failure !== null) throw this.failure.error
     return this.value
@@ -233,7 +233,7 @@ export class Derived<T> implements Source, Consumer {
       // Equal result stops here: observers stay CHECK and settle without recomputing.
       if (changed || recovered) for (const o of this.observers) core.markDirty(o)
     } finally {
-      // Source hooks queued during the run fire here — value in place, state settled.
+      // Node hooks queued during the run fire here — value in place, state settled.
       core.leave()
     }
   }
@@ -260,7 +260,7 @@ export class Watcher implements Consumer {
   readonly engine: Core
   readonly name = '(watcher)'
   state: State = DIRTY
-  readonly sources = new Set<Source>()
+  readonly sources = new Set<Node>()
   readonly observers = new Set<Consumer>()
   private disposed = false
   private readonly body: () => void

@@ -6,10 +6,10 @@
 // decisions rather than hunted for inside a closure.
 
 import type { Readable } from '#graph'
-import type { Timers } from '#graph/time.ts'
+import type { Timers } from '#graph'
 import type { Fault, Remote } from './remote.ts'
 
-export interface SourceOptions {
+export interface SupplyPassport {
   name?: string
   /**
    * Where to count what this source does.
@@ -80,7 +80,7 @@ export interface Tally {
   readonly published: Readable<number>
 }
 
-export interface Source<T> {
+export interface Supply<T> {
   readonly name: string
   /** The state of what the world said: empty, in flight, value with an age, refused. */
   readonly state: Readable<Remote<T>>

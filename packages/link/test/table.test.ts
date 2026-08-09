@@ -7,7 +7,8 @@
 
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
-import { atOnce, link, listed, serve } from '#link'
+import { link, listed, serve } from '#link'
+import { atOnce } from '#wire'
 import { derived, port, subscribe, table, wirePair } from '#weft'
 import type { Key } from '#weft'
 import { settle, setupWire, until } from '#testkit'

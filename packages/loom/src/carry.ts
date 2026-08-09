@@ -6,18 +6,19 @@
 // mirrors.
 
 import { derived, port } from '#weft'
+import { preserve } from '#core'
 import type { Watchable } from '#weft'
 import { heldOf } from '#weft'
-import { preserve } from '#weft'
-import { journal } from '#weft'
-import { quietly } from '#weft'
+import { gauge } from '#weft'
+import { quietly } from '#graph'
 import type { TickSummary } from '#weft'
 import { serve } from '#weft'
 import type { ServeOptions } from '#weft'
 import { link } from '#weft'
 import type { LinkOptions } from '#weft'
 import type { Channel } from '#weft'
-import type { ListOffer, Lock, Mirrored } from '#weft'
+import type { ListOffer, Mirrored } from '#weft'
+import type { Lock } from '#wire'
 import { subscribe } from '#weft'
 
 export interface Offering {
@@ -64,7 +65,7 @@ export function offer(handles: Offering, channel: Channel, options: OfferOptions
   if (options.instruments !== undefined && options.instruments !== false) {
     const keep = options.instruments === true ? 64 : (options.instruments.keep ?? 64)
     const tail = port<readonly TickSummary[]>([], { name: 'loom.waves' })
-    const book = journal(keep, () => quietly(() => tail.set([...book.ticks()])))
+    const book = gauge({ keep, onTick: () => quietly(() => tail.set([...book.log.ticks()])) })
     book.start()
     stopInstruments = () => book.stop()
     cells['loom.waves'] = tail
@@ -166,8 +167,8 @@ export function adopt(channel: Channel, options: LinkOptions = {}): Adopted {
 // and serves the rest; without them the station lives right here, inline.
 // A SharedWorker carrier stays an explicit two-entry wiring for now.
 
-import { busHub, busChannel } from '#weft'
-import { leadOrFollow, webLocks } from '#weft'
+import { busChannel, busHub } from '#wire'
+import { leadOrFollow, webLocks } from '#wire'
 import { wirePair } from '#weft'
 
 export interface Carried {

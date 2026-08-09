@@ -3,7 +3,8 @@
 
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
-import { owned, port, subscribe, wirePair } from '#weft'
+import { port, subscribe, wirePair } from '#weft'
+import { owned } from '#graph'
 import { adopt, cell, laid, listed, notes, offer, region, sends, truth, truthBy, will } from '#loom'
 import type { Note } from '#weft'
 import type { Channel as Wire } from '#weft'

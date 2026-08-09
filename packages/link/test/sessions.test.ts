@@ -7,7 +7,8 @@
 
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
-import { busChannel, busHub, heldOf, port, memoryStore, serve, subscribe, within } from '#weft'
+import { heldOf, port, memoryStore, serve, subscribe, within } from '#weft'
+import { busChannel, busHub } from '#wire'
 import { link } from '#link'
 import { onBus } from '#testkit'
 

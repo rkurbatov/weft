@@ -1,15 +1,8 @@
-// Time, injectable. Tests hand in timers of their own and move time by hand;
-// everything else gets the wall clock without asking.
-
-export interface Timers {
-  set(fn: () => void, ms: number): unknown
-  clear(handle: unknown): void
-}
-
-export const wallClock: Timers = {
-  set: (fn, ms) => setTimeout(fn, ms),
-  clear: handle => clearTimeout(handle as ReturnType<typeof setTimeout>),
-}
+// Yielding the event loop: what a long run does between chunks.
+//
+// Stays with the graph rather than moving to the machine room, because it is
+// the one thing here an application calls itself — a long computation asks for
+// a turn so the page can paint and a stop message can be heard.
 
 /**
  * Give the event loop a turn.

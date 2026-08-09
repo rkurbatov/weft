@@ -1,4 +1,4 @@
-// The door of truth. One word for source and query: a question with
+// The door of truth. One word for supply and query: a question with
 // parameters is the same truth, keyed. The law of the adjective: asynchrony
 // is not a wrapper — truth reads as a plain value of a declared empty shape,
 // and flight, fault and freshness are cells standing beside it. heldOf does
@@ -8,9 +8,9 @@ import { derived } from '#weft'
 import type { Tally, Watchable } from '#weft'
 import { heldOf } from '#weft'
 import type { Remote } from '#weft'
-import { arrivalOf, source } from '#weft'
+import { arrivalOf, supply } from '#weft'
 import { query } from '#weft'
-import type { Timers } from '#weft'
+import type { Timers } from '#core'
 
 export interface TruthPassport<T> {
   /** What the value reads as before anything arrived. */
@@ -105,7 +105,7 @@ export function truth<T>(
   passport: TruthPassport<T>,
 ): Truth<T> {
   const name = passport.name ?? 'truth'
-  const feed = source<Carried<T>>(
+  const feed = supply<Carried<T>>(
     async ({ signal, soFar }) => {
       const askedAt = Date.now()
       return { value: await ask({ signal, soFar: value => soFar({ value, askedAt }) }), askedAt }

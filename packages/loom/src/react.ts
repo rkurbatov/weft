@@ -20,7 +20,7 @@ import {
   useRef,
   useSyncExternalStore,
 } from 'react'
-import { alike, arrivalOf, derived, fresh, heldOf, subscribe, untracked } from '#weft'
+import { alike, anchorShift, arrivalOf, derived, fresh, heldOf, subscribe, untracked } from '#weft'
 import type {
   Command,
   CommandState,
@@ -29,7 +29,7 @@ import type {
   Key,
   Port,
   Remote,
-  Source,
+  Supply,
   Watchable,
 } from '#weft'
 
@@ -127,7 +127,7 @@ export function useCommand<A extends unknown[], T>(cmd: Command<A, T>): CommandH
  * Read a source, stating how fresh this screen needs it. Mounting is the
  * requirement; unmounting withdraws it, and a source nobody needs goes quiet.
  */
-export function useSource<T>(feed: Source<T>, options: { within?: number } = {}): Remote<T> {
+export function useSupply<T>(feed: Supply<T>, options: { within?: number } = {}): Remote<T> {
   const { within } = options
   const view = useMemo(
     () => (within === undefined ? feed.state : fresh(feed, within)),
@@ -158,11 +158,11 @@ export function useField(field: Port<string>): InputBinding {
  * The source's value for a tree that suspends. Only a cold start suspends:
  * once anything is held, the stale keeps showing while the fresh travels, and
  * a refusal on top of a held value stays quiet here — screens that want the
- * whole story read useSource and its flat fields instead. A refusal with
+ * whole story read useSupply and its flat fields instead. A refusal with
  * empty hands is thrown to the nearest boundary.
  */
-export function useSourceValue<T>(feed: Source<T>, options: SourceValueOptions = {}): T {
-  const state = useSource(feed, options)
+export function useSupplyValue<T>(feed: Supply<T>, options: SupplyValueOptions = {}): T {
+  const state = useSupply(feed, options)
   const held = heldOf(state)
   if (held !== undefined) return held.value
   if (state.kind !== 'failed') throw arrivalOf(feed)
@@ -184,7 +184,7 @@ export function useSourceValue<T>(feed: Source<T>, options: SourceValueOptions =
  */
 const attempts = new WeakMap<object, { attempt: number; landing: Promise<void> }>()
 
-function afterAttempt<T>(feed: Source<T>, attempt: number): Promise<void> {
+function afterAttempt<T>(feed: Supply<T>, attempt: number): Promise<void> {
   const known = attempts.get(feed)
   if (known !== undefined && known.attempt === attempt) return known.landing
   const landing = new Promise<void>(resolve => {
@@ -201,7 +201,7 @@ function afterAttempt<T>(feed: Source<T>, attempt: number): Promise<void> {
   return landing
 }
 
-export interface SourceValueOptions {
+export interface SupplyValueOptions {
   /** Treat what is held as good enough for this long; older starts a load. */
   within?: number
   /**
@@ -213,7 +213,7 @@ export interface SourceValueOptions {
 }
 
 /** Is this refusal one the source will try again by itself, and soon? */
-function repeating(fault: Fault, attempt: number, options: SourceValueOptions): boolean {
+function repeating(fault: Fault, attempt: number, options: SupplyValueOptions): boolean {
   // Permanent and rejected are the world's answer, not a hiccup: no repeat is
   // coming, so waiting for one would hang the screen forever.
   if (fault !== 'transient' && fault !== 'unknown') return false
@@ -239,11 +239,11 @@ export interface KeepRowOptions<R> {
 /**
  * Hold the top drawn row in place while the list moves under it.
  *
- * A live list gains and loses rows above the window, and every such move shifts
- * the indices the window is positioned by — the screen would jump. This keeps
- * the row the reader is looking at at the same pixel by scrolling the box by
- * exactly as much as the row moved; the scroll handler then catches the window
- * up, and overscan covers the frame in between.
+ * The arithmetic — how far the box must scroll for a row that moved by so many
+ * places to stay at the same pixel — belongs to the measured line and lives
+ * there. What is left here is React's half: remember which row is being held
+ * across renders, and do the scrolling before the browser paints. The scroll
+ * handler then catches the window up, and overscan covers the frame between.
  */
 export function useKeepRow<R>(options: KeepRowOptions<R>): void {
   const { box, rowHeight, first, rows, keyOf, rankOf, reset } = options
@@ -252,11 +252,11 @@ export function useKeepRow<R>(options: KeepRowOptions<R>): void {
   useLayoutEffect(() => {
     const anchor = held.current
     if (anchor !== null && Object.is(anchor.of, reset)) {
-      const stands = rankOf(anchor.key)
-      if (stands >= 0 && stands !== anchor.rank) {
+      const move = anchorShift(anchor, rankOf, rowHeight)
+      if (move !== null) {
         const view = box.current
-        if (view !== null) view.scrollTop += (stands - anchor.rank) * rowHeight
-        held.current = { ...anchor, rank: stands }
+        if (view !== null) view.scrollTop += move.by
+        held.current = { ...anchor, rank: move.rank }
         return // the same row, restated where it now stands
       }
     }

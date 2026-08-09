@@ -5,7 +5,7 @@
 
 import { evalExpr, truthy } from './expr.ts'
 import type { Expr, Row } from './expr.ts'
-import type { Key } from '#data/key.ts'
+import type { Key } from '#feed'
 import type {
   AggNode,
   ExpandNode,

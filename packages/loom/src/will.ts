@@ -16,7 +16,7 @@ import type { Handler, Note } from '#weft'
 // renamed — the dialect and the engine call it the same thing.
 export type { Note }
 import type { Fault } from '#weft'
-import type { Timers } from '#weft'
+import type { Timers } from '#core'
 
 declare const OP: unique symbol
 

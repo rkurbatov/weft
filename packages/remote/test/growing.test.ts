@@ -10,14 +10,14 @@
 
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
-import { heldOf, query, source, subscribe } from '#weft'
+import { heldOf, query, supply, subscribe } from '#weft'
 import { settle, until, world } from '#testkit'
 
 describe('a run that puts down what it has', () => {
   test('every step is a value, and the last one is the answer', async () => {
     const clock = world()
     let step: (() => void) | undefined
-    const feed = source<number[]>(
+    const feed = supply<number[]>(
       async ({ soFar }) => {
         const built: number[] = []
         for (let i = 1; i <= 3; i++) {
@@ -55,7 +55,7 @@ describe('a run that puts down what it has', () => {
 
   test('steps arrive in order, and none is skipped', async () => {
     const clock = world()
-    const feed = source<number>(
+    const feed = supply<number>(
       async ({ soFar }) => {
         for (let i = 1; i <= 20; i++) soFar(i)
         return 21
@@ -84,7 +84,7 @@ describe('a run that puts down what it has', () => {
     const clock = world()
     let step: (() => void) | undefined
     let wrote = 0
-    const feed = source<number>(
+    const feed = supply<number>(
       async ({ soFar, signal }) => {
         for (let i = 1; i <= 5; i++) {
           await new Promise<void>(resolve => {
@@ -122,7 +122,7 @@ describe('a run that puts down what it has', () => {
     const clock = world()
     let step: (() => void) | undefined
     let heard = false
-    const feed = source<number>(
+    const feed = supply<number>(
       async ({ soFar, signal }) => {
         for (let i = 1; i <= 5; i++) {
           await new Promise<void>(resolve => {

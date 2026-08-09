@@ -2,8 +2,8 @@ import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { MessageChannel } from 'node:worker_threads'
 import { derived, port, subscribe } from '#graph'
-import { atOnce } from '#link'
-import { overWire, wirePair } from '#link'
+import { atOnce } from '#wire'
+import { overWire, wirePair } from '#wire'
 import { link, Unknown } from '#link'
 import { serve } from '#link'
 import { settle, setupWire, until } from '#testkit'
@@ -363,7 +363,7 @@ describe('the wire', () => {
       configurable: true,
     })
     try {
-      const { perFrame: frozenFrame } = await import('#link/channel.ts')
+      const { perFrame: frozenFrame } = await import('#wire')
       const ran: number[] = []
       frozenFrame(() => ran.push(1))
       await new Promise(resolve => setTimeout(resolve, 80))

@@ -7,7 +7,7 @@
  *  otherwise; a join's key is both parents' keys, the right side under its
  *  alias. Paths, not names, because a merged row nests. */
 
-import type { Key } from '#data/key.ts'
+import type { Key } from '#feed'
 import type { Row } from './expr.ts'
 import type { RelNode } from './shape.ts'
 import { readPath } from './inner.ts'

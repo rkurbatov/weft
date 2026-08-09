@@ -32,6 +32,7 @@
     "no-console": "off",
     "unicorn/prefer-string-raw": "off",
     "unicorn/no-null": "off",
+    "unicorn/require-post-message-target-origin": "off",
     "react/react-in-jsx-scope": "off"
   },
   "overrides": [

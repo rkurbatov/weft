@@ -1,8 +1,8 @@
 // Where the table lives is one decision, made here. The panel above reads the
 // station out of a cell, so replacing it is seen like any other change.
 
-import { adopt, cell, overWire } from '#loom'
-import type { Adopted, Port } from '#loom'
+import { cell, loom, worker } from '#loom'
+import type { Loomed, Port } from '#loom'
 import { mount } from '#demo/mount.tsx'
 import { App } from './App.tsx'
 import type { Task } from './state.ts'
@@ -24,11 +24,22 @@ export interface Desk {
 }
 
 function start(): Desk {
-  const worker = new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' })
-  const station: Adopted = adopt(overWire(worker))
+  // One line for the whole arrangement: the station lives in the worker, this
+  // side is a window onto it.
+  const station: Loomed = loom(
+    { name: 'desk' },
+    { wire: worker(new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' })) },
+  )
 
   // Drafts live here, on the panel's side: they are this tab's unfinished
   // typing, not the table's data, and they must outlive a row scrolling away.
+  //
+  // Synchronous on purpose, and that is the second reason. A controlled input
+  // whose value travels to a worker and back moves the caret: the keystroke
+  // renders one value, the answer arrives a frame later with another, and
+  // React puts the cursor at the end of the text. Closing the render loop on
+  // this side means the field always shows exactly what was typed; the commit
+  // to the table crosses the wire in its own time.
   const drafts = new Map<number, Port<string>>()
   const draft = (key: number): Port<string> => {
     const known = drafts.get(key)

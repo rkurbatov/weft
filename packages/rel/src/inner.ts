@@ -4,7 +4,7 @@
 
 import { paramsOfExpr, substituteExpr } from './expr.ts'
 import type { Expr, Row } from './expr.ts'
-import type { Key } from '#data/key.ts'
+import type { Key } from '#feed'
 import type { FoldDecl, RelNode, RowFn } from './shape.ts'
 import { keyPaths } from './keys.ts'
 

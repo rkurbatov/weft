@@ -11,11 +11,11 @@
 // only state ever pushed outward is the current one. Take-latest is not a
 // policy bolted on, it is the shape of the primitive.
 
-import { backoff } from '#data'
-import { derived, port, untracked, watch } from '#graph/graph.ts'
-import type { Readable } from '#graph/graph.ts'
-import { wallClock } from '#graph/time.ts'
-import type { Timers } from '#graph/time.ts'
+import { backoff } from '#core'
+import { derived, port, untracked, watch } from '#graph'
+import type { Readable } from '#graph'
+import { wallClock } from '#graph'
+import type { Timers } from '#graph'
 
 export interface ReconcileOptions<T> {
   name?: string

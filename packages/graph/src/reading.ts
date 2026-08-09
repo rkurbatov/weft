@@ -5,7 +5,7 @@
 // refused. So the reader is tracked per isolate, and the engines are compared
 // at the moment the link is made.
 
-import type { Consumer, Source } from './parts.ts'
+import type { Consumer, Node } from './parts.ts'
 
 /**
  * Who is reading right now is a property of the call stack, not of an engine:
@@ -14,9 +14,9 @@ import type { Consumer, Source } from './parts.ts'
  * the engines are compared at the moment of the link.
  */
 let active: Consumer | null = null
-let tracking: Set<Source> | null = null
+let tracking: Set<Node> | null = null
 
-export function track(source: Source): void {
+export function observe(source: Node): void {
   const consumer = active
   if (consumer === null) return
   // The boundary check, at the one gate every read passes. Several engines
@@ -52,7 +52,7 @@ export function untracked<T>(fn: () => T): T {
   }
 }
 
-function crossing(reader: Consumer, source: Source): Error {
+function crossing(reader: Consumer, source: Node): Error {
   return new Error(
     `weft: "${reader.name}" in engine "${reader.engine.name}" read "${source.name}", ` +
       `which lives in engine "${source.engine.name}". Engines do not read each other; ` +
@@ -66,7 +66,7 @@ function crossing(reader: Consumer, source: Source): Error {
 export const reader = (): Consumer | null => active
 
 /** Run a body as this consumer, keeping the links it reads again. */
-export function asReader<T>(node: Consumer, previous: Set<Source>, body: () => T): T {
+export function asReader<T>(node: Consumer, previous: Set<Node>, body: () => T): T {
   const wasActive = active
   const wasTracking = tracking
   active = node

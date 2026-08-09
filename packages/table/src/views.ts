@@ -6,8 +6,8 @@
 // filter keeps who passes.
 
 import { derived, family } from '#graph'
-import type { Key } from '#data'
-import { changeLog, follow, KEEP } from './log.ts'
+import type { Key } from '#feed'
+import { changeLog, follow, KEEP } from '#feed'
 import { sameItems } from './same.ts'
 import type { Change, Feed, Ordered, Table } from './shape.ts'
 import { tableOver } from './over.ts'

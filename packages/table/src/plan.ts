@@ -1,4 +1,4 @@
-import { notice } from '#data/notice.ts'
+import { notice } from '#graph'
 // The empirics live here and nowhere else: given what is known about a fold —
 // how big the collection is, what the operation can do — pick the carrier that
 // keeps it. The rest of the library asks this module and does not reason.

@@ -2,12 +2,13 @@
 // answers whoever asks. Watching from the other side is ordinary demand: the
 // first watcher wakes whatever the cell depends on, the last one lets it go.
 
-import { subscribe, untracked, watch } from '#graph/graph.ts'
-import type { Watchable } from '#graph/graph.ts'
-import { perFrame } from './channel.ts'
-import type { Channel, Schedule, ToGraph } from './channel.ts'
+import { subscribe, untracked, watch } from '#graph'
+import type { Watchable } from '#graph'
+import { perFrame } from '#wire'
+import type { Channel, Schedule, ToGraph } from '#wire'
 import { handedOver } from './handover.ts'
-import { feedOf, follow } from '#table'
+import { feedOf } from '#table'
+import { follow } from '#feed'
 import type { Table } from '#table'
 
 /** A list published as a difference: its rows, and how a row is identified. */
