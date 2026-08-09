@@ -5,6 +5,7 @@
 // the call site. Apart from the machinery so that it can be read as a list of
 // decisions rather than hunted for inside a closure.
 
+import type { Now } from '#core'
 import type { Readable } from '#graph'
 import type { Timers } from '#graph'
 import type { Fault, Remote } from './remote.ts'
@@ -51,7 +52,7 @@ export interface SupplyPassport {
   classify?: (error: unknown) => Fault
   /** Told when a requirement asks for more than the floor allows. */
   onUnmet?: (unmet: { source: string; wanted: number; floor: number }) => void
-  now?: () => number
+  now?: Now
   timers?: Timers
 }
 

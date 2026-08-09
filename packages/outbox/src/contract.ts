@@ -5,6 +5,7 @@
 // book writes, the schedule waits, the pump decides — and a promise read from
 // inside one of them is a promise nobody reads.
 
+import type { Now } from '#core'
 import type { Readable } from '#graph'
 import type { Timers } from '#graph'
 import type { Fault } from '#remote'
@@ -45,7 +46,7 @@ export interface OutboxOptions {
   retain?: boolean
   /** Start held: nothing is sent until `resume()`. */
   paused?: boolean
-  now?: () => number
+  now?: Now
   timers?: Timers
   newId?: () => string
   onStuck?: (entry: Note) => void

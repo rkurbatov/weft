@@ -10,19 +10,28 @@ import {
   relate,
   source as sourceNode,
 } from '#rel'
-import type { Expr, FoldDecl, RelNode, Row } from '#rel'
+import type { Expr, FoldDecl, MustBeComparable, MustBeNumber, RelNode, Row } from '#rel'
 import type { Table } from '#weft'
 import { tableOfLive } from './live.ts'
 import type { Live } from './live.ts'
 import { keyFieldsOf } from './keys.ts'
-import type { Answers, FieldType, NumericField, Piece, ScalarField, ScanBy } from './fields.ts'
+import type { Answers, FieldType, Piece, ScanBy } from './fields.ts'
 import type { Part } from './shape.ts'
 
-/** What one group may be asked for. The row type is carried by the toolkit,
- *  so a field name is checked against it and a typo does not compile. */
+/**
+ * What one group may be asked for. The row type is carried by the toolkit, so
+ * a field name is checked against it and a typo does not compile.
+ *
+ * The names are taken loosely and judged inside, rather than constrained by
+ * `F extends ScalarField<R>`: a constraint puts the whole union of legal
+ * fields into the error message, and for a wide row that is a wall of text
+ * with the complaint buried in it. Judged inside, the message names the
+ * complaint itself — `NotANumberField<"title">` — and, when the field is
+ * simply misspelled, says that instead.
+ */
 export interface Group<R> {
   /** The value this group stands under. */
-  key<F extends ScalarField<R>>(field: F): Piece<FieldType<R, F>>
+  key<F extends string>(field: MustBeComparable<R, F>): Piece<FieldType<R, F>>
   count(): Piece<number>
   /**
    * A number added up over the group: a field, or a measure of your own for
@@ -30,14 +39,17 @@ export interface Group<R> {
    * measure is a closure, so a tree holding one cannot travel to another
    * implementation; that is the price and it is stated in the tree.
    */
-  sum(field: NumericField<R> | ((row: R) => number)): Piece<number>
-  min<F extends ScalarField<R>>(field: F): Piece<FieldType<R, F> | null>
-  max<F extends ScalarField<R>>(field: F): Piece<FieldType<R, F> | null>
+  sum<F extends string>(field: MustBeNumber<R, F> | ((row: R) => number)): Piece<number>
+  min<F extends string>(field: MustBeComparable<R, F>): Piece<FieldType<R, F> | null>
+  max<F extends string>(field: MustBeComparable<R, F>): Piece<FieldType<R, F> | null>
   /** The group's rows themselves — no projection, no field list. Order them
    *  by a field when the shelf has an order of its own. */
   rows(order?: ScanBy<R>): Piece<R[]>
   /** One field of every row in the group. */
-  rowsOf<F extends ScalarField<R>>(field: F, order?: ScanBy<R>): Piece<Array<FieldType<R, F>>>
+  rowsOf<F extends string>(
+    field: MustBeComparable<R, F>,
+    order?: ScanBy<R>,
+  ): Piece<Array<FieldType<R, F>>>
 }
 
 export const orderOf = <R>(
@@ -50,20 +62,25 @@ export const orderOf = <R>(
   return many.map(o => (typeof o === 'string' ? { field: o } : o))
 }
 
+// The complaint types are a compile-time device: at runtime a field name is
+// always a string, and this is where that is said once instead of at every
+// call below.
+const named = (field: unknown): string => field as string
+
 export const toolkit = <R>(): Group<R> => ({
   // A by-field is already in the group's row: `count` of it is not needed,
   // the value is written back from the group key itself.
-  key: f => ({ decl: { fold: 'min', of: fieldExpr(f) } }) as never,
+  key: f => ({ decl: { fold: 'min', of: fieldExpr(named(f)) } }) as never,
   count: () => ({ decl: { fold: 'count' } }),
   sum: f =>
     ({
       decl: {
         fold: 'sum',
-        of: typeof f === 'function' ? (f as (row: Row) => unknown) : fieldExpr(f),
+        of: typeof f === 'function' ? (f as (row: Row) => unknown) : fieldExpr(named(f)),
       },
     }) as never,
-  min: f => ({ decl: { fold: 'min', of: fieldExpr(f) } }),
-  max: f => ({ decl: { fold: 'max', of: fieldExpr(f) } }),
+  min: f => ({ decl: { fold: 'min', of: fieldExpr(named(f)) } }),
+  max: f => ({ decl: { fold: 'max', of: fieldExpr(named(f)) } }),
   rows: order => {
     const by = orderOf<R>(order)
     return { decl: { fold: 'collect', ...(by === undefined ? {} : { by }) } } as never
@@ -71,7 +88,7 @@ export const toolkit = <R>(): Group<R> => ({
   rowsOf: (f, order) => {
     const by = orderOf<R>(order)
     return {
-      decl: { fold: 'collect', of: fieldExpr(f), ...(by === undefined ? {} : { by }) },
+      decl: { fold: 'collect', of: fieldExpr(named(f)), ...(by === undefined ? {} : { by }) },
     } as never
   },
 })
@@ -90,9 +107,9 @@ export const partsOf = <R, S extends Record<string, Piece<unknown>>>(
 }
 
 /** Rows grouped by a field; the form describes one group. */
-export function byEach<R, F extends ScalarField<R>, S extends Record<string, Piece<unknown>>>(
+export function byEach<R, F extends string, S extends Record<string, Piece<unknown>>>(
   feed: Live<R>,
-  by: F,
+  by: MustBeComparable<R, F>,
   form: (g: Group<R>) => S,
   where?: Expr | ((row: R) => boolean),
 ): Part<Watchable<Array<Answers<S>>>> {

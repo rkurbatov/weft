@@ -140,8 +140,12 @@ export class Rel<R> {
   }
 
   /** The raw door: an Expr as data keeps the canon, a closure spends it. */
-  filter(test: Expr | RowFn): Rel<R> {
-    return this.grow(filterNode(this.node, test))
+  filter(test: Expr | ((row: R) => unknown)): Rel<R> {
+    // The tree holds `RowFn` — a function over a nameless row — because a tree
+    // that travels cannot carry the caller's row type with it. The type is a
+    // promise to whoever writes the closure, kept here and dropped at the edge
+    // of the node; this cast is that edge, said once.
+    return this.grow(filterNode(this.node, test as Expr | RowFn))
   }
 
   /** A computed field. The value's type is declared, not inferred — the
@@ -149,9 +153,9 @@ export class Rel<R> {
    *  oracle hold it to account instead. */
   with<N extends string, T>(
     name: N & MustBeFree<R, N>,
-    of: Expr | RowFn,
+    of: Expr | ((row: R) => T),
   ): Rel<Flat<R & { [K in N]: T }>> {
-    return this.grow(pureNode(this.node, { fields: { [name]: of } }))
+    return this.grow(pureNode(this.node, { fields: { [name]: of as Expr | RowFn } }))
   }
 
   pick<F extends string>(...fields: Array<F & MustBeAField<R, F>>): Rel<Pick<R, F & keyof R>> {
@@ -168,7 +172,7 @@ export class Rel<R> {
       on:
         | MustMatch<R, T, F & MustBeComparable<R, F>, G & MustBeComparable<T, G>>
         | ReadonlyArray<MustMatch<R, T, F & MustBeComparable<R, F>, G & MustBeComparable<T, G>>>
-      residual?: Expr | RowFn
+      residual?: Expr | ((row: R) => unknown)
       keeping?: Keep
     },
   ): Rel<Flat<R & { [K in A]: Keep extends true ? T | null : T }>> {
@@ -182,7 +186,7 @@ export class Rel<R> {
       joinNode(this.node, other.node, {
         as: spec.as,
         on: pairs.map(([left, right]) => ({ left, right })),
-        ...(spec.residual === undefined ? {} : { residual: spec.residual }),
+        ...(spec.residual === undefined ? {} : { residual: spec.residual as Expr | RowFn }),
         ...(spec.keeping === true ? { keeping: true } : {}),
       }),
       other.params,
@@ -194,7 +198,7 @@ export class Rel<R> {
   groupBy<F extends string, S extends Record<string, Fold<unknown>>>(
     by: (F & MustBeComparable<R, F>) | ReadonlyArray<F & MustBeComparable<R, F>>,
     form: (g: Folds<R>) => S,
-  ): Rel<{ [K in F]: FieldType<R, K> } & FoldAnswers<S>> {
+  ): Rel<Flat<{ [K in F]: FieldType<R, K> } & FoldAnswers<S>>> {
     const fields = (typeof by === 'string' ? [by] : by) as readonly string[]
     const declared = form(toolkit<R>())
     const folds: Record<string, FoldDecl> = {}
@@ -237,7 +241,7 @@ export class Rel<R> {
    *  whole is. The carrier is chosen by the same door as folds. */
   scan<N extends string = never, T extends string = never, S extends string = never>(spec: {
     by: ScanOrder<R>
-    step: (S & MustBeNumber<R, S>) | Expr | RowFn
+    step: (S & MustBeNumber<R, S>) | Expr | ((row: R) => number)
     /** Name it only if the screen shows it per row: naming asks for the carry
      *  to be written into every row, and over a long list the plan takes that
      *  back — the view answers offsets either way. */
@@ -251,7 +255,7 @@ export class Rel<R> {
     return this.grow(
       scanNode(this.node, {
         order: order.map(o => (typeof o === 'string' ? { field: o } : o)),
-        step: typeof spec.step === 'string' ? fieldExpr(spec.step) : spec.step,
+        step: typeof spec.step === 'string' ? fieldExpr(spec.step) : (spec.step as Expr | RowFn),
         ...(spec.as === undefined ? {} : { as: spec.as }),
         ...(spec.through === undefined ? {} : { through: spec.through }),
         ...(spec.from === undefined ? {} : { from: spec.from }),

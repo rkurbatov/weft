@@ -4,7 +4,7 @@
 import { derived, port } from './graph.ts'
 import type { Port, Readable } from './graph.ts'
 import { wallClock } from '#core'
-import type { Timers } from '#core'
+import type { Now, Timers } from '#core'
 
 export type CommandState<T> =
   | { readonly kind: 'idle' }
@@ -37,7 +37,7 @@ export interface CommandOptions {
    */
   calm?: number
   timers?: Timers
-  now?: () => number
+  now?: Now
 }
 
 export interface Command<A extends unknown[], T> {

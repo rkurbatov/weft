@@ -4,6 +4,7 @@
 // and flight, fault and freshness are cells standing beside it. heldOf does
 // not exist in application code.
 
+import type { Now } from '#core'
 import { derived } from '#weft'
 import type { Tally, Watchable } from '#weft'
 import { heldOf } from '#weft'
@@ -25,7 +26,7 @@ export interface TruthPassport<T> {
   keep?: number
   name?: string
   timers?: Timers
-  now?: () => number
+  now?: Now
 }
 
 export interface Truth<T> {

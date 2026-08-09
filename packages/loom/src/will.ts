@@ -5,6 +5,7 @@
 // sender that creates state must hand the key to the world, and the world
 // must recognize a repeat by it.
 
+import type { Now } from '#core'
 import { derived, port } from '#weft'
 import type { Watchable } from '#weft'
 import { bestStore } from '#weft'
@@ -71,7 +72,7 @@ export interface WillPassport {
   judge?: (error: unknown) => Fault
   retry?: number
   timers?: Timers
-  now?: () => number
+  now?: Now
 }
 
 export interface WillBase<D extends WillDict> {

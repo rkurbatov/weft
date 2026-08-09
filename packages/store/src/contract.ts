@@ -4,6 +4,7 @@
 // `idb.ts` one of them, `keep.ts` what a cell does with any of them. A promise
 // read from inside one implementation is a promise nobody reads.
 
+import type { Now } from '#core'
 import type { Watchable } from '#graph'
 
 /** Why something on disk was not put back. */
@@ -19,7 +20,7 @@ export interface KeepOptions<T> {
   version?: number
   /** Anything older than this is not put back. */
   maxAge?: number
-  now?: () => number
+  now?: Now
   /** Rescue what an older version wrote. Return undefined to drop it. */
   migrate?: (stored: unknown, from: number) => T | undefined
   onDropped?: (why: Dropped, key: string) => void

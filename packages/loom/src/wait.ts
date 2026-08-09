@@ -115,8 +115,15 @@ export interface WheneverOptions {
    * the flags and booleans this word exists to remove.
    */
   whileRunning?: Overlap
-  /** Run once at once, on the value the state has now. On by default. */
-  now?: boolean
+  /**
+   * Run once at the start, on the value the state already has. On by default.
+   *
+   * Called `atStart` and not `now`: `now` elsewhere in the library is a clock —
+   * `now?: () => number`, what a command, the outbox and a kept value read the
+   * time from — and one word cannot be a clock in four places and a boolean in
+   * the fifth.
+   */
+  atStart?: boolean
   name?: string
 }
 
@@ -224,7 +231,7 @@ export function whenever<T>(
   const stop = watchValue(read, value => {
     if (first) {
       first = false
-      if (options.now === false) return
+      if (options.atStart === false) return
     }
     see(value)
   })

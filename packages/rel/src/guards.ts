@@ -63,11 +63,29 @@ export interface FieldAlreadyTaken<N> {
   readonly name: N
 }
 
-/** `F` if it names a number, otherwise a type whose name is the complaint. */
-export type MustBeNumber<R, F extends string> = F extends NumericField<R> ? F : NotANumberField<F>
-export type MustBeComparable<R, F extends string> =
-  F extends ScalarField<R> ? F : NotAComparableField<F>
-export type MustHoldRows<R, F extends string> = F extends RowsField<R> ? F : NotAFieldOfRows<F>
+/**
+ * `F` if it names a number, otherwise a type whose name is the complaint.
+ *
+ * Absence is asked about first, and the two answers are different on purpose:
+ * a misspelled name and a name that holds the wrong kind of value are
+ * different mistakes, and telling someone their `titel` "does not hold a
+ * number" sends them looking at the wrong thing.
+ */
+export type MustBeNumber<R, F extends string> = F extends keyof R & string
+  ? F extends NumericField<R>
+    ? F
+    : NotANumberField<F>
+  : NoSuchField<F>
+export type MustBeComparable<R, F extends string> = F extends keyof R & string
+  ? F extends ScalarField<R>
+    ? F
+    : NotAComparableField<F>
+  : NoSuchField<F>
+export type MustHoldRows<R, F extends string> = F extends keyof R & string
+  ? F extends RowsField<R>
+    ? F
+    : NotAFieldOfRows<F>
+  : NoSuchField<F>
 export type MustBeAField<R, F extends string> = F extends keyof R & string ? F : NoSuchField<F>
 /** A name a row does not have yet: adding one it has would hide the old value. */
 export type MustBeFree<R, N extends string> = N extends keyof R ? FieldAlreadyTaken<N> : N

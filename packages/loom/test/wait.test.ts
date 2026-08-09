@@ -137,7 +137,7 @@ describe('a standing handler', () => {
         value => {
           seen.push(value)
         },
-        { now: false },
+        { atStart: false },
       ).stop,
     )
 
@@ -161,7 +161,7 @@ describe('a standing handler', () => {
             release = resolve
           })
         },
-        { now: false },
+        { atStart: false },
       ).stop,
     )
     void standing
@@ -193,7 +193,7 @@ describe('a standing handler', () => {
             release = resolve
           })
         },
-        { now: false, whileRunning: 'queue' },
+        { atStart: false, whileRunning: 'queue' },
       ).stop,
     )
 
@@ -236,7 +236,7 @@ describe('a standing handler', () => {
           if (value === 1) return new Promise(resolve => { release = resolve })
           return undefined
         },
-        { now: false, whileRunning: 'queue' },
+        { atStart: false, whileRunning: 'queue' },
       )
       const turn = () => new Promise(resolve => setTimeout(resolve, 0))
       owed.set(1); await turn()
@@ -273,7 +273,7 @@ describe('a standing handler', () => {
           await new Promise<void>(resolve => setTimeout(resolve, 5))
           if (signal.aborted) quit.push(value)
         },
-        { now: false, whileRunning: 'restart' },
+        { atStart: false, whileRunning: 'restart' },
       ).stop,
     )
 
@@ -299,7 +299,7 @@ describe('a standing handler', () => {
         await new Promise<void>(resolve => setTimeout(resolve, 5))
         aborted = signal.aborted
       },
-      { now: false },
+      { atStart: false },
     )
 
     owed.set(1)

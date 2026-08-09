@@ -50,3 +50,14 @@ export type { Expr, Row } from './expr.ts'
 // The field types: which fields may be compared, ordered or added up. The
 // dialect passes them through rather than declaring a second copy.
 export type { Scalar, ScalarField, NumericField, FieldType } from './guards.ts'
+// And the complaints themselves: a layer above states a field name loosely and
+// judges it with these, so the compiler names what is wrong instead of listing
+// every field that would have been legal.
+export type {
+  MustBeAField,
+  MustBeComparable,
+  MustBeFree,
+  MustBeNumber,
+  MustHoldRows,
+  MustMatch,
+} from './guards.ts'

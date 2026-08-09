@@ -94,3 +94,24 @@ describe('the types of the query builder', () => {
     orders.scan({ by: 'id', step: 'client' as never as 'nope' })
   })
 })
+
+test('a closure in the builder knows the row it is given', () => {
+  // Before this the builder took `RowFn` — a function over a nameless row — so
+  // a correct closure had to be annotated by hand and a wrong one complained
+  // about `Row`, not about the field. The row type is a promise to whoever
+  // writes the closure; the tree below still holds the nameless form, because
+  // a tree that travels cannot carry a caller's types with it.
+  interface Sale {
+    readonly id: number
+    readonly sum: number
+  }
+  const orders = from<Sale>('sales', ['id'])
+
+  const doubled = orders.with('twice', row => row.sum * 2).filter(row => row.sum > 10)
+
+  // @ts-expect-error — the row has no such field, and that is what it says
+  const wrong = orders.with('twice', row => row.nope * 2)
+
+  void doubled
+  void wrong
+})
