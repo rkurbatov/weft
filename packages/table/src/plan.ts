@@ -41,6 +41,28 @@ export const TREE_SPAN = 512
 /** A scan's carrier: a prefix line of plain numbers, or an honest oracle of
  *  the tail from the edit. The same door, the same announcement. */
 export type ScanCarrier = 'offsets' | 'tail'
+// ── The planner's one licence ────────────────────────────────────────────────
+//
+// A plan may choose only between ways of arriving at the SAME answer: a clever
+// structure that pays upkeep to be quick under change, or the naive walk that
+// pays nothing and is quick while the collection is small. That is the whole
+// of what is being decided here — a tree against a walk, a line against a
+// tail — and either choice is invisible from outside except in the time it
+// takes.
+//
+// Anything that would change WHAT comes back is not the planner's to decide,
+// however expensive the honest answer is. Where a cheaper answer is a
+// different answer, the plan says the price out loud and pays it: a warning on
+// the notice channel, and the thing the caller asked for. This is not a rule
+// of taste — the version that broke it dropped a field the builder's type
+// promises, so a table under the limit was right in every test and `undefined`
+// in production the day it grew.
+//
+// Two consequences worth stating, because both were once written the other way:
+//   · a named carry is kept at any size — naming it is the WHAT;
+//   · the form of an unnamed carry is free to change, because nothing outside
+//     can tell one from the other.
+
 /** Where the carry lives: written into every row, or answered when asked.
  *  Port is what a ledger's balance column wants — a short list where the
  *  running total is shown. Asked is what a virtualised list wants: an edit

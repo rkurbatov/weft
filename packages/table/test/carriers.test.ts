@@ -16,9 +16,10 @@ import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
 import { carrierFor, runningCarrier, treeCarrier } from '../src/carriers/index.ts'
 import type { FoldCarrier, FoldWork, Rows } from '../src/carriers/index.ts'
-import { planFold, TREE_SPAN, TREE_WORTH_IT } from '../src/plan.ts'
+import { planFold, planScan, STORED_CARRY_LIMIT, TREE_SPAN, TREE_WORTH_IT } from '../src/plan.ts'
 import { onNotice } from '#graph'
 import type { Plan } from '../src/plan.ts'
+import type { Notice } from '#graph'
 import { subscribe, watch } from '#graph'
 import { table } from '../src/table.ts'
 import type { Change } from '../src/table.ts'
@@ -343,5 +344,43 @@ describe('a fold through the table, where the thresholds decide', () => {
 
     t.drop(3) // a hole, not a shift: the same block recounts, answers still agree
     assert.equal(fast.peek(), slow.peek())
+  })
+})
+
+describe("the planner's one licence", () => {
+  test('a named carry is kept whatever the size, because naming it is the what', () => {
+    // The line the planner may not cross. A carrier is a way of arriving at the
+    // same answer and may change with the size; a named carry is a field the
+    // caller's type promises on every row, and dropping it past a limit made a
+    // table right in every test and wrong in production the day it grew.
+    const small = planScan('small', { size: 10, numeric: true, named: true })
+    const huge = planScan('huge', { size: 1_000_000, numeric: true, named: true })
+
+    assert.equal(small.form, 'stored')
+    assert.equal(
+      huge.form,
+      'stored',
+      'the field was asked for; the size is not a licence to drop it',
+    )
+    assert.notEqual(small.carrier, huge.carrier, 'how it is carried is free to differ')
+  })
+
+  test('an unnamed carry may be carried however is cheapest', () => {
+    // Nothing outside can tell the forms apart when no field was named, so the
+    // planner is free — this is the case the licence exists for.
+    const small = planScan('small.unnamed', { size: 10, numeric: true, named: false })
+    const huge = planScan('huge.unnamed', { size: 1_000_000, numeric: true, named: false })
+    assert.equal(small.form, 'asked')
+    assert.equal(huge.form, 'asked')
+  })
+
+  test('the price of a named carry past the limit is said out loud', () => {
+    const said: Notice[] = []
+    until(onNotice(note => said.push(note)))
+    planScan('loud', { size: STORED_CARRY_LIMIT, numeric: true, named: true })
+
+    const about = said.find(note => note.kind === 'scan-plan')
+    assert.equal(about?.level, 'warn', 'a warning, not a note')
+    assert.equal(about?.message.includes('rewrites the tail'), true, 'and it says what it costs')
   })
 })

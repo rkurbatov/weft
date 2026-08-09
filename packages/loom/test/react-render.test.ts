@@ -177,7 +177,13 @@ describe('the React seam, rendered', () => {
     let up = false
     const flaky = supply(
       () => (up ? Promise.resolve('here') : Promise.reject(new Error('down for now'))),
-      { name: 'flaky', retry: 5 },
+      // No jitter, and a wait long enough that the number of attempts inside
+      // the window below is arithmetic rather than a race. With the default
+      // spread the retries scatter over (0, wait], and on an unlucky run four
+      // of them landed inside twenty milliseconds — past the seam's patience of
+      // three, so the boundary painted and the test failed once in a while. The
+      // seam was right every time; the test was measuring the dice.
+      { name: 'flaky', retry: 40, jitter: () => 0 },
     )
     function Shows(): ReactNode {
       return h('b', null, useSupplyValue(flaky))
@@ -189,13 +195,14 @@ describe('the React seam, rendered', () => {
     await act(async () => {
       await wait(20)
     })
-    // The old behaviour painted the boundary here, and no later success could
-    // take it down.
+    // Inside the first wait: one refusal has landed, the next attempt is still
+    // ahead. The old behaviour painted the boundary here, and no later success
+    // could take it down.
     assert.equal(shown.el.textContent, 'wait')
 
     up = true
     await act(async () => {
-      await wait(60)
+      await wait(120)
     })
     assert.equal(shown.el.textContent, 'here')
     shown.unmount()
