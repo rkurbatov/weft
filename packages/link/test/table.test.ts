@@ -9,9 +9,10 @@ import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
 import { link, listed, serve } from '#link'
 import { atOnce } from '#wire'
+import type { Channel } from '#wire'
 import { derived, port, subscribe, table, wirePair } from '#weft'
 import type { Key } from '#weft'
-import { settle, setupWire, until } from '#testkit'
+import { settle, setupWire, until, world } from '#testkit'
 
 interface Row {
   id: number
@@ -431,5 +432,62 @@ describe('losing batches', () => {
 
     const shown = rowsOf(mirror).map(row => row.id)
     assert.deepEqual(shown, [13, 14, 15, 16], 'the window is whole, its oldest row included')
+  })
+})
+
+describe('a catch-up that goes unanswered', () => {
+  test('is asked for again, and stops the moment the snapshot lands', async () => {
+    // The flag that keeps one lost batch from becoming a storm of asks is also
+    // a lock, and this is the case where the key is lost: the ask itself does
+    // not reach the station. Between workers that cannot happen; over a
+    // network it can, and then the mirror would wait forever.
+    const time = world()
+
+    // A channel this side can speak into and nobody answers, and that the test
+    // can speak back on: the station never hears the ask, which is exactly the
+    // incident under test.
+    const asked: Array<{ kind: string }> = []
+    let toMirror: ((message: unknown) => void) | undefined
+    const deaf: Channel = {
+      send: message => {
+        asked.push(message as { kind: string })
+      },
+      listen: handler => {
+        toMirror = handler
+        return () => {
+          toMirror = undefined
+        }
+      },
+    }
+
+    const seen = link(deaf, { timers: time.timers, askAgain: 1000 })
+    const mirror = seen.table<Row>('rows')
+    until(subscribe(mirror.rows, () => {}))
+    await settle()
+    const followId = (asked.find(m => m.kind === 'follow') as { id: number } | undefined)?.id ?? 1
+
+    // A batch from a state this side is not in: the mirror asks to catch up.
+    toMirror?.({ kind: 'changed', id: followId, from: 99, to: 100, changes: [] })
+    await settle()
+    const first = asked.filter(m => m.kind === 'catchUp').length
+    assert.equal(first, 1, 'asked once for the incident')
+
+    await time.advance(1000)
+    await settle()
+    assert.equal(
+      asked.filter(m => m.kind === 'catchUp').length,
+      2,
+      'and again, because nothing came back',
+    )
+
+    await time.advance(2000)
+    await settle()
+    assert.equal(
+      asked.filter(m => m.kind === 'catchUp').length,
+      3,
+      'the wait doubles, as it does everywhere else',
+    )
+
+    seen.close()
   })
 })

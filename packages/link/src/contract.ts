@@ -229,6 +229,16 @@ export interface LinkOptions {
   linger?: number
   timers?: Timers
   /**
+   * How long to wait before asking again for a catch-up that went unanswered.
+   * Doubles per attempt, capped at `askAgainCap`.
+   *
+   * The ask can be lost like anything else on a wire, and the flag that keeps
+   * one incident from becoming a storm would then never come down. Between
+   * workers this is theory; over a network it is a Tuesday.
+   */
+  askAgain?: number
+  askAgainCap?: number
+  /**
    * The station refused to serve this side — it holds somebody else's
    * household. Nothing will ever arrive; the screen should say so rather than
    * spin. Without a handler the refusal is thrown, since silence here looks

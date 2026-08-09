@@ -2,6 +2,7 @@
 // writer is the wire, and watching it is what asks the other side for it:
 // demand crosses the boundary by itself, so nothing has to be released by hand.
 
+import { backoff } from '#core'
 import { port, untracked } from '#graph'
 import type { Port, Watchable } from '#graph'
 import { EMPTY, arrived, heldOf, refused } from '#remote'
@@ -43,6 +44,8 @@ export function link(channel: Channel, options: LinkOptions = {}): Link {
   const within = options.within ?? 10_000
   const linger = options.linger ?? 15_000
   const timers = options.timers ?? wallClock
+  const askAgain = options.askAgain ?? 1000
+  const askAgainCap = options.askAgainCap ?? askAgain * 32
   const mirrors = new Map<string, { id: number; cell: Port<Remote<unknown>> }>()
   /** Which table each follow is for, so an arriving batch finds its rows. */
   const byTable = new Map<number, string>()
@@ -115,6 +118,7 @@ export function link(channel: Channel, options: LinkOptions = {}): Link {
         made.rows.set([...made.held.values()])
         made.cold.set(false)
         made.catchingUp.set(false)
+        stopAsking(made)
         return
       }
       case 'changed': {
@@ -135,7 +139,7 @@ export function link(channel: Channel, options: LinkOptions = {}): Link {
           if (untracked(() => made.catchingUp.peek())) return
           made.catchingUp.set(true)
           made.caughtUp.set(made.caughtUp.peek() + 1)
-          channel.send({ kind: 'catchUp', id: message.id, since: made.at })
+          askToCatchUp(made, message.id)
           return
         }
         made.received.set(made.received.peek() + message.changes.length)
@@ -153,6 +157,7 @@ export function link(channel: Channel, options: LinkOptions = {}): Link {
             : message.order.map(key => made.held.get(key)).filter(row => row !== undefined),
         )
         made.catchingUp.set(false)
+        stopAsking(made)
         return
       }
       case 'failed': {
@@ -257,8 +262,48 @@ export function link(channel: Channel, options: LinkOptions = {}): Link {
       caughtUp: Port<number>
       held: Map<unknown, unknown>
       at: number
+      /** The timer waiting to ask again, when the first ask went unanswered. */
+      asking: unknown
+      /** How many asks have gone unanswered, for the backoff. */
+      attempt: number
     }
   >()
+
+  /**
+   * Ask the station to send the whole table again, and keep asking until it
+   * does.
+   *
+   * The flag that stops a storm of asks is also a lock, and a lock with one
+   * key is a lock that can be lost: if the ask itself does not survive the
+   * wire — a dropped packet, a station restarting mid-question — the flag
+   * stays up and the mirror waits for a snapshot nobody is going to send.
+   * Between workers this never happens, because nothing is lost between
+   * workers; over a network it happens on a bad afternoon.
+   *
+   * So the ask repeats while the flag is up, with the same doubling wait the
+   * rest of the library uses for the same reason. The arriving snapshot both
+   * lowers the flag and stops the timer; nothing else does.
+   */
+  function askToCatchUp(
+    made: { id: number; at: number; asking: unknown; attempt: number },
+    id: number,
+  ): void {
+    channel.send({ kind: 'catchUp', id, since: made.at })
+    made.attempt += 1
+    made.asking = timers.set(
+      () => {
+        askToCatchUp(made, id)
+      },
+      backoff(made.attempt, askAgain, askAgainCap),
+    )
+  }
+
+  /** Stop asking: the answer came, or the mirror is being let go of. */
+  function stopAsking(made: { asking: unknown; attempt: number }): void {
+    if (made.asking !== undefined) timers.clear(made.asking)
+    made.asking = undefined
+    made.attempt = 0
+  }
 
   function tableOf<R>(name: string): Mirrored<R> {
     const known = tables.get(name)
@@ -288,6 +333,8 @@ export function link(channel: Channel, options: LinkOptions = {}): Link {
       caughtUp: port(0, { name: `${name}.caughtUp` }),
       held: new Map<unknown, unknown>(),
       at: 0,
+      asking: undefined,
+      attempt: 0,
     }
     tables.set(name, made)
     byTable.set(id, name)
@@ -339,6 +386,9 @@ export function link(channel: Channel, options: LinkOptions = {}): Link {
       }
       stopListening()
       rejectAll(() => new Unknown('weft: the link closed before an answer came'))
+      // A catch-up still being asked for outlives the link otherwise: the
+      // timer holds the process open and asks a channel nobody is listening to.
+      for (const made of tables.values()) stopAsking(made)
       for (const held of lingering) timers.clear(held as never)
       lingering.clear()
       mirrors.clear()
