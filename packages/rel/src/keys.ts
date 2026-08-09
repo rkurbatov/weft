@@ -9,7 +9,7 @@
 
 import type { Key } from '#feed'
 import type { Row } from './expr.ts'
-import type { RelNode } from './shape.ts'
+import type { RelNode } from './contract.ts'
 import { readPath } from './inner.ts'
 
 export function keyPaths(node: RelNode): ReadonlyArray<readonly string[]> {

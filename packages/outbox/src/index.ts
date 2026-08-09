@@ -6,7 +6,7 @@
 // what an intent moves.
 
 export { outbox } from './outbox.ts'
-export type { Outbox, OutboxOptions, Note, NoteState, Handler } from './shape.ts'
+export type { Outbox, OutboxOptions, Note, NoteState, Handler } from './contract.ts'
 export { projected } from './project.ts'
 export type { ProjectionSpec } from './project.ts'
 export { laneAppend, laneDrop, laneFind, lanePlace } from './arrange.ts'

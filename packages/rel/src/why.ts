@@ -8,7 +8,7 @@
 
 import type { Key } from '#feed'
 import type { Row } from './expr.ts'
-import type { RelNode } from './shape.ts'
+import type { RelNode } from './contract.ts'
 import { keyPaths } from './keys.ts'
 import { oracle } from './oracle.ts'
 import { groupOf } from './work.ts'

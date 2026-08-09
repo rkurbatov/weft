@@ -7,8 +7,9 @@
 // is honest about its age instead of pretending to be new.
 
 export { memoryStore, pack, unpack, webStore, within } from './store.ts'
-export type { Store, Scope } from './store.ts'
+
 export { idbStore, bestStore } from './idb.ts'
 export type { IdbOptions } from './idb.ts'
 export { keepInput, keepSupply, SAVING } from './keep.ts'
-export type { Kept, KeepOptions, Saving, Dropped } from './keep.ts'
+// The contract, said once for the three files that implement it.
+export type { Dropped, KeepOptions, Kept, Saving, Scope, Store } from './contract.ts'

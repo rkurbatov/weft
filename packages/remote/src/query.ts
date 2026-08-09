@@ -8,7 +8,7 @@
 
 import { supply, tally } from './supply.ts'
 import type { Supply, SupplyPassport } from './supply.ts'
-import type { Tally } from './shape.ts'
+import type { Tally } from './contract.ts'
 
 export interface QueryOptions<K> extends SupplyPassport {
   /** How a key becomes a map key. Required for object keys. */

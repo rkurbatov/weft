@@ -9,7 +9,7 @@ import { derived, family } from '#graph'
 import type { Key } from '#feed'
 import { changeLog, follow, KEEP } from '#feed'
 import { sameItems } from './same.ts'
-import type { Change, Feed, Ordered, Table } from './shape.ts'
+import type { Change, Feed, Ordered, Table } from './contract.ts'
 import { tableOver } from './over.ts'
 
 function keyCompare(a: Key, b: Key): number {

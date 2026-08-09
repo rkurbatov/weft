@@ -9,7 +9,7 @@ import { carrierFor } from './carriers/index.ts'
 import { follow } from '#feed'
 import { planFold, TREE_WORTH_IT } from './plan.ts'
 import type { FoldTraits } from './plan.ts'
-import type { Feed, FoldSpec } from './shape.ts'
+import type { Feed, FoldSpec } from './contract.ts'
 
 export function foldOver<R, A>(feed: Feed<R>, spec: FoldSpec<R, A>, name: string): Derived<A> {
   // The rows a carrier is built over: the feed, seen as little as a carrier

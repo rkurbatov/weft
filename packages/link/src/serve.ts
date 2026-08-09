@@ -5,24 +5,14 @@
 import { subscribe, untracked, watch } from '#graph'
 import type { Watchable } from '#graph'
 import { perFrame } from '#wire'
-import type { Channel, Schedule, ToGraph } from '#wire'
+import type { Channel } from '#wire'
+import type { ListOffer, ServeOptions, Surface, ToGraph } from './contract.ts'
 import { handedOver } from './handover.ts'
 import { feedOf } from '#table'
 import { follow } from '#feed'
 import type { Table } from '#table'
 
 /** A list published as a difference: its rows, and how a row is identified. */
-/**
- * A list published as a difference: its rows, and how a row is identified.
- *
- * Built with `listed()` rather than written out, so a station keeps its own
- * row type and the wire keeps none: a map of lists of different row types has
- * no honest element type, and asking for one would make every station cast.
- */
-export interface ListOffer {
-  readonly rows: Watchable<readonly unknown[]>
-  readonly key: (row: unknown) => unknown
-}
 
 /** Publish a list of rows, identified by key. */
 export function listed<R>(rows: Watchable<readonly R[]>, key: (row: R) => unknown): ListOffer {
@@ -30,64 +20,6 @@ export function listed<R>(rows: Watchable<readonly R[]>, key: (row: R) => unknow
     rows: rows as Watchable<readonly unknown[]>,
     key: row => key(row as R),
   }
-}
-
-export interface Surface {
-  /** Cells anyone may watch, by name. */
-  cells?: Readonly<Record<string, Watchable<unknown>>>
-  /** Cells that need a key: a family, by name. */
-  families?: Readonly<Record<string, (key: never) => Watchable<unknown>>>
-  /** What the other side may ask for. Arguments and answers must be cloneable. */
-  commands?: Readonly<Record<string, (...args: never[]) => unknown>>
-  /** Facts the other side may write into. Writing outside these is refused. */
-  facts?: Readonly<Record<string, { set(value: never): void }>>
-  /**
-   * Tables the other side may follow.
-   *
-   * Named apart from `cells` on purpose: a table is not delivered like a value.
-   * A watcher gets one snapshot and then batches of what changed, so a hundred
-   * thousand rows do not cross the wire because one of them was edited. Hiding
-   * that behind the same word would be lying to whoever reads the declaration.
-   *
-   * Asked for as the least a table must be, not as `Table<never>`: a table of
-   * rows is not a table of nevers, and asking for one made every station cast
-   * its own tables. The same mistake was made once with facts.
-   */
-  tables?: Readonly<Record<string, { readonly name: string }>>
-  /**
-   * Lists of rows that travel as differences rather than whole.
-   *
-   * A window onto a big table is the case: scrolling by one row used to send
-   * the whole screen, because a list is one value and a value is sent whole.
-   * Declared here with the key of a row, the station sends what entered and
-   * what left — one row for one row of scrolling.
-   *
-   * The rows themselves stay wherever they are; this is only about what
-   * crosses.
-   */
-  lists?: Readonly<Record<string, ListOffer>>
-}
-
-export interface ServeOptions {
-  /** When to flush what has changed. Once a frame by default. */
-  schedule?: Schedule
-  /**
-   * How many rows a list follower is remembered to have, per follower. Rows
-   * inside the bound are put back by order alone when a window returns to
-   * them; rows evicted past it are simply sent again. Tests shrink it to
-   * reach the eviction path without walking thousands of rows.
-   */
-  remember?: number
-  /** Told when a value cannot be sent — usually because it is not cloneable. */
-  onUnsendable?: (cell: string, error: unknown) => void
-  /**
-   * Told when the channel itself is gone: nothing at all could be sent. What
-   * had piled up stays where it is, and this side stops trying — a watcher
-   * that comes back asks for everything anew. Without this the other side sits
-   * with a stale picture it has no way of knowing is stale, which is worse
-   * than an error.
-   */
-  onBroken?: (error: unknown) => void
 }
 
 /**

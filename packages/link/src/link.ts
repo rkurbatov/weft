@@ -8,8 +8,8 @@ import { EMPTY, arrived, heldOf, refused } from '#remote'
 import { preserve } from '#core'
 import type { Remote } from '#remote'
 import { wallClock } from '#graph'
-import type { Timers } from '#graph'
-import type { Channel, ToWatcher } from '#wire'
+import type { Channel } from '#wire'
+import type { Link, LinkOptions, Mirrored, ToWatcher } from './contract.ts'
 import { notice } from '#graph'
 
 /**
@@ -22,29 +22,6 @@ export class Unknown extends Error {
     super(message)
     this.name = 'Unknown'
   }
-}
-
-export interface Link {
-  /** Ask again for everything being watched. Called for you when the other side announces itself. */
-  rewatch(): void
-  /** A cell of the other side, by name; a family needs its key as well. */
-  derived<T>(name: string, key?: unknown): Watchable<Remote<T>>
-  /** A command of the other side. Arguments and the answer must be cloneable. */
-  command<A extends readonly unknown[], T>(name: string): (...args: A) => Promise<T>
-  /** Write into a fact the other side published. */
-  write(fact: string, value: unknown): void
-  /**
-   * A table of the other side, kept up to date by batches of changes.
-   *
-   * The rows arrive once and then only what changed arrives, so editing one
-   * row of a hundred thousand costs one row on the wire. While a lost batch is
-   * being made up for, the rows already here stay on screen — `catchingUp`
-   * says that is what is happening, and stale-but-labelled beats blank.
-   */
-  table<R>(name: string): Mirrored<R>
-  /** How many mirrors are held right now. */
-  held(): number
-  close(): void
 }
 
 /** The cells a followed table hands out. */
@@ -61,55 +38,6 @@ const faceOfTable = (made: {
   received: made.received,
   caughtUp: made.caughtUp,
 })
-
-/** A table on this side of a wire: rows, and whether they are behind. */
-export interface Mirrored<R> {
-  readonly rows: Watchable<readonly R[]>
-  /** Nothing has arrived yet — no snapshot, no rows. */
-  readonly cold: Watchable<boolean>
-  /** A batch was lost and the rows on screen are the last good ones. */
-  readonly catchingUp: Watchable<boolean>
-  /**
-   * How many rows have actually arrived over the wire: the snapshot, plus
-   * every row of every batch since.
-   *
-   * Counted here because here is where they land. Counted on the other side it
-   * would be the rows the list handed out, which is not the same number and
-   * not the interesting one — a demo said "rows that crossed the wire" while
-   * counting something else entirely.
-   */
-  readonly received: Watchable<number>
-  /**
-   * How many times this side had to be caught up: a batch was lost, and the
-   * station answered with everything rather than with changes that would not
-   * fit.
-   *
-   * Worth showing beside `received`, or the count of rows looks inexplicably
-   * high: one catch-up costs a whole table.
-   */
-  readonly caughtUp: Watchable<number>
-}
-
-export interface LinkOptions {
-  /**
-   * Every ask over the wire waits at most this long; past it the call rejects
-   * with Unknown — the graph may have done the work, nobody knows. Waiting is
-   * finite by design: an ask with no term would hang for as long as the wire
-   * stays politely silent.
-   */
-  within?: number
-  /** An idle mirror lingers this long before it is let go of; a fresh look
-   *  re-creates it. Keeps a family of mirrors from growing immortal. */
-  linger?: number
-  timers?: Timers
-  /**
-   * The station refused to serve this side — it holds somebody else's
-   * household. Nothing will ever arrive; the screen should say so rather than
-   * spin. Without a handler the refusal is thrown, since silence here looks
-   * exactly like a slow wire.
-   */
-  onRefused?: (why: string) => void
-}
 
 export function link(channel: Channel, options: LinkOptions = {}): Link {
   const within = options.within ?? 10_000

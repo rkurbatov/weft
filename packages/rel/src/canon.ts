@@ -6,7 +6,7 @@
 
 import { canonExpr } from './expr.ts'
 import type { Expr } from './expr.ts'
-import type { RelNode, RowFn } from './shape.ts'
+import type { RelNode, RowFn } from './contract.ts'
 import { isExpr } from './inner.ts'
 
 export function canonNode(node: RelNode): string | null {

@@ -21,7 +21,7 @@
 // modules happen to export the same word — and then it fails somewhere far
 // from the cause, in whoever imported the door.
 
-export { agg, expand, filter, join, pure, scan, source, union } from './shape.ts'
+export { agg, expand, filter, join, pure, scan, source, union } from './contract.ts'
 export type {
   AggNode,
   ExpandNode,
@@ -34,7 +34,7 @@ export type {
   ScanNode,
   SourceNode,
   UnionNode,
-} from './shape.ts'
+} from './contract.ts'
 
 export { keyOfRow, keyPaths } from './keys.ts'
 export { canonNode } from './canon.ts'

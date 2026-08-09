@@ -6,7 +6,7 @@
 
 import type { Key } from '#feed'
 import type { Row } from './expr.ts'
-import type { RelNode } from './shape.ts'
+import type { RelNode } from './contract.ts'
 import { keyOfRow } from './keys.ts'
 import {
   expandRows,

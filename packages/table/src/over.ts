@@ -9,7 +9,7 @@ import { remember } from './feeds.ts'
 import { foldOver } from './fold.ts'
 import { orderedOver, whereOver } from './views.ts'
 import { sameItems } from './same.ts'
-import type { Feed, Table } from './shape.ts'
+import type { Feed, Table } from './contract.ts'
 
 export function tableOver<R>(feed: Feed<R>, dispose: () => void): Table<R> {
   const rows = family<Key, R | undefined>(

@@ -5,7 +5,7 @@
 
 /** Build errors are caught before anything runs; the message names the node. */
 
-import type { RelNode } from './shape.ts'
+import type { RelNode } from './contract.ts'
 import { keyPaths } from './keys.ts'
 
 export function checkNode(node: RelNode): void {

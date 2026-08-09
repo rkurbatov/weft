@@ -9,6 +9,12 @@
 // definition, and identity is what a feed is organised by. Nothing below this
 // package needs it.
 //
+// Called `contract.ts` and not `types.ts`: what is here is not "the types of
+// this package" but the promise its several files implement, and a reader who
+// opens it is asking what the promise is. A file named for the kind of its
+// contents collects everything of that kind — the options of one adapter next
+// to the words four packages speak — and stops answering that question.
+//
 // Only the contract and the following machinery are here. Producing a feed —
 // holding the rows, deciding who wins when two writers bring the same row — is
 // the table's work, and stays there.

@@ -4,7 +4,7 @@
 // no such thing: the register here is how the two sides of the package find
 // each other without the surface growing a hole for it.
 
-import type { Feed, Table } from './shape.ts'
+import type { Feed, Table } from './contract.ts'
 
 const feeds = new WeakMap<Table<unknown>, Feed<unknown>>()
 

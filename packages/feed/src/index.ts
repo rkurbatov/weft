@@ -4,6 +4,6 @@
 // the dialect wraps one. Four consumers of one contract — so it is a package
 // with a door, not an internal a neighbour reaches into.
 
-export type { Key, Change, Feed, Follower } from './shape.ts'
+export type { Key, Change, Feed, Follower } from './contract.ts'
 export { follow, changeLog, KEEP } from './follow.ts'
 export type { ChangeLog } from './follow.ts'

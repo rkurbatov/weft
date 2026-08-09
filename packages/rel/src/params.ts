@@ -5,7 +5,7 @@
  *  holes and all, stays the tree's identity. */
 
 import type { Expr } from './expr.ts'
-import type { FoldDecl, JoinNode, PureNode, RelNode, RowFn } from './shape.ts'
+import type { FoldDecl, JoinNode, PureNode, RelNode, RowFn } from './contract.ts'
 import { paramsOfE, subExpr, subFold } from './inner.ts'
 
 export function substituteNode(node: RelNode, values: ReadonlyMap<string, unknown>): RelNode {

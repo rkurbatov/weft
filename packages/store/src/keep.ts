@@ -9,17 +9,11 @@
 // holds. And a refusal to write is a declared state, not a silence: `saving`
 // says whether writes are landing, and why not.
 
+import type { KeepOptions, Kept, Saving, Store } from './contract.ts'
 import { port, subscribe } from '#graph'
-import type { Port, Watchable } from '#graph'
+import type { Port } from '#graph'
 import { heldOf } from '#remote'
 import type { Supply } from '#remote'
-import type { Store } from './store.ts'
-
-/** Why something on disk was not put back. */
-export type Dropped = 'version' | 'age' | 'unreadable'
-
-/** Whether what happens here is reaching the store. */
-export type Saving = { readonly ok: true } | { readonly ok: false; readonly reason: string }
 
 export const SAVING: Saving = { ok: true }
 
@@ -27,30 +21,6 @@ interface Envelope {
   v: number
   at: number
   value: unknown
-}
-
-export interface KeepOptions<T> {
-  key: string
-  store: Store
-  /** Bump it when the shape changes; anything written under another version is dropped or migrated. */
-  version?: number
-  /** Anything older than this is not put back. */
-  maxAge?: number
-  now?: () => number
-  /** Rescue what an older version wrote. Return undefined to drop it. */
-  migrate?: (stored: unknown, from: number) => T | undefined
-  onDropped?: (why: Dropped, key: string) => void
-}
-
-export interface Kept {
-  /** Resolves once the disk has been asked: true if something was put back. */
-  readonly restored: Promise<boolean>
-  /** Are writes landing. `ok: false` names the reason they are not. */
-  readonly saving: Watchable<Saving>
-  /** Stop keeping it; what is on disk stays. */
-  stop(): void
-  /** Stop keeping it and wipe what is on disk. */
-  forget(): void
 }
 
 function describe(error: unknown): string {

@@ -8,9 +8,9 @@ import { schedule } from './schedule.ts'
 import { owned } from '#graph'
 import type { Fault } from '#remote'
 
-import type { Handling, Note, Outbox, OutboxOptions } from './shape.ts'
+import type { Handling, Note, Outbox, OutboxOptions } from './contract.ts'
 
-export type { Handler, Handling, Note, NoteState, Outbox, OutboxOptions } from './shape.ts'
+export type { Handler, Handling, Note, NoteState, Outbox, OutboxOptions } from './contract.ts'
 
 /** The lane everything shares unless it asks for one of its own. */
 const MAIN = 'main'

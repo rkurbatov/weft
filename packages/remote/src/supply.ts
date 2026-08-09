@@ -11,7 +11,7 @@ import type { Readable } from '#graph'
 import { EMPTY, arrived, heldOf, loading, refused } from './remote.ts'
 import type { Fault, Remote } from './remote.ts'
 import { wallClock } from '#core'
-import type { Supply, SupplyPassport, Tally } from './shape.ts'
+import type { Supply, SupplyPassport, Tally } from './contract.ts'
 
 export type { Supply, SupplyPassport }
 

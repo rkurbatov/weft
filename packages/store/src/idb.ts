@@ -12,8 +12,8 @@
 // a kept value is a cache, not a ledger — and are committed explicitly rather
 // than left to the auto-commit.
 
+import type { Store } from './contract.ts'
 import { memoryStore } from './store.ts'
-import type { Store } from './store.ts'
 
 export interface IdbOptions {
   /** The object store inside the database. One database may hold several. */

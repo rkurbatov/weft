@@ -1,6 +1,6 @@
 // A table: rows with a key, and the live views over them.
 //
-// The pieces live beside this file — the contract in shape.ts, sameness in
+// The pieces live beside this file — the contract in contract.ts, sameness in
 // same.ts, the change log in the feed package, views in views.ts, folds in fold.ts —
 // and this one puts them together and hands out the surface.
 
@@ -10,7 +10,7 @@ import { alike } from './same.ts'
 import { changeLog, KEEP } from '#feed'
 import { tableOver } from './over.ts'
 import { remember } from './feeds.ts'
-import type { Change, Feed, Patch, SourceTable, TableOptions } from './shape.ts'
+import type { Change, Feed, Patch, SourceTable, TableOptions } from './contract.ts'
 
 export type {
   Change,
@@ -23,7 +23,7 @@ export type {
   Table,
   TableOptions,
   Key,
-} from './shape.ts'
+} from './contract.ts'
 export { alike } from './same.ts'
 export { follow } from '#feed'
 export { feedOf } from './feeds.ts'

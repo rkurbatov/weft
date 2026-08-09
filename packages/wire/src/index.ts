@@ -9,7 +9,7 @@
 export { wirePair, overWire } from './wires.ts'
 export type { WirePair, Wire } from './wires.ts'
 export { atOnce, every, hurried, perFrame } from './channel.ts'
-export type { Channel, Hurried, Schedule, ToGraph, ToWatcher } from './channel.ts'
+export type { Channel, Hurried, Schedule } from './channel.ts'
 export { localBroadcast, openBroadcast, overBus } from './transport.ts'
 export type { Broadcast, BusLike } from './transport.ts'
 export { busHub, busChannel } from './bus.ts'

@@ -3,7 +3,7 @@
 // A follower that arrives late, or one that fell behind further than the log
 // remembers, is told to rebuild rather than handed a hole — falling behind is
 // an event with a name, not a silence.
-import type { Change, Feed, Follower } from './shape.ts'
+import type { Change, Feed, Follower } from './contract.ts'
 
 /** What the log promises: keep a batch by version, and answer what came after. */
 export interface ChangeLog<R> {

@@ -15,7 +15,7 @@ import type {
   PureNode,
   RowFn,
   ScanNode,
-} from './shape.ts'
+} from './contract.ts'
 import { isExpr } from './inner.ts'
 
 export function pureRow(node: PureNode, row: Row): Row {
