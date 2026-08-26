@@ -131,14 +131,23 @@ export function orderedOver<R>(
     { name: `${name}.version` },
   )
 
+  const read = (from: number, to: number): readonly R[] => {
+    version.get()
+    return entries.slice(Math.max(0, from), Math.max(0, to)).map(e => e.row)
+  }
+
   const windows = family<string, readonly R[]>(
     span => {
-      version.get()
       const [from = 0, to = 0] = span.split(':').map(Number)
-      return entries.slice(Math.max(0, from), Math.max(0, to)).map(e => e.row)
+      return read(from, to)
     },
     { name: `${name}.slice`, equal: sameItems },
   )
+
+  const all = derived(() => read(0, Number.POSITIVE_INFINITY), {
+    name: `${name}.all`,
+    equal: sameItems,
+  })
 
   const size = derived(
     () => {
@@ -150,8 +159,15 @@ export function orderedOver<R>(
 
   return {
     size,
+    all,
+    read,
     get watched() {
-      return size.observed || windows.watched
+      // Only what somebody outside could be holding: the count, the whole
+      // order, and the windows asked for by name. `version` is not in the
+      // list — every cell here reads it, so it is observed from the moment
+      // anything is built, which says nothing about whether anybody is
+      // looking.
+      return size.observed || all.observed || windows.watched
     },
     slice: (from, to) => windows(`${from}:${to}`),
     rank(key) {
@@ -168,7 +184,10 @@ export function orderedOver<R>(
       }
       return -1
     },
-    dispose: () => version.dispose(),
+    dispose: () => {
+      all.dispose()
+      version.dispose()
+    },
   }
 }
 

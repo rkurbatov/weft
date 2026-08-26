@@ -6,6 +6,10 @@ import { derived } from '#weft'
 import type { Key, Watchable } from '#weft'
 import type { Live } from './live.ts'
 import type { FieldType, ScalarField } from './fields.ts'
+
+/** Same rows, same order: a window that recomputes to the same list is no news. */
+const sameRows = (a: readonly unknown[], b: readonly unknown[]): boolean =>
+  a.length === b.length && a.every((one, at) => Object.is(one, b[at]))
 import type { Part } from './shape.ts'
 
 export interface ListView<R> {
@@ -61,16 +65,24 @@ export function list<R>(feed: Live<R>, spec: ListSpec<R>): Part<ListView<R>> {
             }
       const sorted = part.sortedBy(compare, `${name}.order`)
       const window = spec.window
-      const rows =
+      // No cell of ours over a cell of theirs.
+      //
+      // Both of these used to be a bridge — a derived reading the order's own
+      // cell — and a bridge is an observer that never leaves. Once it had run
+      // once, the order answered "somebody is looking" for the rest of the
+      // screen's life, whether anybody was or not: the shelf a person opened
+      // and closed again was pinned for good, and one `peek` was enough to do
+      // it. The order's whole-rows cell is handed straight through, and a
+      // moving window is built over a tracked READ, which takes the dependency
+      // without standing in the window family as a watcher of it.
+      const own =
         window === undefined
-          ? // The sorted view, not the source. Reading the source here meant a
-            // list with an order and no window handed back the rows in
-            // whatever order the feed held them — an order was asked for, one
-            // was built, and nobody read it.
-            derived(() => sorted.rows.get(), { name: `${name}.rows` })
-          : derived(() => sorted.window(window.from.get(), window.from.get() + window.size).get(), {
-              name: `${name}.window`,
-            })
+          ? undefined
+          : derived(
+              () => sorted.read(window.from.get(), window.from.get() + window.size),
+              { name: `${name}.window`, equal: sameRows },
+            )
+      const rows = own ?? sorted.rows
       return {
         rows,
         size: sorted.size,
@@ -91,10 +103,10 @@ export function list<R>(feed: Live<R>, spec: ListSpec<R>): Part<ListView<R>> {
          * handed out would be a leak with no ceiling in it at all.
          */
         get watched() {
-          return rows.observed || sorted.watched
+          return own?.observed === true || sorted.watched
         },
         dispose() {
-          rows.dispose()
+          own?.dispose()
           sorted.dispose()
           // Only what this list built: a filter of its own, never the feed it
           // was taken from.

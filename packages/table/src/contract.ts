@@ -39,6 +39,23 @@ export interface Ordered<R> {
    * ceiling goes by.
    */
   readonly watched: boolean
+  /**
+   * The whole order, tracked. Not a window: no member of the window family, so
+   * a bridge built over it is not mistaken for somebody looking at a window.
+   */
+  readonly all: Watchable<readonly R[]>
+  /**
+   * A range, read now, as a dependency and nothing more.
+   *
+   * `slice` hands back a cell with a life of its own — an identity a screen can
+   * hold and watch, and a place in the family that decides what is still being
+   * looked at. `read` hands back rows. It is for whoever is building a cell of
+   * their own over a range that moves: a scrolled list asks for a different
+   * range every frame, and each one would otherwise be a member of that family
+   * and a standing observer of it, which turns "is anybody looking at this
+   * order" into "has anybody ever looked".
+   */
+  read(from: number, to: number): readonly R[]
   /** Rows [from, to) in order. The same window is the same cell. */
   slice(from: number, to: number): Watchable<readonly R[]>
   /** Where this key stands right now, -1 when absent. Plain and untracked:

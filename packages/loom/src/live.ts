@@ -13,7 +13,7 @@
 // Feeding starts with the first look and stops when the last one leaves, so a
 // list nobody watches costs nothing and holds no socket.
 
-import { derived, table } from '#weft'
+import { table } from '#weft'
 import type { Key, Watchable } from '#weft'
 
 export interface Delta<R> {
@@ -41,7 +41,7 @@ export interface LivePassport<R> {
 
 export interface Sorted<R> {
   size: Watchable<number>
-  /** Is anybody watching this order — its size, or any window of it? */
+  /** Is anybody watching this order — its size, the whole of it, or a window? */
   readonly watched: boolean
   /**
    * Every row, in this order. The honest slow path — a screen showing more
@@ -49,6 +49,8 @@ export interface Sorted<R> {
    * no window has to be able to say what the order was.
    */
   rows: Watchable<readonly R[]>
+  /** A range read as a dependency, for building a cell over bounds that move. */
+  read: (from: number, to: number) => readonly R[]
   /** A window; it wakes only when the window itself moves. */
   window: (from: number, to: number) => Watchable<readonly R[]>
   /** Where this row stands now, or below zero if it is gone. Plain, not a
@@ -116,23 +118,18 @@ function reading<R>(
     onlyLive: (pick, name) => reading(t.whereLive(pick, name), keyOf),
     sortedBy: (compare, name) => {
       const order = t.orderBy(compare, name)
-      // One window over the whole thing, made once and shared: building it
-      // inside a formula would make a fresh view on every recompute.
-      let whole: ReturnType<typeof derived<readonly R[]>> | undefined
       return {
         size: order.size,
-        get watched() {
-          return order.watched || whole?.observed === true
-        },
-        get rows() {
-          whole ??= derived(() => order.slice(0, order.size.get()).get(), {
-            name: `${name ?? t.name}.ordered`,
-          })
-          return whole
-        },
+        rows: order.all,
+        read: (from, to) => order.read(from, to),
         window: (from, to) => order.slice(from, to),
         place: key => order.rank(key),
         dispose: () => order.dispose(),
+        // The order answers for itself. Nothing here wraps its cells in cells
+        // of its own, so an observer of any of them is somebody outside.
+        get watched(): boolean {
+          return order.watched
+        },
       }
     },
     count: test => t.count(test),

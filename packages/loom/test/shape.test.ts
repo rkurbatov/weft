@@ -116,9 +116,7 @@ describe('the shape of an answer', () => {
       { name: 'nested' },
     )
     until(subscribe(screen.header.total, () => {}))
-    const onNow = (screen.board.byStatus as Record<string, ListView<Game>>)[
-      'live'
-    ] as ListView<Game>
+    const onNow = (screen.board.byStatus as Record<string, ListView<Game>>)['live'] as ListView<Game>
     until(subscribe(onNow.size, () => {}))
 
     games.take({ id: 1, status: 'live', start: 10, goals: 0 })
@@ -207,6 +205,34 @@ describe('the shape of an answer', () => {
     until(subscribe(fourth.window(0, 5), () => {}))
     for (const key of ['16', '17', '18', '19']) void shelves[key]
     assert.equal(shelves['15'], fourth, 'a watched window did not count as watching')
+  })
+
+  test('a shelf nobody watches any more is cold again, however it was read', () => {
+    // The other half of the rule, and the one it is easy to lose: the list
+    // used to read the order through a cell of its own, and a cell that has
+    // run once is an observer that never leaves. A shelf opened and closed
+    // again stayed pinned for the life of the screen, and a single `peek` was
+    // enough to pin one.
+    const games = live<Game>({ name: 'cools', key: g => g.id })
+    const board = shape(
+      { byStart: listsBy(games, 'start', { order: 'start', keep: 1 }) },
+      { name: 'cools' },
+    )
+    const shelves = board.byStart as unknown as Record<string, ListView<Game>>
+    for (let i = 0; i < 4; i++) games.take({ id: i, status: 'live', start: i, goals: 0 })
+
+    const watched = shelves['0'] as ListView<Game>
+    const stop = subscribe(watched.rows, () => {})
+    stop()
+    void shelves['1']
+    void shelves['2']
+    assert.notEqual(shelves['0'], watched, 'a shelf stayed pinned after its watcher left')
+
+    const read = shelves['3'] as ListView<Game>
+    void read.rows.peek()
+    void shelves['1']
+    void shelves['2']
+    assert.notEqual(shelves['3'], read, 'one read pinned a shelf for good')
   })
 
   test('shelves are kept to a ceiling, and the whole shelf is never dropped', () => {
