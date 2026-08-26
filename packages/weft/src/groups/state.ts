@@ -7,6 +7,7 @@
 export {
   batch,
   command,
+  CommandReset,
   derived,
   family,
   gauge,

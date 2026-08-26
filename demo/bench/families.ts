@@ -33,7 +33,8 @@ const once = (
   } else {
     fill()
     hold()
-    // reading a watched member moves it to the tail, so the cold ones lead
+    // a member somebody reads is not in the cold order at all; reading it here
+    // only settles where the cold ones stand relative to each other
     for (let i = 0; i < watched; i++) item(-i - 1)
   }
 
@@ -43,8 +44,11 @@ const once = (
 
   let cold = 0
   for (const key of item.keys()) if (!item(key).observed) cold++
+  const size = item.size
+  // read before the watchers leave: letting them go cools their members, and
+  // the family then keeps its own ceiling
   for (const stop of stops) stop()
-  return { ms, size: item.size, cold }
+  return { ms, size, cold }
 }
 
 const run = (label: string, watched: number, watchedFirst: boolean): void => {

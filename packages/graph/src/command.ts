@@ -50,10 +50,28 @@ export interface Command<A extends unknown[], T> {
   readonly error: Readable<unknown>
   /**
    * Forget the last outcome; an answer still in flight is then ignored. A
-   * start still waiting out `calm` never happens, and its callers are refused
-   * rather than left waiting.
+   * start still waiting out `calm` never happens at all, and its callers are
+   * refused with `CommandReset` rather than left waiting.
+   *
+   * The two halves are deliberately different, and the difference is what can
+   * still be undone: a start that has not begun is taken back, while one
+   * already in the world runs to its end and only loses its claim on the
+   * state. Calling a running command off is a different thing and is not this.
    */
   reset(): void
+}
+
+/**
+ * What a start still waiting out `calm` is refused with when the command is
+ * reset. A type rather than a sentence, so an application can tell "the world
+ * said no" from "this start was taken back before it happened".
+ */
+export class CommandReset extends Error {
+  override readonly name = 'CommandReset'
+
+  constructor(commandName: string) {
+    super(`weft: ${commandName} was reset before it started`)
+  }
 }
 
 /**
@@ -124,12 +142,18 @@ export function command<A extends unknown[], T>(
 
   const calm = options.calm
   const timers = options.timers ?? wallClock
-  interface Held {
-    timer: unknown
+  interface Waiter {
+    promise: Promise<T>
     resolve: (value: T | Promise<T>) => void
     reject: (error: unknown) => void
   }
-  let quiet: Held | undefined
+  /** The start being held, and everybody waiting on it. */
+  interface Quiet {
+    timer: unknown
+    args: A
+    waiters: Waiter[]
+  }
+  let quiet: Quiet | undefined
 
   /**
    * With no quiet asked for, a start is a start. With one, the start is held,
@@ -139,40 +163,39 @@ export function command<A extends unknown[], T>(
    */
   const run = (...args: A): Promise<T> => {
     if (calm === undefined) return start(...args)
-    const waiting = quiet
-    if (waiting !== undefined) timers.clear(waiting.timer)
-    const held = new Promise<T>((resolve, reject) => {
-      const timer = timers.set(() => {
-        quiet = undefined
-        const answer = start(...args)
-        resolve(answer)
-        waiting?.resolve(answer)
-      }, calm)
-      // The chain, so that whoever takes the wait back reaches every caller
-      // still on it and not just the last one.
-      quiet = {
-        timer,
-        resolve:
-          waiting === undefined
-            ? resolve
-            : value => {
-                waiting.resolve(value)
-                resolve(value)
-              },
-        reject:
-          waiting === undefined
-            ? reject
-            : error => {
-                waiting.reject(error)
-                reject(error)
-              },
-      }
+    let mine!: Waiter
+    const promise = new Promise<T>((resolve, reject) => {
+      mine = { promise: undefined as unknown as Promise<T>, resolve, reject }
     })
-    // A start taken back is not a refusal by the world and is told to nobody;
-    // marking it handled keeps a caller who did not await from meeting it as
-    // an unhandled rejection. One that did await still gets it.
-    held.catch(() => {})
-    return held
+    mine.promise = promise
+    // A flat list rather than a chain of resolves calling resolves: the chain
+    // was one frame per caller, and a search box that fired twenty thousand
+    // times inside one quiet blew the stack when the wait ran out.
+    if (quiet === undefined) quiet = { timer: undefined, args, waiters: [mine] }
+    else {
+      timers.clear(quiet.timer)
+      quiet.args = args
+      quiet.waiters.push(mine)
+    }
+    const held = quiet
+    held.timer = timers.set(() => {
+      quiet = undefined
+      // The last start within the quiet is the one that runs, and everybody
+      // who asked gets its answer — nobody is left on a promise that will
+      // never settle.
+      const answer = start(...held.args)
+      // Whether a refusal by the world reaches the host as an unhandled
+      // rejection must not depend on whether a quiet was asked for. `start`
+      // marks its own promise handled when somebody is there to be told; the
+      // promises handed to the callers waiting here are other promises, and
+      // they are marked on the same condition and no other.
+      const told = options.onError ?? standing
+      for (const waiter of held.waiters) {
+        waiter.resolve(answer)
+        if (told !== undefined) waiter.promise.catch(() => {})
+      }
+    }, calm)
+    return promise
   }
 
   return {
@@ -206,7 +229,15 @@ export function command<A extends unknown[], T>(
         const held = quiet
         quiet = undefined
         timers.clear(held.timer)
-        held.reject(new Error(`weft: ${name} was reset before it started`))
+        const taken = new CommandReset(name)
+        for (const waiter of held.waiters) {
+          // The library's own doing, told to nobody: a caller who awaited sees
+          // it, one who did not is not made to meet it as an unhandled
+          // rejection. A refusal by the world is left alone — it goes to
+          // `onError` and to the state, exactly as it does without `calm`.
+          waiter.promise.catch(() => {})
+          waiter.reject(taken)
+        }
       }
       state.set({ kind: 'idle' })
     },

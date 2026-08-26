@@ -292,6 +292,43 @@ describe('families of cells', () => {
     assert.equal(part.sweep(), 1, 'and sweep takes what admissions have not reached')
   })
 
+  test('letting a member go turns what it held cold, and the same pass takes it', () => {
+    // The parent reads the child, so while the parent lives the child is
+    // watched and outside the ceiling. Dropping the parent makes the child a
+    // cache entry mid-pass, and the pass has to notice.
+    let item!: Family<number, number>
+    item = family((id: number) => (id === 1 ? item(2).get() : id), { max: 1 })
+    item(1).peek()
+    item(3)
+    assert.deepEqual(item.keys().toSorted(), [3], 'the whole chain the parent held went with it')
+  })
+
+  test('sweep reaches everything that became free while it ran, whatever the order', () => {
+    // The child was built first, so a walk of the map meets it while it is
+    // still watched by the parent and would leave it behind.
+    let item!: Family<number, number>
+    item = family((id: number) => (id === 1 ? item(2).get() : id), { max: 10 })
+    item(2)
+    item(1).peek()
+    assert.equal(item.sweep(), 2)
+    assert.deepEqual(item.keys().toSorted(), [])
+  })
+
+  test('a member enters the cache when it stops being read, not when it was built', () => {
+    // And the ceiling is kept when watchers leave, without waiting for a new
+    // key: 1 was built first but cooled last, so the oldest cache entry is 2.
+    const item = family((id: number) => id, { max: 2 })
+    const stop = subscribe(item(1), () => {})
+    item(2)
+    item(3)
+    assert.equal(item.size, 3)
+    stop()
+    assert.equal(item.size, 2, 'the ceiling is kept the moment the cache goes over it')
+    assert.equal(item.has(2), false, 'the oldest cache entry goes')
+    assert.equal(item.has(1), true, 'the one that just cooled is the youngest, not the oldest')
+    assert.equal(item.has(3), true)
+  })
+
   test('a watched member survives every drop path', () => {
     const item = family((id: number) => id, { max: 1 })
     const stop = subscribe(item(1), () => {})

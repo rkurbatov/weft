@@ -5,7 +5,7 @@
 // refused. So the reader is tracked per isolate, and the engines are compared
 // at the moment the link is made.
 
-import { WATCHED } from './parts.ts'
+import { OBSERVED } from './parts.ts'
 import type { Consumer, Node } from './parts.ts'
 
 /**
@@ -35,11 +35,13 @@ export function observe(source: Node): void {
   // A link that survives a recompute keeps its observer slot and its demand.
   if (tracking !== null && tracking.delete(source)) return
   source.observers.add(consumer)
-  // The one place a node goes from unread to read. A link kept across a
-  // recompute returned above, so this fires on real edges only.
-  if (source.observers.size === 1) source[WATCHED]?.(true)
   const carried = consumer.contribution()
   if (carried > 0) source.demandChanged(carried)
+  // The one place a node goes from unread to read, told last: whoever keeps
+  // the node must see both coordinates settled — read, and demand arrived —
+  // rather than a moment in between. A link kept across a recompute returned
+  // above, so this fires on real edges only.
+  if (source.observers.size === 1) source[OBSERVED]?.observationChanged(true)
 }
 
 /** Read without becoming dependent on it. */

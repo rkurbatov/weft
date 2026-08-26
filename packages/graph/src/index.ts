@@ -25,7 +25,7 @@ export type {
   Trace,
   Engine,
 } from './graph.ts'
-export { command, onCommandFailure } from './command.ts'
+export { command, CommandReset, onCommandFailure } from './command.ts'
 export type { Command, CommandOptions, CommandState, WhileRunning } from './command.ts'
 export { family } from './family.ts'
 export type { Family, FamilyOptions } from './family.ts'
@@ -39,6 +39,10 @@ export { quietly } from './ticks.ts'
 export type { Probe, TickSummary, TickWrite, TickCompute } from './ticks.ts'
 export type { EngineOptions } from './engine.ts'
 
+// The retention seam, for the caches inside the library and nothing else:
+// named here, never at the door in `#weft`.
+export { engineOf, keep } from './graph.ts'
+export type { Keeper } from './parts.ts'
 export { giveWay } from './time.ts'
 export { wallClock } from '#core'
 export type { Timers } from '#core'

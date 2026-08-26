@@ -20,6 +20,8 @@ import {
 } from './nodes.ts'
 import type { Derived, Port } from './nodes.ts'
 import type { DerivedOptions, PortOptions, Watchable, WatchOptions } from './nodes.ts'
+import { OBSERVED } from './parts.ts'
+import type { Keeper, Node } from './parts.ts'
 
 // What a node is lives next door; passed through here so that one import of
 // this file gives an application everything it needs.
@@ -257,4 +259,20 @@ function adopt<T>(core: Core, source: Watchable<T>): Watchable<T> {
     get: () => mirror.get(),
     peek: () => mirror.peek(),
   }
+}
+
+/**
+ * Package-internal: whoever holds a node asks to hear when it stops being read
+ * and starts again. Passing `undefined` takes the ear away, which every cache
+ * owes a node it has let go of — an old handle a caller kept must not go on
+ * reporting to an owner it no longer belongs to.
+ *
+ * A function rather than the bare slot, so the symbol stays inside the graph
+ * and the two caches that need this — the cell family and the query cache —
+ * speak the same one sentence. Named in `#graph`, never in `#weft`: this is
+ * the retention contract between the graph and whoever keeps its nodes, not a
+ * second set of lifecycle hooks for applications.
+ */
+export function keep(node: unknown, keeper: Keeper | undefined): void {
+  ;(node as Node)[OBSERVED] = keeper
 }
