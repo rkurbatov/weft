@@ -17,6 +17,10 @@ export interface ListView<R> {
   window: (from: number, to: number) => Watchable<readonly R[]>
   /** Where a row stands in the order, or -1 when it is not in this list. */
   place: (key: Key) => number
+  /** Is anybody looking? What nobody holds may be let go of. */
+  readonly watched: boolean
+  /** Let go of the filter and the order built for this list. */
+  dispose: () => void
 }
 
 export interface ListSpec<R> {
@@ -67,11 +71,34 @@ export function list<R>(feed: Live<R>, spec: ListSpec<R>): Part<ListView<R>> {
           : derived(() => sorted.window(window.from.get(), window.from.get() + window.size).get(), {
               name: `${name}.window`,
             })
+      // Everything this list has handed out. Watching ANY of it is watching
+      // the list: a screen that shows a count and no rows — a tab with a
+      // number on it — holds `size` and nothing else, and a ceiling that
+      // looked only at `rows` would call that shelf idle and take it away
+      // from under it.
+      const handed = new Set<Watchable<unknown>>([rows, sorted.size])
       return {
         rows,
         size: sorted.size,
-        window: (from, to) => sorted.window(from, to),
+        window: (from, to) => {
+          const seen = sorted.window(from, to)
+          handed.add(seen)
+          return seen
+        },
         place: sorted.place,
+        get watched() {
+          for (const one of handed) {
+            if ((one as { demanded?: boolean }).demanded === true) return true
+          }
+          return false
+        },
+        dispose() {
+          rows.dispose()
+          sorted.dispose()
+          // Only what this list built: a filter of its own, never the feed it
+          // was taken from.
+          if (part !== feed) part.dispose()
+        },
       }
     },
   }
@@ -110,6 +137,28 @@ export function listsBy<R, F extends ScalarField<R>, Whole extends string = neve
     build(name) {
       /** Insertion order is the age order, which is what the ceiling goes by. */
       const shelves = new Map<string, ListView<R>>()
+
+      /**
+       * Drop the oldest shelves nobody is holding.
+       *
+       * Three things this has to get right, each of which it got wrong once.
+       * The standing shelf is skipped rather than stopping the search — a
+       * screen reads its totals first, so `whole` was usually the oldest key
+       * and the ceiling was switched off from the first look. A shelf somebody
+       * is watching is never dropped: dropping it left the old one alive
+       * outside the map and built a second one, with its own filter, order and
+       * measured line, beside it under the same name. And what does go is
+       * disposed of, or the ceiling would bound a map and nothing else.
+       */
+      const evict = (): void => {
+        for (const [key, shelf] of shelves) {
+          if (shelves.size <= keep) return
+          if (key === spec.whole) continue
+          if (shelf.watched) continue
+          shelves.delete(key)
+          shelf.dispose()
+        }
+      }
       const shelfFor = (asked: string): ListView<R> => {
         const standing = shelves.get(asked)
         if (standing !== undefined) {
@@ -147,15 +196,7 @@ export function listsBy<R, F extends ScalarField<R>, Whole extends string = neve
               },
         ).build(`${name}.${asked}`)
         shelves.set(asked, made)
-        // A field with a key per row — an id, a timestamp — builds a shelf per
-        // value and used to keep every one of them for the life of the screen.
-        // The oldest untouched shelf goes, exactly as a family drops a member
-        // nobody is holding.
-        while (shelves.size > keep) {
-          const oldest = shelves.keys().next().value as string | undefined
-          if (oldest === undefined || oldest === spec.whole) break
-          shelves.delete(oldest)
-        }
+        evict()
         return made
       }
       // A proxy, so the set of shelves is the DATA's business, not the

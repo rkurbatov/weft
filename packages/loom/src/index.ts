@@ -41,7 +41,15 @@ export { loom, station, inMemory, tabs, worker } from './assemble.ts'
 export { underOwner } from './owner.ts'
 export type { Owner } from './owner.ts'
 export type { Loomed, LoomSpec, Role, Station, Wiring } from './assemble.ts'
-export type { Offering, OfferOptions, Adopted, Face, Carried, CarrySpec } from './carry.ts'
+export type {
+  Offering,
+  OfferOptions,
+  Adopted,
+  Face,
+  OfferingOf,
+  Carried,
+  CarrySpec,
+} from './carry.ts'
 
 export { shape } from './shape.ts'
 export type { Built, Form, Part } from './shape.ts'

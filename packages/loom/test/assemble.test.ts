@@ -194,4 +194,51 @@ describe('assembling a screen over a station', () => {
     assert.equal(heard.includes('unowned-book'), true, 'an anonymous book passed in silence')
     app.stop()
   })
+
+  test('two sessions of one application do not share a station', async () => {
+    // The book was already apart; the screen was not. Tabs elect by a name, and
+    // two sessions of one application shared it — so one led and handed the
+    // other every view, fact and act it had.
+    const locks = new Map<string, { held: boolean; waiting: Array<() => void> }>()
+    const lock: Lock = {
+      hold(name, whileHeld) {
+        const at = locks.get(name) ?? { held: false, waiting: [] }
+        locks.set(name, at)
+        const take = (): void => {
+          at.held = true
+          const release = whileHeld()
+          void release
+        }
+        if (at.held) at.waiting.push(take)
+        else take()
+        return () => {}
+      },
+    }
+
+    const front = (who: string) => () =>
+      station({ views: { whose: cell(who) } }, { schedule: atOnce })
+
+    const ann = loom(
+      { name: 'same-app', session: 'ann', station: front('ann') },
+      { wire: tabs({ lock }) },
+    )
+    const bob = loom(
+      { name: 'same-app', session: 'bob', station: front('bob') },
+      { wire: tabs({ lock }) },
+    )
+    const stopAnn = ann.warm(['whose'])
+    const stopBob = bob.warm(['whose'])
+    await settle(6)
+
+    assert.equal(ann.face.views.whose.get(), 'ann')
+    assert.equal(bob.face.views.whose.get(), 'bob', 'bob was handed ann’s screen')
+    // Neither waits on the other: they held separate elections.
+    assert.equal(ann.role.get(), 'leading')
+    assert.equal(bob.role.get(), 'leading')
+
+    stopAnn()
+    stopBob()
+    ann.stop()
+    bob.stop()
+  })
 })

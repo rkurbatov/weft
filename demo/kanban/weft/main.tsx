@@ -4,14 +4,19 @@
 // effect.
 
 import { mount } from '#demo/mount.tsx'
-import { region } from '#loom'
+import { region, underOwner } from '#loom'
 import '#kanban/kanban.css'
 import { kanbanServer } from '#kanban'
 import { kanban } from './state.ts'
 import { App } from './App.tsx'
 
 const server = kanbanServer()
-const board = region('kanban', () => kanban(server))
+// Who is signed in, said once for everything this raises. The demo has one
+// person; a real screen puts the signed-in one here. Without it the book of
+// unsent moves would refuse to open on disk, and say so.
+const board = underOwner({ app: 'kanban', session: 'demo' }, () =>
+  region('kanban', () => kanban(server)),
+)
 server.startBot()
 
 mount(<App app={board.value} />)

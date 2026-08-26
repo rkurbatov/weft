@@ -148,6 +148,52 @@ describe('the shape of an answer', () => {
     assert.equal(runs, 1)
   })
 
+  test('the standing shelf does not switch the ceiling off by being oldest', () => {
+    // A screen reads its totals first, so `all` was usually the oldest key —
+    // and the search for a candidate stopped at it rather than stepping over
+    // it, which left the ceiling off from the first look.
+    const games = live<Game>({ name: 'wholefirst', key: g => g.id })
+    const board = shape(
+      { byStart: listsBy(games, 'start', { order: 'start', whole: 'all', keep: 2 }) },
+      { name: 'wholefirst' },
+    )
+    const shelves = board.byStart as unknown as Record<string, ListView<Game>>
+    void shelves['all'] // the standing shelf is the first thing asked for
+    for (let i = 0; i < 20; i++) games.take({ id: i, status: 'live', start: i, goals: 0 })
+    for (let i = 0; i < 20; i++) void shelves[String(i)]
+    assert.equal(Object.keys(shelves).length <= 3, true, `kept ${Object.keys(shelves).length}`)
+    assert.equal(Object.keys(shelves).includes('all'), true)
+  })
+
+  test('a shelf somebody is watching keeps its place and its identity', () => {
+    // Dropped from the map, the old shelf went on living outside it and the
+    // next look built a second one beside it — two filters, two orders and two
+    // measured lines under one name.
+    const games = live<Game>({ name: 'watched', key: g => g.id })
+    const board = shape(
+      { byStart: listsBy(games, 'start', { order: 'start', keep: 2 }) },
+      { name: 'watched' },
+    )
+    const shelves = board.byStart as unknown as Record<string, ListView<Game>>
+    for (let i = 0; i < 6; i++) games.take({ id: i, status: 'live', start: i, goals: 0 })
+
+    // Held by its count and nothing else — a tab with a number on it. Watching
+    // any part of a shelf is watching the shelf; a ceiling that looked only at
+    // the rows would take this one away from under a screen that shows it.
+    const first = shelves['0'] as ListView<Game>
+    until(subscribe(first.size, () => {}))
+    for (const key of ['1', '2', '3', '4']) void shelves[key]
+
+    assert.equal(shelves['0'], first, 'the watched shelf was dropped and built again')
+    assert.equal(first.watched, true)
+
+    // And by its rows alone, which is the other half of the same rule.
+    const second = shelves['5'] as ListView<Game>
+    until(subscribe(second.rows, () => {}))
+    for (const key of ['6', '7', '8', '9']) void shelves[key]
+    assert.equal(shelves['5'], second)
+  })
+
   test('shelves are kept to a ceiling, and the whole shelf is never dropped', () => {
     // Grouping by a field with a value per row used to keep a window per row
     // for as long as the screen lived.

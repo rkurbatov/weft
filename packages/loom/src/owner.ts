@@ -22,12 +22,30 @@ export interface Owner {
 
 let standing: Owner | undefined
 
-/** Build under this owner. Restores whatever stood before, so nesting is safe. */
-export function underOwner<T>(owner: Owner, body: () => T): T {
+/**
+ * Build under this owner. Restores whatever stood before, so nesting is safe.
+ *
+ * Synchronous, and it says so in the type: the owner is put down the moment
+ * the body returns, so a body that returns a promise would be running its real
+ * work — the part that makes the book — after it had already been put down.
+ * Refusing the shape outright is the only honest answer; a station is built
+ * synchronously, and one that has to wait for something builds itself and
+ * fills itself in afterwards.
+ */
+export function underOwner<T>(
+  owner: Owner,
+  body: () => T extends PromiseLike<unknown> ? never : T,
+): T {
   const before = standing
   standing = owner
   try {
-    return body()
+    const made = body()
+    if (typeof (made as PromiseLike<unknown>)?.then === 'function') {
+      throw new TypeError(
+        'loom: underOwner is synchronous — its body may not return a promise, since the owner is put down before an awaited line would run',
+      )
+    }
+    return made as T
   } finally {
     standing = before
   }

@@ -24,7 +24,7 @@ import { overWire } from '#weft'
 import type { Lock } from '#wire'
 import { adopt, carry, facing, offer } from './carry.ts'
 import type { Adopted, Face, Offering, OfferOptions } from './carry.ts'
-import { underOwner } from './owner.ts'
+import { notice } from '#core'
 
 /** Where the state lives, and who is doing the work. */
 export type Role = 'inline' | 'leading' | 'following'
@@ -59,13 +59,29 @@ export function station<O extends Offering>(
 }
 
 export interface LoomSpec<O extends Offering = Offering> {
-  /** The name the tabs elect by, and the name in the instruments. */
+  /** The name in the instruments, and the word this screen is elected by. */
   name: string
   /**
-   * Who is signed in. Said once, here, and inherited by everything the station
-   * builds that needs an owner — a book of unsent intents, above all: it
-   * outlives the tab, so it is kept under `name`/`session` and nobody else can
-   * reach it. Absent, nothing durable opens itself and says so.
+   * The application's durable identity — what its shelf is filed under.
+   *
+   * Apart from `name` on purpose. `name` is diagnostic: it is renamed to read
+   * better in a log, and a rename that quietly moves a book of unsent intents
+   * to a new key and abandons the old one is not a rename anybody meant to
+   * make. Absent, `name` is used, which is right until the day it is renamed —
+   * state it the moment the shelf matters.
+   */
+  app?: string
+  /**
+   * Who is signed in.
+   *
+   * Said once, here, and it partitions two things at once: the shelf — a book
+   * of unsent intents outlives the tab, so it is filed under app and session
+   * and nobody else can reach it — and the placement. Tabs elect one of
+   * themselves to do the work; two sessions of one application hold separate
+   * elections and raise stations of their own, rather than one leading and
+   * handing the other its whole screen.
+   *
+   * Absent, nothing durable opens itself and says so.
    */
   session?: string
   /** Build the station. Called only where it comes to live — never in a tab
@@ -104,7 +120,7 @@ export function worker(target: Parameters<typeof overWire>[0]): Wiring {
 
 export interface Loomed<O extends Offering = Offering> extends Adopted {
   /**
-   * The station's face: `app.views.seats`, `app.acts.take()`, checked against
+   * The station's face: `app.face.views.seats`, `app.face.acts.take()`, checked against
    * what the station declared. The untyped `view(name)` and `act(name)` stay
    * below for names built at run time.
    */
@@ -124,6 +140,17 @@ export function loom<O extends Offering = Offering>(
   const wiring = options.wire ?? inMemory()
 
   if (wiring.kind === 'worker') {
+    if (spec.session !== undefined) {
+      // The station is built inside the worker, by the worker's own entry
+      // point, so there is nothing here to build under an owner. Saying who is
+      // signed in on this side would look like it took effect and would not.
+      notice({
+        kind: 'session-in-worker',
+        where: spec.name,
+        level: 'warn',
+        message: `loom(${spec.name}): the station lives in the worker, so its owner is named there — the session given here does nothing`,
+      })
+    }
     const channel = wiring.channel as Channel
     const face = adopt(channel)
     // Always 'following': the work is on the other side of the wire, and this
@@ -144,17 +171,16 @@ export function loom<O extends Offering = Offering>(
     throw new Error(`loom(${spec.name}): a station is needed for ${wiring.kind}`)
   }
 
-  const build = spec.station
+  const owner =
+    spec.session === undefined ? undefined : { app: spec.app ?? spec.name, session: spec.session }
   const carried = carry(
     {
       name: spec.name,
-      // The owner stands while the station is built — which is where every
-      // durable thing in it is made — and nowhere else. In a following tab
-      // this is never called at all.
-      station:
-        spec.session === undefined
-          ? build
-          : () => underOwner({ app: spec.name, session: spec.session as string }, build),
+      // Handed down rather than wrapped here: the owner has to hold for the
+      // election and the bus as well as for the building, and a tab that is
+      // handed the lock minutes later has to be raised under the same one.
+      ...(owner === undefined ? {} : { owner }),
+      station: spec.station,
     },
     {
       mode: wiring.kind,

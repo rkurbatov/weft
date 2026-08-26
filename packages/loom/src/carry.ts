@@ -20,6 +20,9 @@ import type { Channel } from '#weft'
 import type { ListOffer, Mirrored } from '#weft'
 import type { Lock } from '#wire'
 import { subscribe } from '#weft'
+import type { Station } from './assemble.ts'
+import { underOwner } from './owner.ts'
+import type { Owner } from './owner.ts'
 
 export interface Offering {
   views?: Readonly<Record<string, Watchable<unknown>>>
@@ -163,21 +166,44 @@ export interface Adopted {
   close(): void
 }
 
+/**
+ * A door onto named things, kept.
+ *
+ * The same name gives back the same thing: a screen putting `app.face.acts.add`
+ * in a dependency list or comparing it against a previous render must not be
+ * handed a new function every time it looks. Symbols pass through untouched —
+ * `then` is asked for by name, but a promise-check asks by symbol, and a proxy
+ * that answers everything makes itself look like a thenable.
+ */
+function door<T extends object>(make: (name: string) => unknown): T {
+  const kept = new Map<string, unknown>()
+  return new Proxy({} as T, {
+    get: (target, name) => {
+      if (typeof name !== 'string') return Reflect.get(target, name)
+      const standing = kept.get(name)
+      if (standing !== undefined || kept.has(name)) return standing
+      const made = make(name)
+      kept.set(name, made)
+      return made
+    },
+    has: () => true,
+  })
+}
+
 /** The typed face over an adopted station: names checked, values already shaped. */
 export function facing<O extends Offering>(taken: Adopted): Face<O> {
   return {
-    views: new Proxy({}, { get: (_t, name: string) => taken.view(name) }) as Face<O>['views'],
-    facts: new Proxy(
-      {},
-      {
-        get: (_t, name: string) => (value: unknown) => taken.write(name, value),
-      },
-    ) as Face<O>['facts'],
-    acts: new Proxy({}, { get: (_t, name: string) => taken.act(name) }) as Face<O>['acts'],
-    lists: new Proxy({}, { get: (_t, name: string) => taken.list(name) }) as Face<O>['lists'],
-    tables: new Proxy({}, { get: (_t, name: string) => taken.table(name) }) as Face<O>['tables'],
+    views: door<Face<O>['views']>(name => taken.view(name)),
+    facts: door<Face<O>['facts']>(name => (value: unknown) => taken.write(name, value)),
+    acts: door<Face<O>['acts']>(name => taken.act(name)),
+    lists: door<Face<O>['lists']>(name => taken.list(name)),
+    tables: door<Face<O>['tables']>(name => taken.table(name)),
   }
 }
+
+/** What a station offers, read off the station's own type. For a worker panel,
+ *  where there is no station on this side to infer it from. */
+export type OfferingOf<S> = S extends Station<infer O> ? O : never
 
 /** The tab's side: take a face off the wire. */
 export function adopt(channel: Channel, options: LinkOptions = {}): Adopted {
@@ -245,6 +271,22 @@ export interface Carried {
 
 export interface CarrySpec {
   name: string
+  /**
+   * Whose station this is.
+   *
+   * Not only where a durable book is kept — where the station itself is. Tabs
+   * elect one of themselves to do the work and mirror it to the rest, and they
+   * elect by a name: two tabs of one application under different sessions
+   * shared that name, so one of them led and the other received its whole
+   * screen. The book was already apart by then, which made the leak quieter,
+   * not smaller: every view, fact and act crossed.
+   *
+   * So an owner partitions the election and the bus as well as the shelf, and
+   * the claim on the wire says whose tab is asking. Sessions do not compete
+   * for one lock and do not refuse each other; they simply hold separate
+   * elections and raise stations of their own.
+   */
+  owner?: Owner
   /** Build the station; called only where it comes to live. */
   station: () => { serve: (channel: Channel) => () => void; dispose?: () => void }
 }
@@ -257,8 +299,30 @@ export interface CarryOptions {
   lock?: Lock
 }
 
+/**
+ * The word tabs elect and talk by. One per owner, so sessions never meet.
+ *
+ * Joined with a slash and not with a NUL, though NUL is what the rest of the
+ * library separates parts with: a broadcast channel's name crosses into the
+ * platform, and there it is a C string — two names differing only after a NUL
+ * are one channel, so two sessions kept meeting on a bus they had every reason
+ * to think was their own. A slash is safe because a session and an application
+ * may not contain one; `within` refuses such a name for the same reason.
+ */
+function partOf(spec: CarrySpec): string {
+  if (spec.owner === undefined) return spec.name
+  return `${spec.name}/${spec.owner.app}/${spec.owner.session}`
+}
+
 export function carry(spec: CarrySpec, options: CarryOptions = {}): Carried {
   const mode = options.mode ?? 'auto'
+  const part = partOf(spec)
+  const claim = spec.owner === undefined ? undefined : `${spec.owner.app}/${spec.owner.session}`
+  // Whatever this station builds is built under its owner — the shelf included.
+  // Stated here rather than by the caller, so a station raised by a lock grant
+  // minutes later is raised under the same owner as one raised at once.
+  const build = (): { serve: (channel: Channel) => () => void; dispose?: () => void } =>
+    spec.owner === undefined ? spec.station() : underOwner(spec.owner, spec.station)
   const tabsCanTalk =
     mode === 'tabs' ||
     (mode === 'auto' &&
@@ -267,7 +331,7 @@ export function carry(spec: CarrySpec, options: CarryOptions = {}): Carried {
       'locks' in navigator)
 
   if (!tabsCanTalk) {
-    const built = spec.station()
+    const built = build()
     const pair = wirePair()
     const stopServe = built.serve(pair.graph)
     const role = port<'inline' | 'leading' | 'following'>('inline', { name: `${spec.name}.role` })
@@ -287,14 +351,21 @@ export function carry(spec: CarrySpec, options: CarryOptions = {}): Carried {
     name: `${spec.name}.role`,
   })
   const stopLead = leadOrFollow({
-    name: spec.name,
+    name: part,
     lock: options.lock ?? webLocks(),
     lead: () => {
       role.set('leading')
       // The hub — and its bus — are opened by the leader only: a follower
       // holds nothing it would have to let go of.
-      const hub = busHub(spec.name)
-      const built = spec.station()
+      // Belt as well as braces: separate elections keep sessions apart, and a
+      // tab that reaches the wrong bus anyway is turned away by name rather
+      // than handed a replica of somebody else's screen.
+      const hub = busHub(
+        part,
+        undefined,
+        claim === undefined ? {} : { admit: (asked: string | undefined) => asked === claim },
+      )
+      const built = build()
       const stopHub = hub.accept(channel => built.serve(channel))
       return () => {
         stopHub()
@@ -309,7 +380,7 @@ export function carry(spec: CarrySpec, options: CarryOptions = {}): Carried {
 
   // The channel carry opened, carry closes: whoever adopted it may have
   // closed it already, and a second close is a shrug, not a fault.
-  const channel = busChannel(spec.name)
+  const channel = busChannel(part, undefined, claim === undefined ? {} : { claim })
   return {
     channel,
     role,
