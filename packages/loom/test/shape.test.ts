@@ -116,7 +116,9 @@ describe('the shape of an answer', () => {
       { name: 'nested' },
     )
     until(subscribe(screen.header.total, () => {}))
-    const onNow = (screen.board.byStatus as Record<string, ListView<Game>>)['live'] as ListView<Game>
+    const onNow = (screen.board.byStatus as Record<string, ListView<Game>>)[
+      'live'
+    ] as ListView<Game>
     until(subscribe(onNow.size, () => {}))
 
     games.take({ id: 1, status: 'live', start: 10, goals: 0 })

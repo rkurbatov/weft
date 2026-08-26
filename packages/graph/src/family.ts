@@ -8,7 +8,11 @@ export interface FamilyOptions<K, T> {
   name?: string
   /** How a key becomes a map key. Required for object keys; numbers and strings work as they are. */
   nameOf?: (key: K) => string
-  /** Ceiling on unwatched members. Watched ones are never evicted and do not count against it. */
+  /**
+   * Ceiling on unwatched members. Watched ones are never evicted and do not
+   * count against it. One member may stand over the ceiling: the one just
+   * asked for, which is held until the next key is asked for.
+   */
   max?: number
   equal?: (a: T, b: T) => boolean
 }
@@ -72,10 +76,19 @@ export function family<K, T>(
     members.set(id, member)
   }
 
-  const dropUnwatched = (): number => {
-    let dropped = 0
+  // Called just before a new member joins; `over` is how many held members are
+  // one too many once it does. Every member the walk passes costs one from that
+  // budget — a dropped one because it is gone, a watched one because it never
+  // counted against the ceiling — so the walk is bounded by the budget, not the
+  // map: `watched + 1` steps once the family is full. The error is one-sided: a
+  // watched member met before the cold ones behind it spends a drop's budget,
+  // so the cache can sit under its ceiling, never over it.
+  const makeRoom = (): void => {
+    let over = members.size + 1 - max
+    if (over <= 0) return // the common path: not even the iterator is made
     for (const [id, member] of members) {
-      if (members.size - dropped <= max) break
+      if (over <= 0) return
+      over--
       // `observed`, not `demanded`, and the difference is the invariant at
       // the top of this file: a cold watch — demand off, a journal following
       // what happens anyway — is still a watcher, and dropping the cell
@@ -84,11 +97,14 @@ export function family<K, T>(
       // documented anti-pattern the React seam is shaped to avoid (see
       // useLive: the screen cell is born on subscription, never in render).
       if (member.cell.observed) continue
+      // A member whose own formula is running is in use as surely as a watched
+      // one: it is usually the very build that asked for the key now arriving
+      // (a fold over blocks, a tree of parts). Dropping it throws, and the run
+      // that was building it dies.
+      if (member.cell.computing) continue
       member.cell.dispose()
       members.delete(id)
-      dropped++
     }
-    return dropped
   }
 
   const get = (key: K): Derived<T> => {
@@ -109,6 +125,10 @@ export function family<K, T>(
       if (members.size >= max) touch(id, existing)
       return existing.cell
     }
+    // Room is made before the newborn joins, not after: a member that is not
+    // yet in the map cannot be chosen as the candidate to drop, and the caller
+    // cannot be handed a cell the family disposed on its way out.
+    makeRoom()
     const member: Member<K, T> = {
       key,
       cell: derived(() => build(key), {
@@ -117,7 +137,6 @@ export function family<K, T>(
       }),
     }
     members.set(id, member)
-    if (members.size > max) dropUnwatched()
     return member.cell
   }
 
@@ -149,6 +168,11 @@ export function family<K, T>(
     let dropped = 0
     for (const [id, member] of members) {
       if (member.cell.observed) continue
+      // A member whose own formula is running is in use as surely as a watched
+      // one: it is usually the very build that asked for the key now arriving
+      // (a fold over blocks, a tree of parts). Dropping it throws, and the run
+      // that was building it dies.
+      if (member.cell.computing) continue
       member.cell.dispose()
       members.delete(id)
       dropped++

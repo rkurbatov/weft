@@ -78,10 +78,10 @@ export function list<R>(feed: Live<R>, spec: ListSpec<R>): Part<ListView<R>> {
       const own =
         window === undefined
           ? undefined
-          : derived(
-              () => sorted.read(window.from.get(), window.from.get() + window.size),
-              { name: `${name}.window`, equal: sameRows },
-            )
+          : derived(() => sorted.read(window.from.get(), window.from.get() + window.size), {
+              name: `${name}.window`,
+              equal: sameRows,
+            })
       const rows = own ?? sorted.rows
       return {
         rows,

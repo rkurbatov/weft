@@ -58,10 +58,15 @@ export function query<K, T>(
     throw new Error(`weft: query needs keyOf for ${kind} keys`)
   }
 
-  /** Unwatched members past the ceiling go, oldest first; watched ones stay. */
+  /**
+   * Unwatched members past the ceiling go, oldest first; watched ones stay.
+   * Called just before a new member joins, so the newborn counts against the
+   * ceiling but cannot be the candidate that pays for it — a caller handed a
+   * source the cache has already let go asks the world twice for one answer.
+   */
   const makeRoom = (): void => {
     if (max === 'unbounded') return
-    let unwatched = 0
+    let unwatched = 1 // the one about to join: nobody demands it yet
     for (const member of held.values()) if (!member.feed.demanded) unwatched++
     let over = unwatched - max
     if (over <= 0) return
@@ -95,8 +100,8 @@ export function query<K, T>(
       tally: shared,
       name: `${perSupply.name ?? 'query'}:${name}`,
     })
-    held.set(name, { key, feed })
     makeRoom()
+    held.set(name, { key, feed })
     return feed
   }) as Query<K, T>
 

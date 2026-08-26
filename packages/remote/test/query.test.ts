@@ -84,6 +84,23 @@ describe('parametric queries', () => {
     assert.equal(user.sweep(), 3)
   })
 
+  test('the member just asked for is never the one dropped to make room', async () => {
+    const clock = world()
+    // A cache told to keep nothing still has to hand back what it was asked
+    // for: a source dropped on its way out to the caller means two requests
+    // over the wire for one answer, and two states for one question.
+    const user = query(async (id: number) => `user ${id}`, {
+      max: 0,
+      now: clock.now,
+      timers: clock.timers,
+    })
+    const one = user(1)
+    assert.equal(user(1), one)
+    assert.equal(user.size, 1)
+    user(2)
+    assert.equal(user.size, 1) // the first is cold and goes; the newborn stays
+  })
+
   test('object keys need keyOf, and get their own member each', async () => {
     const clock = world()
     const page = query(async (at: { list: string; page: number }) => `${at.list}#${at.page}`, {

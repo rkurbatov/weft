@@ -126,7 +126,7 @@ export class Derived<T> implements Node, Consumer {
   demand = 0
   private value!: T
   private valued = false
-  private computing = false
+  private running = false
   /**
    * What the formula threw last time, if it did. Held rather than rethrown from
    * a fresh run: a formula that fails on every read would otherwise fail once
@@ -185,10 +185,19 @@ export class Derived<T> implements Node, Consumer {
     return this.demand > 0
   }
 
+  /**
+   * The formula is running right now — the cell is on the stack, and whoever
+   * holds it is in the middle of using it. Asked by caches that drop cells
+   * nobody wants: `dispose` refuses a computing cell, so a cache that picks
+   * one as a candidate crashes the run that was building it.
+   */
+  get computing(): boolean {
+    return this.running
+  }
+
   /** Let go of the sources. Next read recomputes from scratch. */
   dispose(): void {
-    if (this.computing)
-      throw new Error(`weft: cannot dispose cell "${this.name}" while it computes`)
+    if (this.running) throw new Error(`weft: cannot dispose cell "${this.name}" while it computes`)
     this.engine.unlink(this)
     this.state = DIRTY
     this.valued = false
@@ -197,7 +206,7 @@ export class Derived<T> implements Node, Consumer {
 
   stabilize(): void {
     if (this.state === CLEAN) return
-    if (this.computing) throw new Error(`weft: cycle through cell "${this.name}"`)
+    if (this.running) throw new Error(`weft: cycle through cell "${this.name}"`)
     if (this.state === CHECK && !this.engine.verify(this)) {
       this.state = CLEAN
       return
@@ -212,7 +221,7 @@ export class Derived<T> implements Node, Consumer {
       const started = core.tap.watching ? core.tap.now() : 0
       let next!: T
       let thrown: { error: unknown } | null = null
-      this.computing = true
+      this.running = true
       try {
         core.retrack(this, () => {
           next = this.formula()
@@ -222,7 +231,7 @@ export class Derived<T> implements Node, Consumer {
         // of them moves, the formula runs again and may well succeed.
         thrown = { error }
       } finally {
-        this.computing = false
+        this.running = false
       }
       if (thrown !== null) {
         const was = this.failure

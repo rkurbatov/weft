@@ -2,6 +2,7 @@ import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { port, derived, subscribe } from '#graph'
 import { family } from '#graph'
+import type { Derived } from '#graph'
 import { until } from '#testkit'
 
 describe('families of cells', () => {
@@ -160,6 +161,61 @@ describe('families of cells', () => {
     assert.equal(at({ row: 1, col: 2 }), at({ row: 1, col: 2 }))
     assert.equal(at({ row: 1, col: 2 }).peek(), '1/2')
     assert.equal(at.size, 1)
+  })
+
+  test('the member just asked for is never the one dropped to make room', () => {
+    const item = family((id: number) => id, { max: 2 })
+    const stopOne = subscribe(item(1), () => {})
+    until(subscribe(item(2), () => {}))
+    // Both standing members are watched, so neither counts against the ceiling
+    // and the newborn is within it. Room is made before it joins, so it cannot
+    // be the candidate for its own arrival.
+    const three = item(3)
+    assert.equal(item.has(3), true)
+    assert.equal(item(3), three)
+    stopOne()
+  })
+
+  test('the ceiling counts unwatched members, watched ones stand outside it', () => {
+    const item = family((id: number) => id, { max: 2 })
+    const stopOne = subscribe(item(1), () => {})
+    until(subscribe(item(2), () => {}))
+    item(3)
+    item(4)
+    item(5)
+    assert.equal(item.has(1), true)
+    assert.equal(item.has(2), true)
+    // Two watched standing outside the ceiling, two cold under it.
+    assert.equal(item.size, 4)
+    assert.equal(item.has(3), false)
+    assert.equal(item.has(5), true)
+    stopOne()
+  })
+
+  test('a family that caches nothing still hands back a live member', () => {
+    const item = family((id: number) => id, { max: 0 })
+    const one = item(1)
+    assert.equal(item(1), one)
+    const two = item(2)
+    assert.equal(item.has(1), false)
+    assert.equal(item(2), two)
+    assert.equal(two.peek(), 2)
+  })
+
+  test('a member building its own children is not dropped to make room for them', () => {
+    // A fold over blocks: the upper part reads eight lower ones, and the family
+    // is small enough that the children push the ceiling while their parent is
+    // still on the stack.
+    const part: (key: string) => Derived<number> = family(
+      (key: string): number => {
+        if (key.startsWith('leaf:')) return Number(key.slice(5))
+        let sum = 0
+        for (let i = 0; i < 8; i++) sum += part(`leaf:${i}`).get()
+        return sum
+      },
+      { max: 4 },
+    )
+    assert.equal(part('sum').peek(), 28)
   })
 
   test('a watched member survives every drop path', () => {
