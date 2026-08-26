@@ -41,6 +41,8 @@ export interface LivePassport<R> {
 
 export interface Sorted<R> {
   size: Watchable<number>
+  /** Is anybody watching this order — its size, or any window of it? */
+  readonly watched: boolean
   /**
    * Every row, in this order. The honest slow path — a screen showing more
    * than a screenful wants `window` — but a list of twenty with an order and
@@ -116,9 +118,12 @@ function reading<R>(
       const order = t.orderBy(compare, name)
       // One window over the whole thing, made once and shared: building it
       // inside a formula would make a fresh view on every recompute.
-      let whole: Watchable<readonly R[]> | undefined
+      let whole: ReturnType<typeof derived<readonly R[]>> | undefined
       return {
         size: order.size,
+        get watched() {
+          return order.watched || whole?.observed === true
+        },
         get rows() {
           whole ??= derived(() => order.slice(0, order.size.get()).get(), {
             name: `${name ?? t.name}.ordered`,

@@ -19,6 +19,15 @@ export interface Family<K, T> {
   readonly name: string
   /** Members currently held, watched and cached alike. */
   readonly size: number
+  /**
+   * Is anybody watching any member?
+   *
+   * Asked by whoever holds the family and has a life of its own to decide —
+   * an ordered view deciding whether any window of it is being shown. It is
+   * the same `observed` the ceiling goes by, so the answer and the eviction
+   * rule cannot drift apart.
+   */
+  readonly watched: boolean
   /** Members held right now; not a set of keys that ever existed. */
   keys(): K[]
   has(key: K): boolean
@@ -116,6 +125,12 @@ export function family<K, T>(
   Object.defineProperties(api, {
     name: { value: name },
     size: { get: () => members.size },
+    watched: {
+      get: () => {
+        for (const member of members.values()) if (member.cell.observed) return true
+        return false
+      },
+    },
   })
 
   api.keys = () => [...members.values()].map(m => m.key)

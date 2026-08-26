@@ -71,26 +71,27 @@ export function list<R>(feed: Live<R>, spec: ListSpec<R>): Part<ListView<R>> {
           : derived(() => sorted.window(window.from.get(), window.from.get() + window.size).get(), {
               name: `${name}.window`,
             })
-      // Everything this list has handed out. Watching ANY of it is watching
-      // the list: a screen that shows a count and no rows — a tab with a
-      // number on it — holds `size` and nothing else, and a ceiling that
-      // looked only at `rows` would call that shelf idle and take it away
-      // from under it.
-      const handed = new Set<Watchable<unknown>>([rows, sorted.size])
       return {
         rows,
         size: sorted.size,
-        window: (from, to) => {
-          const seen = sorted.window(from, to)
-          handed.add(seen)
-          return seen
-        },
+        window: (from, to) => sorted.window(from, to),
         place: sorted.place,
+        /**
+         * Is anybody watching any part of this list?
+         *
+         * `observed`, not `demanded`, and the difference is the same invariant
+         * a family keeps: a cold watch — demand off, a journal following what
+         * happens anyway — is still a watcher, and taking the cell out from
+         * under it leaves it alive and deaf for good.
+         *
+         * Any part, because a screen holds whichever part it shows: a count on
+         * a tab holds `size` and nothing else. The windows are not counted
+         * here but where they live, under the order's own ceiling — a scrolled
+         * list asks for a new one every frame, and a set of every window ever
+         * handed out would be a leak with no ceiling in it at all.
+         */
         get watched() {
-          for (const one of handed) {
-            if ((one as { demanded?: boolean }).demanded === true) return true
-          }
-          return false
+          return rows.observed || sorted.watched
         },
         dispose() {
           rows.dispose()
@@ -150,9 +151,15 @@ export function listsBy<R, F extends ScalarField<R>, Whole extends string = neve
        * measured line, beside it under the same name. And what does go is
        * disposed of, or the ceiling would bound a map and nothing else.
        */
-      const evict = (): void => {
+      const evict = (born: string): void => {
         for (const [key, shelf] of shelves) {
           if (shelves.size <= keep) return
+          // Never the one just asked for: it is about to be handed back, and
+          // handing back a shelf that has already been disposed of is worse
+          // than being one over the ceiling for a moment. When everything else
+          // is being watched, over the ceiling is the right answer anyway —
+          // what somebody is looking at is not evictable, whatever the count.
+          if (key === born) continue
           if (key === spec.whole) continue
           if (shelf.watched) continue
           shelves.delete(key)
@@ -196,7 +203,7 @@ export function listsBy<R, F extends ScalarField<R>, Whole extends string = neve
               },
         ).build(`${name}.${asked}`)
         shelves.set(asked, made)
-        evict()
+        evict(asked)
         return made
       }
       // A proxy, so the set of shelves is the DATA's business, not the

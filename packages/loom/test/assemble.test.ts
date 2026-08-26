@@ -6,7 +6,8 @@
 
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
-import { cell, inMemory, loom, offer, sends, station, tabs, will } from '#loom'
+import { cell, inMemory, loom, offer, sends, station, tabs, underOwner, will } from '#loom'
+import { worker } from '#loom'
 import type { Station } from '#loom'
 import { atOnce, wirePair } from '#weft'
 import type { Lock } from '#wire'
@@ -240,5 +241,63 @@ describe('assembling a screen over a station', () => {
     stopBob()
     ann.stop()
     bob.stop()
+  })
+
+  test('a worker is not told whose it is from this side', () => {
+    // The station is built inside the worker, so there is nothing here to
+    // build under an owner. A parameter that exists to keep one person's state
+    // away from another's must not be accepted where it does nothing: the
+    // screen would go on running, looking isolated and not being it.
+    const pair = wirePair()
+    assert.throws(
+      () => loom({ name: 'panel', session: 'ann' }, { wire: worker(pair.watcher as never) }),
+      /owner is named there/,
+    )
+    pair.graph.close?.()
+    pair.watcher.close?.()
+  })
+
+  test('an owner stands for a synchronous build and no longer', () => {
+    let inside: string | undefined
+    const made = underOwner({ app: 'demo', session: 'ann' }, () => {
+      inside = will({ ping: sends<number>(() => Promise.resolve()) }, { name: 'inner' }).shelf
+      return 'built'
+    })
+    assert.equal(made, 'built')
+    assert.equal(inside, 'memory') // no browser database here; the point is that it opened owned
+    // Put down again afterwards: a second book built outside the call is
+    // anonymous, and says so.
+    const after = will({ ping: sends<number>(() => Promise.resolve()) }, { name: 'outer' })
+    assert.equal(after.shelf, 'memory')
+  })
+
+  test('an owner refuses a body that would outlive it', () => {
+    // The owner is put down the moment the body returns, so a body that
+    // returns a promise would do its real work — the part that opens the book
+    // — after it had already been put down. The type refuses the shape; this
+    // is the same refusal for a thenable that got past it.
+    const before = { app: 'demo', session: 'bob' }
+    let restored: string | undefined
+    assert.throws(
+      () =>
+        underOwner(before, () => {
+          // Built by hand rather than written as a literal: a thenable at run
+          // time, which is what the check is for, and typed as an ordinary
+          // object so it gets past the compiler that would otherwise refuse
+          // the shape outright.
+          const looksAwaitable: Record<string, unknown> = {
+            // oxlint-disable-next-line unicorn/no-thenable
+            then: (resolve: (value: unknown) => void) => resolve(undefined),
+          }
+          return looksAwaitable
+        }),
+      /synchronous/,
+    )
+    // And the owner that stood before is standing again.
+    underOwner(before, () => {
+      restored = will({ ping: sends<number>(() => Promise.resolve()) }, { name: 'after' }).shelf
+      return 0
+    })
+    assert.equal(restored, 'memory')
   })
 })

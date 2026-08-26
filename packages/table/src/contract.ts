@@ -28,6 +28,17 @@ export interface FoldSpec<R, A> {
 
 export interface Ordered<R> {
   readonly size: Watchable<number>
+  /**
+   * Is anybody watching this order — its size, or any window of it?
+   *
+   * Windows are asked for by their bounds and made as they are asked for, so
+   * whoever holds an order cannot keep a list of them to check: a scrolled
+   * list asks for a different one every frame, and a list of every window
+   * ever handed out is a leak with a ceiling nowhere in it. Answered here,
+   * where the windows already live under one, and by the same `observed` the
+   * ceiling goes by.
+   */
+  readonly watched: boolean
   /** Rows [from, to) in order. The same window is the same cell. */
   slice(from: number, to: number): Watchable<readonly R[]>
   /** Where this key stands right now, -1 when absent. Plain and untracked:

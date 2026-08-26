@@ -24,7 +24,6 @@ import { overWire } from '#weft'
 import type { Lock } from '#wire'
 import { adopt, carry, facing, offer } from './carry.ts'
 import type { Adopted, Face, Offering, OfferOptions } from './carry.ts'
-import { notice } from '#core'
 
 /** Where the state lives, and who is doing the work. */
 export type Role = 'inline' | 'leading' | 'following'
@@ -141,15 +140,16 @@ export function loom<O extends Offering = Offering>(
 
   if (wiring.kind === 'worker') {
     if (spec.session !== undefined) {
-      // The station is built inside the worker, by the worker's own entry
-      // point, so there is nothing here to build under an owner. Saying who is
-      // signed in on this side would look like it took effect and would not.
-      notice({
-        kind: 'session-in-worker',
-        where: spec.name,
-        level: 'warn',
-        message: `loom(${spec.name}): the station lives in the worker, so its owner is named there — the session given here does nothing`,
-      })
+      // Refused rather than noted. The station is built inside the worker, by
+      // the worker's own entry point, so there is nothing on this side to
+      // build under an owner — and a parameter whose whole job is keeping one
+      // person's state away from another's must not be accepted where it does
+      // nothing. A note in a log is the wrong weight for that: the screen goes
+      // on running, looking isolated and not being it. Until a worker can be
+      // told whose it is before it builds, the combination does not exist.
+      throw new Error(
+        `loom(${spec.name}): a worker builds its own station, so its owner is named there — pass the session to the worker's entry point, not to this side`,
+      )
     }
     const channel = wiring.channel as Channel
     const face = adopt(channel)

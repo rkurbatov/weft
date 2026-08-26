@@ -150,6 +150,9 @@ export function orderedOver<R>(
 
   return {
     size,
+    get watched() {
+      return size.observed || windows.watched
+    },
     slice: (from, to) => windows(`${from}:${to}`),
     rank(key) {
       version.peek() // brings the order up to date without becoming a dependency

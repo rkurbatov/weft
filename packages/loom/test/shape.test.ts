@@ -192,6 +192,21 @@ describe('the shape of an answer', () => {
     until(subscribe(second.rows, () => {}))
     for (const key of ['6', '7', '8', '9']) void shelves[key]
     assert.equal(shelves['5'], second)
+
+    // And by a cold watch: demand off, a journal following what happens
+    // anyway. Still a watcher, and taking the shelf out from under it would
+    // leave it alive and deaf for good.
+    const third = shelves['10'] as ListView<Game>
+    until(subscribe(third.size, () => {}, { demand: false }))
+    for (const key of ['11', '12', '13', '14']) void shelves[key]
+    assert.equal(shelves['10'], third, 'a cold observer was left deaf')
+
+    // And by a window of its own, which lives under the order's ceiling rather
+    // than in a list of every window ever handed out.
+    const fourth = shelves['15'] as ListView<Game>
+    until(subscribe(fourth.window(0, 5), () => {}))
+    for (const key of ['16', '17', '18', '19']) void shelves[key]
+    assert.equal(shelves['15'], fourth, 'a watched window did not count as watching')
   })
 
   test('shelves are kept to a ceiling, and the whole shelf is never dropped', () => {
