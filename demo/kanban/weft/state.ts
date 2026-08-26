@@ -61,6 +61,9 @@ export function kanban(io: KanbanServer, pollMs = 4000): Kanban {
     },
     {
       name: 'kanban',
+      // The owner is not named here: it is inherited from the assembly, where
+      // the application says once who is signed in. A book of unsent moves
+      // outlives the tab, so without one nothing durable opens.
       judge: error =>
         error instanceof Error && error.message.includes('conflict') ? 'rejected' : 'transient',
       retry: 30,

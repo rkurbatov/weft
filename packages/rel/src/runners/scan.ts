@@ -112,6 +112,12 @@ export function scanRunner(node: ScanNode, make: Make): Runner {
       // the same single linear walk the hand-written layouts pay.
       const gone = new Map<Key, Row>()
       const landed = new Map<Key, Row>()
+      // Rows updated where they stood. They belong in what goes out — their
+      // answer changed — but NOT in what gets inserted: the pass already holds
+      // them. Merging the two lists put such a row in the order twice, and a
+      // duplicate the map on top hides while rank, size and the measured line
+      // all count it.
+      const inPlace = new Set<Key>()
       const moves: Array<Change<Row>> = []
       let earliest = placed.length
       let touched = false
@@ -129,6 +135,7 @@ export function scanRunner(node: ScanNode, make: Make): Runner {
             earliest = Math.min(earliest, at)
             touched = true
             landed.set(change.key, change.next)
+            inPlace.add(change.key)
             continue
           }
         }
@@ -143,15 +150,23 @@ export function scanRunner(node: ScanNode, make: Make): Runner {
             if (places.delete(change.key) && change.prev !== undefined) {
               gone.set(change.key, change.prev)
             }
+            // A row measured earlier in the same batch and dropped later in it
+            // is gone, whatever the earlier half of the batch recorded.
+            landed.delete(change.key)
+            inPlace.delete(change.key)
           } else {
             places.set(change.key, change.next)
             gone.delete(change.key)
             landed.set(change.key, change.next)
+            // It really moves now, so the pass does have to take it in.
+            inPlace.delete(change.key)
           }
         }
         // The pass is already in order; only the batch needs sorting, and the
         // two are merged in one walk — n + m, not n log n.
-        const fresh = [...landed].map(([key, row]) => ({ key, row }))
+        const fresh = [...landed]
+          .filter(([key]) => !inPlace.has(key))
+          .map(([key, row]) => ({ key, row }))
         fresh.sort(compare)
         const kept = placed.filter(one => places.get(one.key) === one.row)
         const merged: Array<{ key: Key; row: Row }> = []
@@ -179,7 +194,10 @@ export function scanRunner(node: ScanNode, make: Make): Runner {
               places.delete(change.key)
               earliest = Math.min(earliest, at)
               touched = true
-              if (change.next === undefined) gone.set(change.key, change.prev)
+              if (change.next === undefined) {
+                gone.set(change.key, change.prev)
+                landed.delete(change.key)
+              }
             }
           }
           if (change.next !== undefined) {
@@ -192,6 +210,7 @@ export function scanRunner(node: ScanNode, make: Make): Runner {
             touched = true
             gone.delete(change.key)
             landed.set(change.key, change.next)
+            inPlace.delete(change.key)
           }
         }
       }

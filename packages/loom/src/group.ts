@@ -121,12 +121,16 @@ export function fold<R>(
   form: (g: Group<R>) => Piece<unknown> | Record<string, Piece<unknown>>,
   where?: Expr | ((row: R) => boolean),
 ): Part<Watchable<unknown>> {
-  const one = 'decl' in (form(toolkit<R>()) as object)
-  const asRecord = (g: Group<R>): Record<string, Piece<unknown>> => {
-    const asked = form(g)
-    return one ? { it: asked as Piece<unknown> } : (asked as Record<string, Piece<unknown>>)
-  }
-  const part = group<R, Record<string, Piece<unknown>>>(feed, [], asRecord, where)
+  // Called once, here, and never again. It used to run a second time inside
+  // the group — once to learn whether it answers with one piece or a record,
+  // once to build the folds — and a declaration a caller reasonably takes for
+  // a description of what is wanted was quietly a function run twice.
+  const asked = form(toolkit<R>())
+  const one = 'decl' in (asked as object)
+  const declared: Record<string, Piece<unknown>> = one
+    ? { it: asked as Piece<unknown> }
+    : (asked as Record<string, Piece<unknown>>)
+  const part = group<R, Record<string, Piece<unknown>>>(feed, [], () => declared, where)
   return {
     build: name => {
       const many = part.build(name)

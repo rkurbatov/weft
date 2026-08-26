@@ -302,18 +302,57 @@ describe('the Loom dialect', () => {
     one.stop()
   })
 
-  test('the book states its shelf: memory here, and a given shelf is the caller’s', async () => {
-    const { memoryStore } = await import('#weft')
+  test('a book with no owner is never durable, and says so out loud', async () => {
+    const { forgetNotices, onNotice } = await import('#core')
+    forgetNotices()
+    const heard: string[] = []
+    const stop = onNotice(what => heard.push(what.kind))
     const plain = will({ ping: sends<number>(() => Promise.resolve()) }, { name: 'shelf.plain' })
-    // No browser database in a test runner, so the best shelf here is memory —
-    // and it says so rather than pretending the book outlives the tab.
+    stop()
+    // Nobody named an owner, so nothing durable is opened — an anonymous book
+    // would be shared by whoever signs in next. It is memory, it says memory,
+    // and it does not pass in silence.
     assert.equal(plain.shelf, 'memory')
+    assert.deepEqual(heard, ['unowned-book'])
+  })
+
+  test('the book states its shelf: named owner here, and a given shelf is the caller’s', async () => {
+    const { memoryStore } = await import('#weft')
+    const named = will(
+      { ping: sends<number>(() => Promise.resolve()) },
+      { name: 'shelf.owned', owner: { app: 'demo', session: 'ann' } },
+    )
+    // No browser database in a test runner, so the best shelf an owner can get
+    // here is memory — and it says so rather than pretending the book outlives
+    // the tab.
+    assert.equal(named.shelf, 'memory')
 
     const given = will(
       { ping: sends<number>(() => Promise.resolve()) },
       { name: 'shelf.given', store: memoryStore() },
     )
     assert.equal(given.shelf, 'given')
+  })
+
+  test('two people on one shelf keep separate books', async () => {
+    const { memoryStore, within } = await import('#weft')
+    const disk = memoryStore()
+    const held: string[] = []
+    // A sender that never answers: both notes stay owed and stay on the disk,
+    // which is exactly the state that must not be shared.
+    const dict = { ping: sends<string>(() => new Promise<void>(() => {})) }
+    const hers = will(dict, { name: 'book', store: disk, owner: { app: 'demo', session: 'ann' } })
+    const his = will(dict, { name: 'book', store: disk, owner: { app: 'demo', session: 'bob' } })
+    void hers.ping('hers')
+    void his.ping('his')
+    await settle()
+    for (const key of await disk.keys()) held.push(key)
+    assert.deepEqual(held.toSorted(), ['demo/ann/book/book', 'demo/bob/book/book'])
+    const ann = within(disk, 'demo', 'ann')
+    assert.deepEqual(
+      (((await ann.read(ann.book('book'))) ?? []) as Array<{ args: unknown }>).map(one => one.args),
+      ['hers'],
+    )
   })
 
   test('a local change costs the size of the book, not the size of the board', () => {
@@ -480,6 +519,49 @@ describe('a truth that reports as it goes', () => {
     step?.()
     await settle(3)
     assert.equal(seen.last(), 99, 'and the return is the finished one')
+  })
+
+  test('while it grows, the flight is on and nothing may conclude from a piece', async () => {
+    const clock = world()
+    let step: (() => void) | undefined
+    const found = truth<number>(
+      async ({ soFar }) => {
+        soFar(1)
+        await new Promise<void>(resolve => {
+          step = resolve
+        })
+        return 2
+      },
+      { name: 'run', empty: 0, timers: clock.timers, now: clock.now },
+    )
+    until(subscribe(found.flight, () => {}))
+    await settle(3)
+
+    assert.equal(found.get(), 1, 'the piece shows')
+    assert.equal(found.flight.peek(), true, 'and the spinner stays up')
+    // A piece is not a snapshot of the world, so nothing dates by it: an
+    // optimistic write waiting to be taken back keeps waiting.
+    assert.equal(found.asked.peek(), 0)
+
+    step?.()
+    await settle(3)
+    assert.equal(found.flight.peek(), false)
+    assert.equal(found.asked.peek() > 0, true, 'a whole answer dates what is held')
+  })
+
+  test('a truth handed a clock uses it for every moment it records', async () => {
+    const clock = world(5000)
+    const found = truth(() => Promise.resolve('answer'), {
+      name: 'clocked',
+      empty: '',
+      timers: clock.timers,
+      now: clock.now,
+    })
+    until(subscribe(found.asked, () => {}))
+    await settle(3)
+    // Not the wall clock: a passport that hands in its own hands it in for all
+    // of them, and a test that moves time must see the moments move with it.
+    assert.equal(found.asked.peek(), 5000)
   })
 
   test('a body that ignores both handles works exactly as it did', async () => {

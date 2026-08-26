@@ -12,6 +12,7 @@ export {
   isFresh,
   loading,
   arrived,
+  partial,
   refused,
   together,
   firstOf,

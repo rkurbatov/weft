@@ -2,7 +2,7 @@
 // join is called crowded — along with everything the door does offer.
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
-import { subscribe } from '#weft'
+import { port, subscribe } from '#weft'
 import { table } from '#weft'
 import type { SourceTable } from '#weft'
 import type { Key } from '#weft'
@@ -46,8 +46,12 @@ describe('the relational layer', () => {
   }
 
   /** A live relation over the given tables, disposed of when the test ends. */
-  function living(tree: Parameters<typeof relate>[0], tables: Parameters<typeof relate>[1]) {
-    return owned(relate(tree, tables))
+  function living(
+    tree: Parameters<typeof relate>[0],
+    tables: Parameters<typeof relate>[1],
+    options?: Parameters<typeof relate>[2],
+  ) {
+    return owned(relate(tree, tables, options))
   }
 
   test('expressions: data in, JS semantics out, canon stable across key order', () => {
@@ -570,6 +574,40 @@ describe('the relational layer', () => {
     assert.equal(warned.includes('scan.offset'), true, 'the price was said aloud')
   })
 
+  test('a row measured in place is not inserted a second time by the batch', () => {
+    // A batch of eight moves or more is folded and merged in one pass. A row
+    // whose edit did not change its position was updated where it stood AND
+    // listed among the arrivals, so the merge put its key into the order
+    // twice. The map on top hides it; the size of the order, the ranks and the
+    // measured line do not.
+    const rows = feed('rows')
+    const many: Row[] = []
+    for (let i = 0; i < 20; i++) many.push({ id: i, rank: i, height: 10 })
+    rows.put(many)
+    const tree = scan(source('rows', ['id']), {
+      order: [{ field: 'rank' }],
+      step: field('height'),
+      as: 'offset',
+    })
+    const live = living(tree, { rows })
+    until(subscribe(live.all, () => {}))
+
+    // One row edited where it stands, and eight that really move — in one batch.
+    const batch: Row[] = [{ id: 5, rank: 5, height: 40 }]
+    for (let i = 0; i < 8; i++) batch.push({ id: i + 10, rank: 100 - i, height: 10 })
+    rows.put(batch)
+
+    const got = live.all.peek()
+    assert.equal(got.length, 20, 'the order grew a duplicate')
+    const seen = new Set(got.map(r => r['id']))
+    assert.equal(seen.size, got.length, 'a key stands in the order once')
+    // The running total is where a duplicate shows up as a wrong number.
+    const held = new Map<Key, Row>()
+    for (const r of rows.all.peek()) held.set(r['id'] as Key, r)
+    const truth = oracle(tree, { rows: held })
+    for (const row of got) assert.deepEqual(row, truth.get(row['id'] as Key))
+  })
+
   test('scan parity: a running total in order, against the oracle at every step', () => {
     const rows = feed('rows')
     const tree = scan(source('rows', ['id']), {
@@ -815,6 +853,35 @@ describe('the relational layer', () => {
 
       const deeper = agg(asked, { by: ['shop'], folds: { n: { fold: 'count' } } })
       assert.deepEqual([...paramsOfNode(deeper)], ['floor'], 'found under a group too')
+    })
+
+    test('a parameter changed while nobody looked is applied before the first answer', () => {
+      // The watcher used to spend its first pass only taking the dependency,
+      // so a search box typed into during a spell of no demand answered once —
+      // exactly once — with the results of the old word.
+      const orders = feed('orders')
+      orders.put([sale(1, 1, 5), sale(2, 2, 15), sale(3, 3, 25)])
+      const floor = port(10, { name: 'floor' })
+      const live = living(
+        filter(source('orders', ['id']), cmp('>', field('price'), param('floor'))),
+        { orders },
+        { params: { floor } },
+      )
+
+      const ids = (): unknown[] =>
+        live.all
+          .peek()
+          .map(r => r['id'])
+          .toSorted()
+
+      const stop = subscribe(live.all, () => {})
+      assert.deepEqual(ids(), [2, 3])
+      stop() // demand leaves; the relation goes quiet
+
+      floor.set(20) // nobody is looking
+      const again = subscribe(live.all, () => {})
+      assert.deepEqual(ids(), [3], 'the first answer back used the old parameter')
+      again()
     })
 
     test('why, asked of the tree itself rather than through a relation', () => {

@@ -1,6 +1,7 @@
 // The desk's side: build it, put its face on the wire, wait.
 
-import { gauge, listed, offer, overWire } from '#loom'
+import { gauge, listed, offer } from '#loom'
+import { overWire } from '#weft'
 import { desk } from './state.ts'
 
 const held = desk()

@@ -56,6 +56,13 @@ export interface Truth<T> {
 interface Carried<T> {
   value: T
   askedAt: number
+  /**
+   * Whether this is the whole answer or a piece of one on the way. A piece is
+   * a real value and shows like one, but it is not a snapshot of the world:
+   * nothing may conclude from it that a write it was waiting to see is in
+   * there.
+   */
+  whole: boolean
 }
 
 function faceOf<T>(
@@ -74,7 +81,16 @@ function faceOf<T>(
     },
     { name: `${name}.fault` },
   )
-  const asked = derived(() => heldOf(state.get())?.value.askedAt ?? 0, { name: `${name}.asked` })
+  // Only a whole answer dates what is held. A piece of one leaves this at
+  // zero, and whoever waits on it — an optimistic write waiting to be taken
+  // back by the world's own version — waits, which is the right answer.
+  const asked = derived(
+    () => {
+      const held = heldOf(state.get())
+      return held !== undefined && held.value.whole ? held.value.askedAt : 0
+    },
+    { name: `${name}.asked` },
+  )
   return {
     tally: feed.tally,
     get: () => value.get(),
@@ -106,10 +122,20 @@ export function truth<T>(
   passport: TruthPassport<T>,
 ): Truth<T> {
   const name = passport.name ?? 'truth'
+  // One clock. A passport that hands in its own is handing it in for every
+  // moment this records, not for some of them.
+  const now = passport.now ?? Date.now
   const feed = supply<Carried<T>>(
     async ({ signal, soFar }) => {
-      const askedAt = Date.now()
-      return { value: await ask({ signal, soFar: value => soFar({ value, askedAt }) }), askedAt }
+      const askedAt = now()
+      return {
+        value: await ask({
+          signal,
+          soFar: value => soFar({ value, askedAt, whole: false }),
+        }),
+        askedAt,
+        whole: true,
+      }
     },
     {
       name,
@@ -142,12 +168,17 @@ export function truthBy<K, T>(
   passport: TruthPassport<T>,
 ): TruthBy<K, T> {
   const name = passport.name ?? 'truth'
+  const now = passport.now ?? Date.now
   const family = query<K, Carried<T>>(
     async (key: K, { signal, soFar }) => {
-      const askedAt = Date.now()
+      const askedAt = now()
       return {
-        value: await ask(key, { signal, soFar: value => soFar({ value, askedAt }) }),
+        value: await ask(key, {
+          signal,
+          soFar: value => soFar({ value, askedAt, whole: false }),
+        }),
         askedAt,
+        whole: true,
       }
     },
     {

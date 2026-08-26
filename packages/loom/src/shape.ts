@@ -22,16 +22,39 @@ export interface Part<T> {
   readonly build: (name: string) => T
 }
 
-/** The whole form: an ordinary nested structure, every field a live answer. */
-export function shape<Form extends Record<string, Part<unknown>>>(
-  form: Form,
-  options: { name?: string } = {},
-): { [K in keyof Form]: Form[K] extends Part<infer T> ? T : never } {
+/** What may stand in a form: a part, or a form of its own. */
+export interface Form {
+  readonly [name: string]: Part<unknown> | Form
+}
+
+/** What a form comes back as: every part built, every sub-form built through. */
+export type Built<F> = {
+  [K in keyof F]: F[K] extends Part<infer T> ? T : F[K] extends Form ? Built<F[K]> : never
+}
+
+const isPart = (thing: Part<unknown> | Form): thing is Part<unknown> =>
+  typeof (thing as Part<unknown>).build === 'function'
+
+/**
+ * The whole form: an ordinary nested structure, every field a live answer.
+ *
+ * Nested for real. It said "nested" and meant one level — a flat record of
+ * parts — so a screen that wanted its counters under `header` and its shelves
+ * under `board` had to build two forms and put them together by hand, which is
+ * the sequence of operations a form exists to replace. A value is a part when
+ * it can build; anything else that is a plain object is a form, and goes
+ * through.
+ */
+export function shape<F extends Form>(F: F, options?: { name?: string }): Built<F>
+export function shape(form: Form, options: { name?: string } = {}): Record<string, unknown> {
+  const at = options.name ?? 'shape'
   const out: Record<string, unknown> = {}
-  for (const [name, part] of Object.entries(form)) {
-    out[name] = part.build(`${options.name ?? 'shape'}.${name}`)
+  for (const [name, thing] of Object.entries(form)) {
+    out[name] = isPart(thing)
+      ? thing.build(`${at}.${name}`)
+      : shape(thing, { name: `${at}.${name}` })
   }
-  return out as never
+  return out
 }
 
 /** A shorthand for the commonest condition: this field equals this value. */

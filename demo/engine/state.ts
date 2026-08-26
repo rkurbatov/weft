@@ -8,7 +8,10 @@
 // goes: every chunk publishes what it has, and the panel shows a real answer
 // over part of the log rather than a spinner over all of it.
 
-import { cell, giveWay, truthBy } from '#loom'
+import { cell, truthBy } from '#loom'
+// The scheduler is machinery: a demo that yields the thread reaches one door
+// down for it, rather than the dialect handing it out to every screen.
+import { giveWay } from '#weft'
 import type { Port, Tally, Watchable } from '#loom'
 import { logLines, searching } from './corpus.ts'
 import type { Line, Log, Progress } from './corpus.ts'

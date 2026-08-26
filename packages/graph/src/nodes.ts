@@ -13,6 +13,19 @@ import type { Consumer, NodeKind, Node, State } from './engine.ts'
 
 export type Equal<T> = (a: T, b: T) => boolean
 
+/**
+ * Whether two failures are the same failure. The same object is; otherwise it
+ * is the name and the sentence, walking down the cause, since a formula that
+ * throws on every run makes a fresh Error each time and a reader must not be
+ * woken sixty times a second for one unchanging complaint. Stacks are not
+ * compared: they say where it was thrown, not what went wrong.
+ */
+function sameFailure(a: unknown, b: unknown): boolean {
+  if (Object.is(a, b)) return true
+  if (!(a instanceof Error) || !(b instanceof Error)) return false
+  return a.name === b.name && a.message === b.message && sameFailure(a.cause, b.cause)
+}
+
 export interface DerivedOptions<T> {
   equal?: Equal<T>
   name?: string
@@ -212,12 +225,17 @@ export class Derived<T> implements Node, Consumer {
         this.computing = false
       }
       if (thrown !== null) {
-        const wasBroken = this.failure !== null
+        const was = this.failure
         this.failure = thrown
         this.state = CLEAN
         core.tap.fail(this.name, thrown.error)
         // Breaking is a change like any other: whoever reads this must hear it.
-        if (!wasBroken) for (const o of this.observers) core.markDirty(o)
+        // And so is breaking DIFFERENTLY — "cannot divide by zero" giving way
+        // to "no such column" is a new state, not the same one twice. Gating on
+        // "was it broken already" left the reader holding the older reason for
+        // good, since nothing else would ever wake it.
+        if (was === null || !sameFailure(was.error, thrown.error))
+          for (const o of this.observers) core.markDirty(o)
         return
       }
       // A first value is not a change: nobody held a previous one from us.

@@ -53,6 +53,36 @@ describe('a run that puts down what it has', () => {
     assert.deepEqual(seen.at(-1), [1, 2, 3, 99], 'and the return is the finished one')
   })
 
+  test('a step shown is a step shown: the ask is still out until it answers', async () => {
+    // Published as an arrival, the first piece said the flight was over — a
+    // spinner came down and anything waiting for a whole answer concluded from
+    // half of one.
+    const clock = world()
+    let step: (() => void) | undefined
+    const feed = supply<number>(
+      async ({ soFar }) => {
+        soFar(1)
+        await new Promise<void>(resolve => {
+          step = resolve
+        })
+        return 2
+      },
+      { name: 'run', timers: clock.timers, now: clock.now },
+    )
+    until(subscribe(feed.state, () => {}))
+    await settle(3)
+
+    const carrying = feed.state.peek()
+    assert.equal(carrying.value, 1, 'the piece is there to show')
+    assert.equal(carrying.loading, true, 'and the ask is still out')
+    assert.equal(carrying.kind, 'loading')
+
+    step?.()
+    await settle(3)
+    assert.equal(feed.state.peek().loading, false)
+    assert.equal(feed.state.peek().value, 2)
+  })
+
   test('steps arrive in order, and none is skipped', async () => {
     const clock = world()
     const feed = supply<number>(

@@ -6,11 +6,12 @@
 
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
-import { cell, inMemory, loom, offer, tabs } from '#loom'
+import { cell, inMemory, loom, offer, sends, station, tabs, will } from '#loom'
 import type { Station } from '#loom'
 import { atOnce, wirePair } from '#weft'
 import type { Lock } from '#wire'
 import { settle } from '#testkit'
+import { forgetNotices, onNotice } from '#core'
 
 const desk = (): Station => {
   const seats = cell(1)
@@ -105,5 +106,92 @@ describe('assembling a screen over a station', () => {
 
   test('a wiring that builds a station here is told when there is none', () => {
     assert.throws(() => loom({ name: 'desk.none' }, { wire: inMemory() }), /station is needed/)
+  })
+
+  test('the face keeps the station’s names and types across the wiring', async () => {
+    // Declared once, on the station, and read back with the names checked: no
+    // `view<number>('seats')` restating a type the declaration already knew,
+    // and no string the compiler cannot see is wrong.
+    const front = () => {
+      const seats = cell(1)
+      const note = cell('open')
+      return station(
+        {
+          views: { note },
+          // `seats` is named once. It is written into, and it can be read, so
+          // it is published as itself rather than declared a second time.
+          facts: { seats },
+          acts: { take: (many: number) => seats.set(seats.get() + many) },
+        },
+        { schedule: atOnce },
+      )
+    }
+
+    const app = loom({ name: 'desk.typed', station: front }, { wire: inMemory() })
+    const stop = app.warm(['seats', 'note'])
+    await settle()
+
+    assert.equal(app.face.views.seats.get(), 1, 'a fact is readable without a second declaration')
+    assert.equal(app.face.views.note.get(), 'open')
+
+    await app.face.acts.take(2)
+    await settle()
+    assert.equal(app.face.views.seats.get(), 3)
+
+    app.face.facts.seats(10)
+    await settle()
+    assert.equal(app.face.views.seats.get(), 10, 'a fact writes through under its own name')
+
+    const wrong = (): void => {
+      // @ts-expect-error — no such view on this station
+      void app.face.views.chairs
+      // @ts-expect-error — no such act either
+      void app.face.acts.leave
+      // @ts-expect-error — take counts seats, and a count is a number
+      void app.face.acts.take('two')
+    }
+    void wrong
+
+    stop()
+    app.stop()
+  })
+
+  test('the signed-in session is said once and inherited by what needs an owner', async () => {
+    // A book of unsent intents cannot be anonymous, and the application knows
+    // whose screen this is exactly once — here. Saying it at every `will()`
+    // was the same fact written down as many times as there were intents.
+    const heard: string[] = []
+    const stopHearing = onNotice(what => heard.push(what.kind))
+    let shelf: string | undefined
+    const front = () => {
+      const post = will({ ping: sends<number>(() => Promise.resolve()) }, { name: 'book' })
+      shelf = post.shelf
+      return station({ views: { owed: post.owed } }, { schedule: atOnce })
+    }
+
+    const app = loom({ name: 'desk.owned', session: 'ann', station: front }, { wire: inMemory() })
+    stopHearing()
+    // No browser database in a test runner, so the best an owner can get here
+    // is memory — but it was opened as an owned book, and nothing complained.
+    assert.equal(shelf, 'memory')
+    assert.equal(heard.includes('unowned-book'), false, 'the assembly’s session was not inherited')
+    app.stop()
+  })
+
+  test('with no session named, nothing durable opens itself', async () => {
+    const heard: string[] = []
+    const stopHearing = onNotice(what => heard.push(what.kind))
+    const front = () => {
+      const post = will({ ping: sends<number>(() => Promise.resolve()) }, { name: 'book.loose' })
+      return station({ views: { owed: post.owed } }, { schedule: atOnce })
+    }
+    forgetNotices()
+    const app = loom({ name: 'desk.loose', station: front })
+    stopHearing()
+    // Also: no wiring said at all. The state living right here is the common
+    // case, and a line that carries no decision is noise.
+    assert.equal(app.role.get(), 'inline')
+    assert.equal(heard.includes('unowned-book'), true, 'an anonymous book passed in silence')
+    app.stop()
   })
 })

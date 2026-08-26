@@ -160,9 +160,17 @@ export function whenever<T>(
   let hasWaiting = false
   let abort: AbortController | undefined
   let stopped = false
+  // Which run the bookkeeping belongs to. A restart leaves the old run to
+  // finish in its own time, and it used to clear `running` and `abort` on its
+  // way out — the newer run's own record, wiped by its predecessor. After that
+  // the next value started a second body alongside the live one, and `stop`
+  // aborted a controller nobody was listening to.
+  let generation = 0
 
   const run = (value: T): void => {
     const control = new AbortController()
+    const mine = ++generation
+    const current = (): boolean => mine === generation
     abort = control
     // A synchronous body is over by the time it returns, so it never counts as
     // busy: otherwise two writes in a row would look like an overlap and the
@@ -171,11 +179,11 @@ export function whenever<T>(
     try {
       answer = body(value, control.signal)
     } catch (error) {
-      abort = undefined
+      if (current()) abort = undefined
       throw error
     }
     if (!(answer instanceof Promise)) {
-      abort = undefined
+      if (current()) abort = undefined
       return
     }
     running = true
@@ -188,6 +196,9 @@ export function whenever<T>(
         })
       })
       .finally(() => {
+        // A run that has been overtaken says nothing about the state of the
+        // one that overtook it.
+        if (!current()) return
         running = false
         abort = undefined
         if (stopped || !hasWaiting) return

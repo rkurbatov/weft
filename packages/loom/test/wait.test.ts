@@ -288,6 +288,62 @@ describe('a standing handler', () => {
     assert.deepEqual(quit, [1], 'the first run learned it was abandoned')
   })
 
+  test('a restarted run does not clear the bookkeeping of the one that replaced it', async () => {
+    // The abandoned run's `finally` used to set `running` back to false and
+    // drop `abort` — the record of the NEWER run, wiped by its predecessor.
+    // After that a third value started a second body beside the live one.
+    const owed = port(0)
+    const started: number[] = []
+    const ended: number[] = []
+    const standing = whenever(
+      () => owed.get(),
+      async value => {
+        started.push(value)
+        // The second run outlives the first by a wide margin, so the first
+        // finishes while the second is still going.
+        await new Promise<void>(resolve => setTimeout(resolve, value === 1 ? 5 : 60))
+        ended.push(value)
+      },
+      { atStart: false, whileRunning: 'restart' },
+    )
+    until(standing.stop)
+
+    owed.set(1)
+    await settle()
+    owed.set(2) // restarts: run 1 is abandoned but still sleeping
+    await wait(25) // run 1 has now finished; run 2 is still going
+
+    assert.deepEqual(started, [1, 2])
+    assert.equal(standing.running, true, 'the live run was reported as finished')
+
+    owed.set(3)
+    await settle()
+    assert.deepEqual(started, [1, 2, 3], 'a third body started beside the live one')
+  })
+
+  test('stop reaches the run that is actually going', async () => {
+    const owed = port(0)
+    const quit: number[] = []
+    const standing = whenever(
+      () => owed.get(),
+      async (value, signal) => {
+        await new Promise<void>(resolve => setTimeout(resolve, value === 1 ? 5 : 60))
+        if (signal.aborted) quit.push(value)
+      },
+      { atStart: false, whileRunning: 'restart' },
+    )
+    until(standing.stop)
+
+    owed.set(1)
+    await settle()
+    owed.set(2)
+    await wait(25) // the abandoned run is over; the live one is not
+    standing.stop()
+    await wait(60)
+
+    assert.deepEqual(quit, [1, 2], 'stop aborted a controller nobody was listening to')
+  })
+
   test('stopping is final, and tells the running body so', async () => {
     const owed = port(0)
     const seen: number[] = []

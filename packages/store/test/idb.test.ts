@@ -33,6 +33,118 @@ describe('the browser database, and the shelf that picks it', () => {
     }
   })
 
+  /**
+   * The least of IndexedDB the adapter touches, driven by hand: one database,
+   * one object store, one request and one transaction at a time, none of which
+   * do anything until the test says so.
+   */
+  const staged: {
+    request:
+      | { result: unknown; error: unknown; onsuccess?: () => void; onerror?: () => void }
+      | undefined
+    transaction:
+      | { error: unknown; oncomplete?: () => void; onabort?: () => void; onerror?: () => void }
+      | undefined
+    answered: boolean
+    error: unknown
+  } = { request: undefined, transaction: undefined, answered: false, error: undefined }
+
+  const settled = (): Promise<void> => new Promise(resolve => setTimeout(resolve, 0))
+
+  function pretendDatabase(): () => void {
+    staged.request = undefined
+    staged.transaction = undefined
+    staged.answered = false
+    staged.error = undefined
+    const had = Object.getOwnPropertyDescriptor(globalThis, 'indexedDB')
+    const makeRequest = (): NonNullable<typeof staged.request> => {
+      const request = { result: undefined as unknown, error: undefined as unknown }
+      Object.defineProperty(request, 'error', { get: () => staged.error })
+      staged.request = request as NonNullable<typeof staged.request>
+      return staged.request
+    }
+    const db = {
+      version: 1,
+      objectStoreNames: { contains: () => true },
+      createObjectStore: () => ({}),
+      transaction: () => {
+        const tx = {
+          objectStore: () => ({
+            get: makeRequest,
+            put: makeRequest,
+            delete: makeRequest,
+            getAllKeys: makeRequest,
+          }),
+          commit: () => {},
+        }
+        Object.defineProperty(tx, 'error', {
+          get: () => staged.error ?? new Error('AbortError: the transaction gave up'),
+        })
+        staged.transaction = tx as unknown as NonNullable<typeof staged.transaction>
+        return tx
+      },
+      close: () => {},
+      onversionchange: null,
+      onclose: null,
+    }
+    Object.defineProperty(globalThis, 'indexedDB', {
+      value: {
+        open: () => {
+          const request = { result: db, error: undefined, onsuccess: null, onerror: null }
+          setTimeout(() => (request as { onsuccess?: (() => void) | null }).onsuccess?.(), 0)
+          return request
+        },
+      },
+      configurable: true,
+    })
+    return () => {
+      if (had === undefined) delete (globalThis as { indexedDB?: unknown }).indexedDB
+      else Object.defineProperty(globalThis, 'indexedDB', had)
+    }
+  }
+
+  test('a write answers when the transaction completes, not when the request succeeds', async () => {
+    // The difference cannot be staged in fake-indexeddb — it completes every
+    // transaction it starts — so the shapes the adapter actually uses are
+    // stood up by hand. That is the whole surface: a request that succeeds
+    // inside a transaction that is then thrown away.
+    const restore = pretendDatabase()
+    try {
+      const store = idbStore('weft-test')
+      const written = store.write('row', 1)
+      await settled()
+      // The request said yes. Nothing has reached the disk yet, and nobody may
+      // be told it has.
+      staged.request?.onsuccess?.()
+      await settled()
+      assert.equal(staged.answered, false, 'answered on the request, not on the transaction')
+      staged.transaction?.onabort?.()
+      await assert.rejects(written, /gave up/)
+    } finally {
+      restore()
+    }
+  })
+
+  test('a write that completes answers, and one whose request fails refuses', async () => {
+    const restore = pretendDatabase()
+    try {
+      const store = idbStore('weft-test')
+      const good = store.write('row', 1)
+      await settled()
+      staged.request?.onsuccess?.()
+      staged.transaction?.oncomplete?.()
+      await good
+
+      const bad = store.write('row', 2)
+      await settled()
+      staged.error = new Error('QuotaExceededError: full')
+      staged.request?.onerror?.()
+      await assert.rejects(bad, /full/)
+    } finally {
+      restore()
+    }
+  })
+
   test('a missing key reads as undefined, and remove makes it one', async () => {
     const restore = ownIndexedDB()
     try {

@@ -50,6 +50,7 @@ interface WillSide {
 
 interface TruthSide<S> {
   get(): S
+  /** When the whole snapshot now held was asked for; zero while none is held. */
   asked: Watchable<number>
 }
 
@@ -66,8 +67,13 @@ export function laid<S, R>(
 ): Watchable<Board<R>> {
   const name = spec.name ?? 'laid'
 
-  // Absorption is wired where both sides meet: a snapshot taken after a
-  // confirmation absorbs it. Cold watch — reacts to what arrives anyway.
+  // Absorption is wired where both sides meet: a WHOLE snapshot taken after a
+  // confirmation absorbs it. Whole is the load-bearing word — a piece of an
+  // answer arriving mid-flight is a real value to show and no evidence at all
+  // that the confirmed move is in it, and taking the local one back on that
+  // reading made the card jump home and then move again. A truth publishes
+  // zero here until it holds a complete answer. Cold watch — reacts to what
+  // arrives anyway.
   watch(
     () => {
       const asked = base.asked.get()

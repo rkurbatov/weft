@@ -112,6 +112,27 @@ export function arrived<T>(value: T, at: number): Remote<T> {
   return { kind: 'value', value, at, error: undefined, loading: false }
 }
 
+/**
+ * A piece of the answer, with the ask still in flight.
+ *
+ * "There is something to show" and "the request is finished" are two facts,
+ * and a partial answer is the case where they part company. Published as an
+ * arrival, the first piece said the flight was over: a screen took down its
+ * spinner and a write waiting on the answer thought the snapshot complete,
+ * while the load was still running.
+ */
+export function partial<T>(value: T, at: number, since: number): Remote<T> {
+  return {
+    kind: 'loading',
+    since,
+    held: { value, at },
+    value,
+    at,
+    error: undefined,
+    loading: true,
+  }
+}
+
 export function refused<T>(
   previous: Remote<T>,
   error: unknown,

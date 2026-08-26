@@ -4,7 +4,8 @@
 // snapshot and then batches of what changed. Nothing here decides how that
 // travels — that is the protocol's business, and this file is four lines.
 
-import { gauge, offer, overWire } from '#loom'
+import { gauge, offer } from '#loom'
+import { overWire } from '#weft'
 import { desk } from './state.ts'
 
 const held = desk()

@@ -127,4 +127,32 @@ describe('the measured line', () => {
     assert.equal(line.total(), 20_200 * 20, 'and the answers are still right')
     assert.equal(line.offsetOf(20_100), 20_100 * 20)
   })
+
+  test('a batch larger than the tree has room for still sums correctly', () => {
+    // The fast path used to check that ONE slot was free and then write the
+    // whole batch. A typed array drops writes past its end without a word, so
+    // the sums that were never written read back as undefined and every total
+    // after them came out NaN.
+    const line = offsets([10, 10, 10])
+    line.total() // builds the tree at its current size
+    line.insert(3, [10, 10, 10, 10, 10, 10, 10, 10])
+    assert.equal(line.total(), 110)
+    assert.equal(line.offsetOf(11), 110)
+    assert.deepEqual(line.at(55), { index: 5, into: 5 })
+  })
+
+  test('appended one at a time or in batches, the line agrees with itself', () => {
+    const one = offsets([])
+    const many = offsets([])
+    for (let round = 0; round < 40; round++) {
+      const batch = Array.from({ length: (round % 7) + 1 }, (_, i) => round + i + 1)
+      for (const size of batch) one.insert(one.size(), [size])
+      many.insert(many.size(), batch)
+      // Reading between arrivals is what keeps the fast path alive; the two
+      // must not part company because of how the rows were handed in.
+      assert.equal(many.total(), one.total(), `round ${round}`)
+    }
+    assert.equal(many.size(), one.size())
+    for (let i = 0; i <= one.size(); i += 13) assert.equal(many.offsetOf(i), one.offsetOf(i))
+  })
 })

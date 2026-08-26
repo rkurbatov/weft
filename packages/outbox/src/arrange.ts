@@ -33,9 +33,12 @@ export function lanePlace<K extends Key>(
   into: string,
   at: number,
 ): Lanes<K> {
+  // Asked about first, cleared after. Dropping and then finding no target
+  // made "the move is void" mean the subject vanished from the lane it was
+  // standing in — a lost card, from a lane name that arrived a moment late.
+  if (lanes[into] === undefined) return lanes
   const cleared = laneDrop(lanes, id)
-  const lane = cleared[into]
-  if (lane === undefined) return cleared // no such lane: the move is void
+  const lane = cleared[into] as readonly K[]
   const index = Math.max(0, Math.min(at, lane.length))
   return { ...cleared, [into]: [...lane.slice(0, index), id, ...lane.slice(index)] }
 }

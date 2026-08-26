@@ -15,7 +15,7 @@ import { leadOrFollow, webLocks } from '#wire'
 import type { Lock } from '#wire'
 import { link } from '#link'
 import { serve } from '#link'
-import { onBus, settle } from '#testkit'
+import { onBus, settle, until as keptUntil } from '#testkit'
 
 describe('tabs and leadership', () => {
   // A bus message takes a turn each way, and a hello-then-watch takes several.
@@ -412,6 +412,72 @@ describe('tabs and leadership', () => {
     live.port2.close()
     gone.port1.close()
     gone.port2.close()
+  })
+
+  test('a shared worker admits a tab on its claim, and refuses somebody else’s', async () => {
+    // One shared worker serves every tab of an origin — which is every build
+    // and every person signed in on it. A port is private, not ours.
+    const clock = fakeTimers()
+    const secret = port('ann’s board')
+    const listeners = new Set<(event: { ports: readonly Wire[] }) => void>()
+    const scope: SharedScope = {
+      addEventListener: (_kind, handler) => listeners.add(handler),
+      removeEventListener: (_kind, handler) => listeners.delete(handler),
+    }
+    const stopHub = sharedWorkerHub(scope, {
+      lease: false,
+      timers: clock.timers,
+      admit: claim => claim === 'ann',
+    }).accept(channel => serve({ cells: { secret } }, channel, { schedule: atOnce }))
+
+    const hers = new MessageChannel()
+    const his = new MessageChannel()
+    // Registered before the assertions: a port left open holds the process
+    // open, so a failing assertion would look like a hang instead.
+    keptUntil(stopHub)
+    for (const pair of [hers, his]) {
+      keptUntil(() => {
+        pair.port1.close()
+        pair.port2.close()
+      })
+      for (const arrival of listeners) arrival({ ports: [pair.port1 as unknown as Wire] })
+    }
+
+    const refusals: string[] = []
+    const ann = link(
+      sharedWorkerChannel(hers.port2 as unknown as Wire, {
+        claim: 'ann',
+        keepAlive: false,
+        timers: clock.timers,
+      }),
+      { onRefused: why => refusals.push(`ann: ${why}`) },
+    )
+    keptUntil(() => ann.close())
+    const bob = link(
+      sharedWorkerChannel(his.port2 as unknown as Wire, {
+        claim: 'bob',
+        keepAlive: false,
+        timers: clock.timers,
+      }),
+      { onRefused: why => refusals.push(`bob: ${why}`) },
+    )
+    keptUntil(() => bob.close())
+
+    const mine = ann.derived<string>('secret')
+    const theirs = bob.derived<string>('secret')
+    const stopMine = subscribe(mine, () => {})
+    const stopTheirs = subscribe(theirs, () => {})
+    await settle(4)
+
+    assert.equal(mine.peek().value, 'ann’s board')
+    assert.equal(theirs.peek().value, undefined, 'served a replica to the wrong session')
+    assert.equal(refusals.length, 1)
+    assert.match(refusals[0] as string, /^bob: /)
+
+    stopMine()
+    stopTheirs()
+    ann.close()
+    bob.close()
   })
 
   test('the heartbeat introduces itself fast and settles down to its pace', async () => {

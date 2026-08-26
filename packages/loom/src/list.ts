@@ -1,6 +1,7 @@
 // A list as part of a form: filtered, ordered, windowed — and shelves taken
 // from the values of a field rather than written out one by one.
 
+import { notice } from '#core'
 import { derived } from '#weft'
 import type { Key, Watchable } from '#weft'
 import type { Live } from './live.ts'
@@ -58,7 +59,11 @@ export function list<R>(feed: Live<R>, spec: ListSpec<R>): Part<ListView<R>> {
       const window = spec.window
       const rows =
         window === undefined
-          ? derived(() => part.rows.get(), { name: `${name}.rows` })
+          ? // The sorted view, not the source. Reading the source here meant a
+            // list with an order and no window handed back the rows in
+            // whatever order the feed held them — an order was asked for, one
+            // was built, and nobody read it.
+            derived(() => sorted.rows.get(), { name: `${name}.rows` })
           : derived(() => sorted.window(window.from.get(), window.from.get() + window.size).get(), {
               name: `${name}.window`,
             })
@@ -92,21 +97,65 @@ export function listsBy<R, F extends ScalarField<R>, Whole extends string = neve
      * not.
      */
     whole?: Whole
+    /**
+     * How many shelves to keep. Grouping by a field with few values — a status,
+     * a lane — never reaches it; grouping by one with a value per row would
+     * otherwise keep a window per row for as long as the screen lives.
+     */
+    keep?: number
   },
 ): Part<Record<Extract<FieldType<R, F>, string | number> | Whole, ListView<R>>> {
+  const keep = spec.keep ?? 32
   return {
     build(name) {
+      /** Insertion order is the age order, which is what the ceiling goes by. */
       const shelves = new Map<string, ListView<R>>()
-      const shelfFor = (value: string): ListView<R> => {
-        const standing = shelves.get(value)
-        if (standing !== undefined) return standing
+      const shelfFor = (asked: string): ListView<R> => {
+        const standing = shelves.get(asked)
+        if (standing !== undefined) {
+          // Looked at, so it is not the oldest any more.
+          shelves.delete(asked)
+          shelves.set(asked, standing)
+          return standing
+        }
+        // A shelf is named by a property, and a property name is a string:
+        // asked for the number 1 and asked for the string "1", a screen says
+        // the same word, and there is nothing here that could tell them apart.
+        // So the rule is the string form of the value — said out loud the one
+        // time it matters, which is when a field really does hold both.
+        const kinds = new Set<string>()
         const made = list(
           feed,
-          value === spec.whole
+          asked === spec.whole
             ? spec
-            : { ...spec, where: row => String(row[field as unknown as keyof R]) === value },
-        ).build(`${name}.${value}`)
-        shelves.set(value, made)
+            : {
+                ...spec,
+                where: row => {
+                  const held = row[field as unknown as keyof R]
+                  if (String(held) !== asked) return false
+                  kinds.add(typeof held)
+                  if (kinds.size > 1) {
+                    notice({
+                      kind: 'mixed-shelf',
+                      where: `${name}.${asked}`,
+                      level: 'warn',
+                      message: `shelf "${asked}" of ${name} holds values of ${[...kinds].join(' and ')}: a shelf is named by the text of a value, so these share one`,
+                    })
+                  }
+                  return true
+                },
+              },
+        ).build(`${name}.${asked}`)
+        shelves.set(asked, made)
+        // A field with a key per row — an id, a timestamp — builds a shelf per
+        // value and used to keep every one of them for the life of the screen.
+        // The oldest untouched shelf goes, exactly as a family drops a member
+        // nobody is holding.
+        while (shelves.size > keep) {
+          const oldest = shelves.keys().next().value as string | undefined
+          if (oldest === undefined || oldest === spec.whole) break
+          shelves.delete(oldest)
+        }
         return made
       }
       // A proxy, so the set of shelves is the DATA's business, not the
@@ -119,6 +168,7 @@ export function listsBy<R, F extends ScalarField<R>, Whole extends string = neve
         {},
         {
           get: (_target, key) => (typeof key === 'string' ? shelfFor(key) : undefined),
+          set: () => false,
           has: () => true,
           ownKeys: () => [...shelves.keys()],
           getOwnPropertyDescriptor: () => ({ enumerable: true, configurable: true }),

@@ -57,9 +57,21 @@ export interface OfferOptions extends ServeOptions {
   instruments?: boolean | { keep?: number }
 }
 
+/** Can this be read as well as written? Then it need not be declared twice. */
+const readable = (thing: unknown): thing is Watchable<unknown> =>
+  typeof (thing as Watchable<unknown>)?.get === 'function' &&
+  typeof (thing as Watchable<unknown>)?.peek === 'function'
+
 /** The station's side: put a face on the wire. */
 export function offer(handles: Offering, channel: Channel, options: OfferOptions = {}): () => void {
   const cells: Record<string, Watchable<unknown>> = { ...handles.views }
+  // A port is one thing, and a station had to name it twice — once under
+  // `views` to be read, once under `facts` to be written — with the two halves
+  // free to drift apart under one name. A fact that can be read is published
+  // as itself; a station that says otherwise in `views` still wins.
+  for (const [name, fact] of Object.entries(handles.facts ?? {})) {
+    if (cells[name] === undefined && readable(fact)) cells[name] = fact
+  }
   let stopInstruments: (() => void) | undefined
 
   if (options.instruments !== undefined && options.instruments !== false) {
@@ -88,6 +100,43 @@ export function offer(handles: Offering, channel: Channel, options: OfferOptions
   }
 }
 
+/** What a view of the offering holds, seen from the other side. */
+type Held<C> = C extends Watchable<infer T> ? T : never
+
+/** What a fact takes, seen from the other side. */
+type Written<F> = F extends { set(value: infer V): void } ? V : never
+
+/** What a list or table carries, row by row. */
+type Rows<T> = T extends { all: Watchable<readonly (infer R)[]> }
+  ? R
+  : T extends { rows: Watchable<readonly (infer R)[]> }
+    ? R
+    : unknown
+
+/**
+ * The station's own face, with its names and types intact.
+ *
+ * The names and types are known at the moment the station is declared, and
+ * were thrown away one line later: a screen asked for `view<number>('seats')`
+ * — a string the compiler cannot check and a type stated a second time by
+ * hand. Rename a view on the station and every screen went on compiling and
+ * started reading undefined. Nothing crosses the wire differently; this only
+ * remembers what was declared.
+ */
+export interface Face<O extends Offering> {
+  readonly views: {
+    readonly [K in keyof O['views']]: Watchable<Held<O['views'][K]> | undefined>
+  } & { readonly [K in keyof O['facts']]: Watchable<Written<O['facts'][K]> | undefined> }
+  readonly facts: { readonly [K in keyof O['facts']]: (value: Written<O['facts'][K]>) => void }
+  readonly acts: {
+    readonly [K in keyof O['acts']]: O['acts'][K] extends (...args: infer A) => infer T
+      ? (...args: A) => Promise<Awaited<T>>
+      : never
+  }
+  readonly lists: { readonly [K in keyof O['lists']]: Mirrored<Rows<O['lists'][K]>> }
+  readonly tables: { readonly [K in keyof O['tables']]: Mirrored<Rows<O['tables'][K]>> }
+}
+
 export interface Adopted {
   /** The station's views, read plain: undefined until the first value lands. */
   view<T>(name: string): Watchable<T | undefined>
@@ -112,6 +161,22 @@ export interface Adopted {
   /** Hold demand on the named views (what a mounted screen would do). */
   warm(names: readonly string[]): () => void
   close(): void
+}
+
+/** The typed face over an adopted station: names checked, values already shaped. */
+export function facing<O extends Offering>(taken: Adopted): Face<O> {
+  return {
+    views: new Proxy({}, { get: (_t, name: string) => taken.view(name) }) as Face<O>['views'],
+    facts: new Proxy(
+      {},
+      {
+        get: (_t, name: string) => (value: unknown) => taken.write(name, value),
+      },
+    ) as Face<O>['facts'],
+    acts: new Proxy({}, { get: (_t, name: string) => taken.act(name) }) as Face<O>['acts'],
+    lists: new Proxy({}, { get: (_t, name: string) => taken.list(name) }) as Face<O>['lists'],
+    tables: new Proxy({}, { get: (_t, name: string) => taken.table(name) }) as Face<O>['tables'],
+  }
 }
 
 /** The tab's side: take a face off the wire. */

@@ -128,7 +128,12 @@ export function offsets(initial: readonly number[] = []): Offsets {
       // the tree instead of retiring it. Without this a screen that reads
       // between arrivals pays a full rebuild per row, and that, not the array
       // itself, was the expensive part: appending cost as much as prepending.
-      if (!stale && at === sizes.length && tree.length > n) {
+      //
+      // Room for the WHOLE batch, not for one more: a typed array drops writes
+      // past its end without a word, so a batch that overran the buffer left
+      // the sums it never wrote reading as undefined, and every total after it
+      // came back NaN.
+      if (!stale && at === sizes.length && tree.length > n + fresh.length) {
         for (const size of fresh) {
           sizes.push(size)
           const i = ++n

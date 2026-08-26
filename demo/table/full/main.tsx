@@ -4,7 +4,8 @@
 // batches — because the interesting part of the protocol is what happens when
 // one goes missing.
 
-import { adopt, cell, overWire } from '#loom'
+import { adopt, cell } from '#loom'
+import { overWire } from '#weft'
 import type { Adopted, Mirrored, Port } from '#loom'
 import { mount } from '#demo/mount.tsx'
 import { App } from './App.tsx'

@@ -191,7 +191,16 @@ export function link(channel: Channel, options: LinkOptions = {}): Link {
     }
   })
 
-  /** Ask again for everything somebody is still watching. */
+  /**
+   * Ask again for everything somebody is still watching.
+   *
+   * Everything, not just the cells. A station that restarted knows nothing of
+   * what was being followed, and a table only ever says `follow` from its
+   * `onDemand` — which does not fire on a restart, because the demand never
+   * went away. The rows sat on the last snapshot the old station sent and
+   * stayed there for good, quietly, which is the worst way for a screen to be
+   * wrong. One recovery, every standing subscription.
+   */
   function rewatch(): void {
     for (const [at, mirror] of mirrors) {
       if (!mirror.cell.demanded) continue
@@ -202,6 +211,16 @@ export function link(channel: Channel, options: LinkOptions = {}): Link {
         cell: name,
         key: rawKey === undefined ? undefined : (JSON.parse(rawKey) as unknown),
       })
+    }
+    for (const [name, made] of tables) {
+      if (!made.rows.demanded) continue
+      // A retry timer from before the restart is asking the old station for a
+      // catch-up since a version the new one has never heard of.
+      stopAsking(made)
+      untracked(() => {
+        made.catchingUp.set(false)
+      })
+      channel.send({ kind: 'follow', id: made.id, table: name })
     }
   }
 
@@ -319,10 +338,16 @@ export function link(channel: Channel, options: LinkOptions = {}): Link {
         onDemand: () => channel.send({ kind: 'follow', id, table: name }),
         onIdle: () => {
           channel.send({ kind: 'unfollow', id })
+          // The retry that was chasing a lost catch-up outlives the interest
+          // in it otherwise: a timer asking a station for a version this side
+          // has already thrown away, and on Node one that holds the process
+          // open while it does.
+          stopAsking(made)
           untracked(() => {
             made.held.clear()
             made.rows.set([])
             made.cold.set(true)
+            made.catchingUp.set(false)
             made.at = 0
           })
         },
@@ -365,7 +390,16 @@ export function link(channel: Channel, options: LinkOptions = {}): Link {
         })
         // An ignored answer must not look like a lost error.
         answer.catch(() => {})
-        channel.send({ kind: 'call', id, command: name, args })
+        try {
+          channel.send({ kind: 'call', id, command: name, args })
+        } catch (error) {
+          // A wire that refuses the send on the spot — a closed port, a value
+          // that will not clone — leaves nobody to answer. Without this the
+          // waiter and its timer sat there until the term ran out and then
+          // reported "no answer within 10s", which names the wrong trouble and
+          // holds the process open while it waits to name it.
+          settleCall(id)?.reject(error)
+        }
         return answer
       }
     },
@@ -380,6 +414,12 @@ export function link(channel: Channel, options: LinkOptions = {}): Link {
       try {
         for (const { id, cell } of mirrors.values()) {
           if (cell.demanded) channel.send({ kind: 'unwatch', id })
+        }
+        // A followed table holds demand on the station exactly as a watched
+        // cell does. Leaving only the cells released let a station keep
+        // sending batches into a wire nobody was on the other end of.
+        for (const made of tables.values()) {
+          if (made.rows.demanded) channel.send({ kind: 'unfollow', id: made.id })
         }
       } catch {
         // The other side is gone, then; there is nothing to release.

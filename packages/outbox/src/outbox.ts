@@ -64,8 +64,42 @@ export function outbox(options: OutboxOptions): Outbox {
   }
   const laneOf = (entry: Note): string => entry.lane ?? MAIN
 
+  /**
+   * The disk is one, so its trouble is one clock, not one per lane. A refused
+   * write or an unreadable book is not a lane waiting out a server — it is
+   * everything waiting for the shelf itself, and until the shelf answers
+   * nothing may be sent.
+   */
+  const disk = schedule({ ...laneOptions, paused: held })
+  let diskTries = 0
+
+  function afterDiskTrouble(): void {
+    if (held) return
+    diskTries++
+    disk.after(disk.backoff(diskTries), () => {
+      const again = pages.shut() ? pages.reopen() : pages.flush()
+      void again.then(
+        () => {
+          // A reopen answers whether or not it succeeded; `shut` is the verdict.
+          if (pages.shut()) {
+            afterDiskTrouble()
+            return
+          }
+          diskTries = 0
+          pumpAll()
+        },
+        () => afterDiskTrouble(),
+      )
+    })
+  }
+
   const pages = openBook(key, store, () => {
     if (!held) pumpAll()
+  })
+  // A book that could not be read is not a book that is empty. Nothing is sent
+  // over it; the only thing to do is ask the disk again.
+  void pages.ready.then(() => {
+    if (pages.shut()) afterDiskTrouble()
   })
   const { entries, saving } = pages
   const waiting = new Map<
@@ -107,6 +141,26 @@ export function outbox(options: OutboxOptions): Outbox {
     // `again` or `forget`; other lanes are other stories and keep moving.
     const head = entries.peek().find(entry => laneOf(entry) === lane && entry.state !== 'done')
     if (head === undefined || head.state === 'stuck') return
+
+    // Written down BEFORE it is sent — and written down means the disk said so,
+    // not that a write was started. Between the two there is a window in which
+    // a dying tab leaves the world changed with no record of it and no
+    // idempotency key to repeat by; that window is the one thing an outbox
+    // exists to close. Sending is held here rather than only at `send`, because
+    // the head after a finished send is the next entry, whose own write may
+    // still be travelling.
+    if (!pages.confirmed(head.id)) {
+      void pages.written().then(
+        () => {
+          if (pages.confirmed(head.id)) void pump(lane)
+          // The disk moved on without it: the shelf, not the lane, is the
+          // trouble, and it is tried again on the disk's own clock.
+          else afterDiskTrouble()
+        },
+        () => afterDiskTrouble(),
+      )
+      return
+    }
 
     const handler = handlers[head.name]
     if (handler === undefined) {
@@ -181,6 +235,7 @@ export function outbox(options: OutboxOptions): Outbox {
   // nothing more is sent, no timer stays on the clock.
   owned(() => {
     held = true
+    disk.hold()
     for (const clock of clocks.values()) clock.hold()
   })
 
@@ -228,7 +283,7 @@ export function outbox(options: OutboxOptions): Outbox {
         ...(lane === MAIN ? {} : { lane }),
       }
       // Written down before it is sent: a death between the two loses nothing.
-      pages.write([...entries.peek(), entry])
+      const written = pages.write([...entries.peek(), entry])
       let arm: { resolve: () => void; reject: (error: unknown) => void } | undefined
       const done = new Promise<void>((resolve, reject) => {
         arm = { resolve, reject }
@@ -237,7 +292,13 @@ export function outbox(options: OutboxOptions): Outbox {
       // The caller may ignore `done`; a refusal is already reported through the
       // entry itself, so an ignored promise must not look like a lost error.
       done.catch(() => {})
-      void pump(lane)
+      // The refusal of a disk is not the refusal of a server: the intent stands
+      // and stays owed, `saving` says why nothing is moving, and the write is
+      // tried again on the disk's clock. What must not happen is the send.
+      void written.then(
+        () => void pump(lane),
+        () => afterDiskTrouble(),
+      )
       return { id, done }
     },
 
@@ -291,12 +352,15 @@ export function outbox(options: OutboxOptions): Outbox {
 
     pause() {
       held = true
+      disk.hold()
       for (const clock of clocks.values()) clock.hold()
     },
 
     resume() {
       held = false
+      disk.release()
       for (const clock of clocks.values()) clock.release()
+      if (pages.shut()) afterDiskTrouble()
       pumpAll()
     },
 

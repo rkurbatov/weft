@@ -13,7 +13,7 @@
 // Feeding starts with the first look and stops when the last one leaves, so a
 // list nobody watches costs nothing and holds no socket.
 
-import { table } from '#weft'
+import { derived, table } from '#weft'
 import type { Key, Watchable } from '#weft'
 
 export interface Delta<R> {
@@ -41,6 +41,12 @@ export interface LivePassport<R> {
 
 export interface Sorted<R> {
   size: Watchable<number>
+  /**
+   * Every row, in this order. The honest slow path — a screen showing more
+   * than a screenful wants `window` — but a list of twenty with an order and
+   * no window has to be able to say what the order was.
+   */
+  rows: Watchable<readonly R[]>
   /** A window; it wakes only when the window itself moves. */
   window: (from: number, to: number) => Watchable<readonly R[]>
   /** Where this row stands now, or below zero if it is gone. Plain, not a
@@ -49,7 +55,16 @@ export interface Sorted<R> {
   dispose: () => void
 }
 
-export interface Live<R> {
+/**
+ * The reading half of a feed: what a part of one can offer.
+ *
+ * A filtered or ordered view is a way of looking at rows somebody else owns.
+ * `only()` used to hand back the whole `Live<R>` — writing side and all —
+ * because that was the type at hand, so `board.only(mine).take(row)` compiled
+ * and then threw at run time. What a view cannot do it now cannot be asked to
+ * do.
+ */
+export interface LiveView<R> {
   readonly name: string
   /** How a row's key is taken. Kept so the query layer can learn the field
    *  names from it instead of being told them a second time. */
@@ -60,11 +75,16 @@ export interface Live<R> {
   /** One row's own cell: it wakes when that row moves, and no oftener. */
   row: (key: Key) => Watchable<R | undefined>
   /** A part of the feed, by a test that may itself be a formula. */
-  only: (test: (row: R) => boolean, name?: string) => Live<R>
-  onlyLive: (pick: () => (row: R) => boolean, name?: string) => Live<R>
+  only: (test: (row: R) => boolean, name?: string) => LiveView<R>
+  onlyLive: (pick: () => (row: R) => boolean, name?: string) => LiveView<R>
   sortedBy: (compare: (a: R, b: R) => number, name?: string) => Sorted<R>
   count: (test?: (row: R) => boolean) => Watchable<number>
   sumBy: (measure: (row: R) => number) => Watchable<number>
+  dispose: () => void
+}
+
+/** A feed itself: a view, and the side that puts rows into it. */
+export interface Live<R> extends LiveView<R> {
   /** Rows the application fetched itself — a page, a search, a reload. */
   /** Rows in: loose, or one collection. `take(rows)` never spreads. */
   take: (...rows: readonly R[] | [Iterable<R>]) => void
@@ -75,7 +95,6 @@ export interface Live<R> {
   /** The whole picture anew; rows that stayed keep their identity. */
   reset: (rows: Iterable<R>) => void
   peek: (key: Key) => R | undefined
-  dispose: () => void
 }
 
 type EngineTable<R> = ReturnType<typeof table<R>>
@@ -84,19 +103,28 @@ type EngineTable<R> = ReturnType<typeof table<R>>
 function reading<R>(
   t: EngineTable<R> | ReturnType<EngineTable<R>['where']>,
   keyOf: (row: R) => Key,
-): Omit<Live<R>, 'take' | 'lose' | 'feed' | 'reset' | 'peek'> {
+): LiveView<R> {
   return {
     name: t.name,
     keyOf,
     rows: t.all,
     size: t.size,
     row: key => t.row(key),
-    only: (test, name) => reading(t.where(test, name), keyOf) as Live<R>,
-    onlyLive: (pick, name) => reading(t.whereLive(pick, name), keyOf) as Live<R>,
+    only: (test, name) => reading(t.where(test, name), keyOf),
+    onlyLive: (pick, name) => reading(t.whereLive(pick, name), keyOf),
     sortedBy: (compare, name) => {
       const order = t.orderBy(compare, name)
+      // One window over the whole thing, made once and shared: building it
+      // inside a formula would make a fresh view on every recompute.
+      let whole: Watchable<readonly R[]> | undefined
       return {
         size: order.size,
+        get rows() {
+          whole ??= derived(() => order.slice(0, order.size.get()).get(), {
+            name: `${name ?? t.name}.ordered`,
+          })
+          return whole
+        },
         window: (from, to) => order.slice(from, to),
         place: key => order.rank(key),
         dispose: () => order.dispose(),

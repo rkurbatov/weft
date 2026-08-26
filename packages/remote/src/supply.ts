@@ -8,7 +8,7 @@ import type { Port } from '#graph'
 import type { Watchable } from '#graph'
 import { owned } from '#graph'
 import type { Readable } from '#graph'
-import { EMPTY, arrived, heldOf, loading, refused } from './remote.ts'
+import { EMPTY, arrived, heldOf, loading, partial, refused } from './remote.ts'
 import type { Fault, Remote } from './remote.ts'
 import { wallClock } from '#core'
 import type { Supply, SupplyPassport, Tally } from './contract.ts'
@@ -225,7 +225,8 @@ export function supply<T>(
         finish()
       }, timeout)
     }
-    state.set(loading(state.peek(), now()))
+    const since = now()
+    state.set(loading(state.peek(), since))
 
     /**
      * What the work has so far.
@@ -233,11 +234,12 @@ export function supply<T>(
      * A long run — a histogram over a hundred megabytes — is not one answer at
      * the end: every step of it is a real value, and a screen should be able to
      * show it. So the body may put down what it has, as often as it likes, and
-     * the last one it puts down is simply the answer until the next.
+     * the last one it puts down is simply what is held until the next.
      *
-     * Nothing marks these as unfinished, on purpose. What "partial" means —
-     * where the work stopped, whether a budget ran out — is the application's
-     * own business, said inside its own value; the library only carries it.
+     * What "partial" means — where the work stopped, whether a budget ran out —
+     * is the application's own business, said inside its own value; the library
+     * only carries it, and says the one thing it does know: the ask is still
+     * out.
      * A run whose demand has left is disowned like any other: its `soFar` does
      * nothing, so a body that keeps going for a moment cannot write into a
      * question nobody asked.
@@ -245,7 +247,10 @@ export function supply<T>(
     const soFar = (value: T): void => {
       if (mine !== generation) return
       tallyPublished.set(tallyPublished.peek() + 1)
-      state.set(arrived(value, now()))
+      // Held, not arrived: the piece is there to be shown and the flight is
+      // not over. Anything that waits for a whole answer — a spinner, an
+      // optimistic write waiting to be absorbed — must be able to tell.
+      state.set(partial(value, now(), since))
     }
 
     void load({ signal: controller.signal, soFar })

@@ -6,6 +6,11 @@
 // are: the database clones structurally, so a Date survives and numbers stay
 // numbers, with no text packing on the way.
 //
+// A write answers when its TRANSACTION completes, not when its request
+// succeeds: a request can succeed inside a transaction that is then aborted,
+// and a book of unsent intents cannot be told "written" about bytes that never
+// landed.
+//
 // The connection is opened lazily and held. Another tab upgrading the schema
 // (versionchange) or the browser taking the connection away (close) drops it;
 // the next operation opens afresh. Transactions default to relaxed durability —
@@ -88,9 +93,31 @@ export function idbStore(name: string, options: IdbOptions = {}): Store {
     }
     return await new Promise<T>((resolve, reject) => {
       const request = act(tx.objectStore(storeName))
-      request.onsuccess = () => resolve(request.result)
+      if (mode === 'readonly') {
+        // Nothing to commit: the answer is the answer.
+        request.onsuccess = () => resolve(request.result)
+        request.onerror = () => reject(asError(request.error))
+        tx.commit?.()
+        return
+      }
+      // A successful request is not a finished transaction — it can still be
+      // aborted, by a quota refusal, by the browser reclaiming the connection,
+      // by anything else in the same transaction. Answering at `onsuccess`
+      // reports as written what may never reach the disk, which is the whole
+      // difference between a cache and a book of unsent intents.
+      let answer!: T
+      let answered = false
+      request.onsuccess = () => {
+        answer = request.result
+        answered = true
+      }
       request.onerror = () => reject(asError(request.error))
-      // The requests are all placed; there is nothing to wait for.
+      tx.oncomplete = () => {
+        if (answered) resolve(answer)
+        else reject(new Error('weft: the transaction ended without an answer'))
+      }
+      tx.onabort = () => reject(asError(tx.error))
+      tx.onerror = () => reject(asError(tx.error))
       tx.commit?.()
     })
   }
@@ -144,8 +171,12 @@ interface Databaseish {
 }
 
 interface Transactionish {
+  readonly error: unknown
   objectStore(name: string): ObjectStoreish
   commit?: () => void
+  oncomplete: (() => void) | null
+  onabort: (() => void) | null
+  onerror: (() => void) | null
 }
 
 interface ObjectStoreish {

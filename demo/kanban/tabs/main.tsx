@@ -6,7 +6,7 @@
 import type { ReactNode } from 'react'
 import { mount } from '#demo/mount.tsx'
 import { perFrame } from '#weft'
-import { carry } from '#loom'
+import { carry, underOwner } from '#loom'
 import { useLive } from '#loom/react'
 import '#kanban/kanban.css'
 import { kanbanServer } from '#kanban'
@@ -16,17 +16,21 @@ import { App } from '../weft/App.tsx'
 
 const carried = carry({
   name: 'weft-kanban-tabs',
-  station: () => {
-    // The server pretends to be the world; each leader gets its own copy, the
-    // way each backend deployment would. The book travels by succession.
-    const server = kanbanServer({ latency: 120, grumpiness: 0.15 })
-    const app = kanban(server, 4000)
-    console.log('[carried] the book lives on:', app.post.shelf)
-    return {
-      serve: channel => serveKanban(app, channel, { schedule: perFrame, instruments: true }),
-      dispose: app.dispose,
-    }
-  },
+  station: () =>
+    // Who is signed in, said once for everything the station builds. The demo
+    // has one person; a real screen puts the signed-in one here. Without it
+    // the book of unsent moves would refuse to open on disk, and say so.
+    underOwner({ app: 'kanban', session: 'demo' }, () => {
+      // The server pretends to be the world; each leader gets its own copy, the
+      // way each backend deployment would. The book travels by succession.
+      const server = kanbanServer({ latency: 120, grumpiness: 0.15 })
+      const app = kanban(server, 4000)
+      console.log('[carried] the book lives on:', app.post.shelf)
+      return {
+        serve: channel => serveKanban(app, channel, { schedule: perFrame, instruments: true }),
+        dispose: app.dispose,
+      }
+    }),
 })
 
 const tab = kanbanMirror(carried.channel)

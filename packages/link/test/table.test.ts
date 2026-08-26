@@ -180,6 +180,69 @@ describe('following a table across a wire', () => {
   })
 })
 
+describe('a station that restarted', () => {
+  test('a followed table is asked for again, not left on the old snapshot', async () => {
+    // Only cells were re-asked for on `up`. A table says `follow` from its
+    // onDemand, and demand never went away over a restart — so the rows sat on
+    // the last snapshot the dead station sent, for good and in silence.
+    const wire = wirePair()
+    const first = table<Row>({ key: r => r.id as Key, name: 'rows' })
+    first.put({ id: 1, title: 'from the first station' })
+    const stopFirst = serve({ tables: { rows: first } }, wire.graph, { schedule: atOnce })
+    const watcher = link(wire.watcher)
+    until(() => watcher.close())
+
+    const mirror = watcher.table<Row>('rows')
+    until(subscribe(mirror.rows, () => {}))
+    await settle(3)
+    assert.deepEqual(
+      rowsOf(mirror).map(r => r.title),
+      ['from the first station'],
+    )
+
+    // The station dies and comes back with different rows. Nobody unwatched
+    // anything: the demand on this side never moved.
+    stopFirst()
+    first.dispose()
+    const second = table<Row>({ key: r => r.id as Key, name: 'rows' })
+    second.put({ id: 1, title: 'from the second station' }, { id: 2, title: 'and a new one' })
+    until(serve({ tables: { rows: second } }, wire.graph, { schedule: atOnce }))
+    until(() => second.dispose())
+    await settle(4)
+
+    assert.deepEqual(
+      rowsOf(mirror)
+        .map(r => r.title)
+        .toSorted(),
+      ['and a new one', 'from the second station'],
+      'the mirror stayed on the dead station’s snapshot',
+    )
+    assert.equal(mirror.cold.peek(), false)
+  })
+
+  test('closing the link releases followed tables, not only watched cells', async () => {
+    const rows = table<Row>({ key: r => r.id as Key, name: 'rows' })
+    until(() => rows.dispose())
+    const said: unknown[] = []
+    const wire = wirePair()
+    const heard: Channel = {
+      send: message => {
+        said.push(message)
+        wire.watcher.send(message)
+      },
+      listen: wire.watcher.listen,
+    }
+    until(serve({ tables: { rows } }, wire.graph, { schedule: atOnce }))
+    const watcher = link(heard)
+    until(subscribe(watcher.table<Row>('rows').rows, () => {}))
+    await settle(3)
+
+    watcher.close()
+    const kinds = said.map(m => (m as { kind?: string }).kind)
+    assert.equal(kinds.includes('unfollow'), true, 'the station kept sending into a closed wire')
+  })
+})
+
 describe('a list that travels as a difference', () => {
   /** Counts what actually crosses: rows in a snapshot, changes in a batch. */
   function counting(inner: {

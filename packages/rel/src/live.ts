@@ -94,9 +94,26 @@ export function relate(
     for (const hole of holes) values.set(hole, (cells[hole] as Watchable<unknown>).get())
     return values
   }
+  /**
+   * The parameters as one comparable line, read without becoming a dependency.
+   * Typed, so the number 1 and the string "1" do not read as the same word.
+   */
+  const appliedNow = (): string =>
+    untracked(() =>
+      holes
+        .map(hole => {
+          const value = (cells[hole] as Watchable<unknown>).get()
+          return `${typeof value}:${JSON.stringify(value) ?? 'undefined'}`
+        })
+        .join('\u0000'),
+    )
 
   let resolved = holes.length === 0 ? root : untracked(() => substituteNode(root, valuesNow()))
   let runner = runnerFor(resolved)
+  // Which parameters the standing runner was built for. Not a flag: nobody was
+  // watching while they changed, so on the way back the question is not "has
+  // this run before" but "was it built for these values".
+  let tunedFor = holes.length === 0 ? '' : appliedNow()
 
   let stops: Array<() => void> = []
 
@@ -127,6 +144,7 @@ export function relate(
   const retune = (): void => {
     resolved = untracked(() => substituteNode(root, valuesNow()))
     runner = runnerFor(resolved)
+    tunedFor = appliedNow()
     rebuild()
   }
 
@@ -142,15 +160,16 @@ export function relate(
   function start(): void {
     let built = false
     if (holes.length > 0) {
-      let tuned = false
+      // The first pass only takes the dependency — unless the parameters moved
+      // while nobody was looking. A search box typed into during a spell of no
+      // demand used to answer, once, with the results of the old word.
+      let first = true
       stops.push(
         watch(() => {
           const values = valuesNow() // reading is the dependency
-          if (tuned) {
-            void values
-            retune()
-          }
-          tuned = true
+          void values
+          if (!first || appliedNow() !== tunedFor) retune()
+          first = false
         }),
       )
     }

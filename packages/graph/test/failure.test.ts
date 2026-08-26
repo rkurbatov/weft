@@ -199,6 +199,65 @@ describe('the border of a failure', () => {
     attachProbe(null, g)
     g.dispose()
   })
+
+  test('one failure giving way to another is a change, and reaches the reader', () => {
+    // The gate used to be "was it broken already", so a reader that had heard
+    // the first complaint never heard the second and went on showing the wrong
+    // reason for good.
+    const g = graph('app')
+    const mode = g.port('zero')
+    const half = g.derived(() => {
+      if (mode.get() === 'zero') throw new Error('cannot divide by zero')
+      throw new Error('no such column')
+    })
+
+    const reason = g.derived(() => {
+      try {
+        return String(half.get())
+      } catch (error) {
+        return (error as Error).message
+      }
+    })
+    const heard: string[] = []
+    const stop = subscribe(reason, said => heard.push(said))
+    assert.equal(reason.get(), 'cannot divide by zero')
+
+    mode.set('column')
+    assert.deepEqual(heard, ['no such column'], 'the reader kept the older reason')
+    assert.equal(reason.get(), 'no such column')
+
+    stop()
+    g.dispose()
+  })
+
+  test('the same complaint, thrown afresh every run, wakes nobody twice', () => {
+    // A formula that throws makes a new Error object on each run; the reason is
+    // the same reason, and a screen must not be woken sixty times a second for
+    // it.
+    const g = graph('app')
+    const nudge = g.port(0)
+    const broken = g.derived(() => {
+      nudge.get()
+      throw new Error('the shape is wrong')
+    })
+    let woke = 0
+    const stop = subscribe(
+      g.derived(() => {
+        try {
+          return broken.get()
+        } catch {
+          return 'broken'
+        }
+      }),
+      () => woke++,
+    )
+    const first = woke
+    for (let i = 1; i <= 5; i++) nudge.set(i)
+    assert.equal(woke, first, 'the same failure is not news')
+
+    stop()
+    g.dispose()
+  })
 })
 
 test('two watchers writing each other are stopped by name, and quickly', () => {

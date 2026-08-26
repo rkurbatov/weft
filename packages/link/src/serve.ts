@@ -32,12 +32,16 @@ const unwrap = (value: unknown): unknown => (handedOver(value) ? value.value : v
 
 /** Buffers to hand over with this batch, if any were declared. */
 function buffersIn(batch: readonly { value: unknown }[]): readonly ArrayBufferLike[] {
-  const found: ArrayBufferLike[] = []
+  // A set, not a list. Two values in one batch can name the same buffer — two
+  // views over one allocation is the ordinary way to hold columns — and a
+  // transfer list that names it twice is refused by the platform, taking the
+  // whole batch with it.
+  const found = new Set<ArrayBufferLike>()
   for (const one of batch) {
     if (!handedOver(one.value)) continue
-    for (const buffer of one.value.buffers) found.push(buffer)
+    for (const buffer of one.value.buffers) found.add(buffer)
   }
-  return found
+  return [...found]
 }
 
 export function serve(surface: Surface, channel: Channel, options: ServeOptions = {}): () => void {
@@ -70,12 +74,30 @@ export function serve(surface: Surface, channel: Channel, options: ServeOptions 
       // Either one value will not clone, or the channel is gone. Sending them
       // one at a time tells the two apart.
       let sent = 0
-      for (const one of changed) if (sendAlone(one)) sent++
+      const refused: Array<{ id: number; value: unknown; why: unknown }> = []
+      for (const one of changed) {
+        const why = sendAlone(one)
+        if (why === null) sent++
+        else refused.push({ ...one, why })
+      }
       // Nothing got through. That is either a batch where every value refuses
       // to clone, or a channel that is gone — and the two want opposite
       // answers. An empty message tells them apart: it clones trivially, so
       // only a dead channel refuses it.
-      if (sent === 0 && changed.length > 0 && !alive()) fell(error)
+      if (sent === 0 && changed.length > 0 && !alive()) {
+        // The wire is gone, not the values. Dropping them here — and naming
+        // every one of them unsendable on the way out — emptied the queue for
+        // a fault that has nothing to do with the values in it, and left
+        // nothing to send when the wire came back.
+        fell(error)
+        return
+      }
+      // These really will not clone. Named and dropped, and only them: one
+      // impossible value must not block the queue forever.
+      for (const one of refused) {
+        complain(one.id, one.why)
+        settled(one)
+      }
     }
   }
 
@@ -84,20 +106,17 @@ export function serve(surface: Surface, channel: Channel, options: ServeOptions 
     if (pending.get(one.id) === one.value) pending.delete(one.id)
   }
 
-  function sendAlone(one: { id: number; value: unknown }): boolean {
+  /** Null when it went; otherwise why it did not. The caller decides what that means. */
+  function sendAlone(one: { id: number; value: unknown }): unknown {
     try {
       channel.send(
         { kind: 'values', changed: [{ id: one.id, value: unwrap(one.value) }] },
         buffersIn([one]),
       )
       settled(one)
-      return true
+      return null
     } catch (error) {
-      complain(one.id, error)
-      // A value nobody can clone would block the queue forever; it is named
-      // and dropped, and only it.
-      settled(one)
-      return false
+      return error
     }
   }
 

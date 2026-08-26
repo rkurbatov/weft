@@ -3,7 +3,8 @@
 // `self` is a wire like any other. Nothing here is about the demo — it is what
 // any application with state in a worker writes once.
 
-import { cell, every, offer, overWire } from '#loom'
+import { cell, every, offer } from '#loom'
+import { overWire } from '#weft'
 import { engine } from './state.ts'
 
 const held = engine()

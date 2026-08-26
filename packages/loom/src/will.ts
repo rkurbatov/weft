@@ -6,9 +6,10 @@
 // must recognize a repeat by it.
 
 import type { Now } from '#core'
+import { notice } from '#core'
 import { derived, port } from '#weft'
 import type { Watchable } from '#weft'
-import { bestStore } from '#weft'
+import { bestStore, memoryStore, within } from '#weft'
 import type { Store } from '#weft'
 import { outbox } from '#weft'
 import type { Handler, Note } from '#weft'
@@ -18,6 +19,8 @@ import type { Handler, Note } from '#weft'
 export type { Note }
 import type { Fault } from '#weft'
 import type { Timers } from '#core'
+import { ownerNow } from './owner.ts'
+import type { Owner } from './owner.ts'
 
 declare const OP: unique symbol
 
@@ -65,8 +68,26 @@ export interface Refusal {
 
 export interface WillPassport {
   name?: string
-  /** Where the book lives. Default: the best shelf this platform has, since a
-   *  book of unsent intents that dies with the tab is not a book. */
+  /**
+   * Whose book this is: an application and a session inside it.
+   *
+   * A book of unsent intents outlives the tab, so it cannot be anonymous. Two
+   * people signing in one after another in the same browser, or one leading
+   * tab serving both, would otherwise share a single book — and the second
+   * would send the first's unsent work under the first's keys. Named here, the
+   * book lives under its owner and nobody else can reach it.
+   *
+   * Named at assembly for the whole screen — `loom({ name, session })` — and
+   * inherited from there, so an application says this once rather than at
+   * every intent. Stated here it wins over what was inherited.
+   *
+   * Without an owner, inherited or stated, nothing durable is opened: the book
+   * is memory, `shelf` says so, and a notice says it out loud. Persistence is
+   * not something to acquire by forgetting to name it.
+   */
+  owner?: Owner
+  /** A shelf of the caller's own. Then the owner is the caller's business too,
+   *  and `shelf` answers 'given'. */
   store?: Store
   /** Sort a sender's failure. Default: everything is transient. */
   judge?: (error: unknown) => Fault
@@ -97,9 +118,36 @@ export interface WillBase<D extends WillDict> {
 
 export type Will<D extends WillDict> = WillBase<D> & Speak<D>
 
+/** Where this book lives, and under what key — the whole of the ownership rule. */
+function shelfFor(
+  name: string,
+  passport: WillPassport,
+): { store: Store; key: string; shelf: 'disk' | 'memory' | 'given' } {
+  // Stated, or inherited from the assembly this is being built inside of.
+  const owner = passport.owner ?? ownerNow()
+  if (owner === undefined) {
+    // A shelf handed in is the caller's, and so is the naming on it: they know
+    // whose it is. What must never happen by default is a durable book nobody
+    // named an owner for.
+    if (passport.store !== undefined) return { store: passport.store, key: name, shelf: 'given' }
+    notice({
+      kind: 'unowned-book',
+      where: name,
+      level: 'warn',
+      message: `will "${name}" has no owner, so its book is kept in memory and dies with the tab; name one with { owner: { app, session } } to keep it`,
+    })
+    return { store: memoryStore(), key: name, shelf: 'memory' }
+  }
+  const best = passport.store === undefined ? bestStore(`weft.${owner.app}`) : undefined
+  const scope = within(passport.store ?? (best as Store), owner.app, owner.session)
+  // A book key, not a cache key: signing out clears what can be fetched again
+  // and leaves what was entrusted, waiting for the one who wrote it.
+  return { store: scope, key: scope.book(name), shelf: best === undefined ? 'given' : best.where }
+}
+
 export function will<D extends WillDict>(dict: D, passport: WillPassport = {}): Will<D> {
   const name = passport.name ?? 'will'
-  const shelf = bestStore(`weft.${name}`)
+  const shelf = shelfFor(name, passport)
   const refused = port<Refusal | null>(null, { name: `${name}.refused` })
 
   const handlers: Record<string, Handler> = {}
@@ -112,8 +160,8 @@ export function will<D extends WillDict>(dict: D, passport: WillPassport = {}): 
   }
 
   const box = outbox({
-    key: name,
-    store: passport.store ?? shelf,
+    key: shelf.key,
+    store: shelf.store,
     handlers,
     retain: true,
     ...(passport.judge === undefined ? {} : { classify: passport.judge }),
@@ -154,7 +202,7 @@ export function will<D extends WillDict>(dict: D, passport: WillPassport = {}): 
       ),
     owed: box.owed,
     refused,
-    shelf: passport.store === undefined ? shelf.where : 'given',
+    shelf: shelf.shelf,
     pause: () => box.pause(),
     resume: () => box.resume(),
     absorb: before => box.absorb(before),
