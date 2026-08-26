@@ -2,7 +2,7 @@ import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { port, derived, subscribe } from '#graph'
 import { family } from '#graph'
-import type { Derived } from '#graph'
+import type { Derived, Family } from '#graph'
 import { until } from '#testkit'
 
 describe('families of cells', () => {
@@ -216,6 +216,80 @@ describe('families of cells', () => {
       { max: 4 },
     )
     assert.equal(part('sum').peek(), 28)
+  })
+
+  test('what the cache holds does not depend on the order watched and cold stand in', () => {
+    // The ceiling bounds the members nobody is reading. How many of those
+    // survive an admission is arithmetic, and arithmetic does not care whether
+    // the watched members happen to lie ahead of the cold ones in the map.
+    const run = (watchedFirst: boolean) => {
+      const item = family((id: number) => id, { max: 4 })
+      const cells = new Map<number, Derived<number>>()
+      const made = (id: number): Derived<number> => {
+        const cell = item(id)
+        cells.set(id, cell)
+        return cell
+      }
+      const stops: (() => void)[] = []
+      const watch = () => {
+        for (const id of [1, 2, 3]) stops.push(subscribe(made(id), () => {}))
+      }
+      const chill = () => {
+        for (const id of [4, 5, 6]) made(id)
+      }
+      if (watchedFirst) {
+        watch()
+        chill()
+      } else {
+        chill()
+        watch()
+      }
+      const cold = () => [...cells].filter(([id, c]) => item.has(id) && !c.observed).length
+      assert.equal(cold(), 3, 'three cold, one under the ceiling')
+
+      made(7) // cold would be four, which is the ceiling: nobody goes
+      assert.equal(cold(), 4)
+      assert.equal(item.size, 7)
+
+      made(8) // now one too many: the oldest cold member goes, and only it
+      assert.equal(cold(), 4)
+      assert.equal(item.size, 7)
+      assert.equal(item.has(4), false, 'the oldest cold member is the one that goes')
+      assert.equal(item.has(5), true)
+      for (const id of [1, 2, 3]) assert.equal(item.has(id), true, 'watched members stay')
+      for (const stop of stops) stop()
+      return item.size
+    }
+    assert.equal(run(true), run(false))
+  })
+
+  test('every way out refuses a member whose formula is running', () => {
+    // All three used to test for watchers and then dispose, which throws on a
+    // cell that is mid-formula. Whichever one is called, the answer is now no.
+    for (const attempt of [
+      (item: Family<number, number>, id: number) => assert.equal(item.evict(id), false),
+      (item: Family<number, number>, _id: number) => assert.equal(item.sweep(), 0),
+    ]) {
+      let item!: Family<number, number>
+      item = family((id: number) => {
+        attempt(item, id)
+        return id
+      })
+      assert.equal(item(1).peek(), 1)
+      assert.equal(item.has(1), true)
+    }
+  })
+
+  test('a member on the stack stands over the ceiling until the next admission', () => {
+    // `max: 0` is the sharpest case: every member is one too many, so what is
+    // held is exactly what could not be let go of.
+    let part!: Family<string, number>
+    part = family((key: string) => (key === 'parent' ? part('child').peek() : 1), { max: 0 })
+    assert.equal(part('parent').peek(), 1)
+    assert.equal(part.size, 2, 'the parent was running and the child was being handed back')
+    part('other') // the next admission finds both of them ordinary again
+    assert.equal(part.size, 1)
+    assert.equal(part.sweep(), 1, 'and sweep takes what admissions have not reached')
   })
 
   test('a watched member survives every drop path', () => {

@@ -7,7 +7,7 @@
 // Building them — in which engine, owned by which region — is the business of
 // graph.ts next door; here is only what they are.
 
-import { CHECK, CLEAN, coreForBuild, DIRTY, markOf, NODE, observe } from './engine.ts'
+import { CHECK, CLEAN, coreForBuild, DIRTY, markOf, NODE, observe, WATCHED } from './engine.ts'
 import type { Core } from './engine.ts'
 import type { Consumer, NodeKind, Node, State } from './engine.ts'
 
@@ -110,6 +110,16 @@ export class Port<T> implements Node {
 }
 
 /** Derived cell: a formula. Nobody writes it; it recomputes when its inputs move. */
+/**
+ * Package-private: the one way to drop a cell somebody else is holding for a
+ * cache. Not exported from the package — see `[RELEASE]` below for why it is a
+ * question and not two.
+ */
+export const RELEASE: unique symbol = Symbol('weft.release')
+
+/** Package-private: how a cache installs its listener. See `[WATCHING]` below. */
+export const WATCHING: unique symbol = Symbol('weft.watching')
+
 export class Derived<T> implements Node, Consumer {
   get [NODE](): NodeKind {
     return 'cell'
@@ -127,6 +137,10 @@ export class Derived<T> implements Node, Consumer {
   private value!: T
   private valued = false
   private running = false
+  // A cache's listener, if one asked. A plain field and two methods on the
+  // prototype: a field under a symbol name is built per instance, and that
+  // showed up as three times the cost of admitting a member.
+  private watching: ((watched: boolean) => void) | undefined = undefined
   /**
    * What the formula threw last time, if it did. Held rather than rethrown from
    * a fresh run: a formula that fails on every read would otherwise fail once
@@ -185,14 +199,27 @@ export class Derived<T> implements Node, Consumer {
     return this.demand > 0
   }
 
+  /** Package-private: a cache asks to hear when this cell is read and unread. */
+  [WATCHING](listener: ((watched: boolean) => void) | undefined): void {
+    this.watching = listener
+  }
+
+  /** The engine, at the two moments the observer set fills and goes empty. */
+  [WATCHED](watched: boolean): void {
+    this.watching?.(watched)
+  }
+
   /**
-   * The formula is running right now — the cell is on the stack, and whoever
-   * holds it is in the middle of using it. Asked by caches that drop cells
-   * nobody wants: `dispose` refuses a computing cell, so a cache that picks
-   * one as a candidate crashes the run that was building it.
+   * Package-private: let go of this cell if nothing is using it, and say
+   * whether it went. A cache asks this instead of testing and disposing in two
+   * steps — the two could disagree, and did: `dispose` refuses a cell whose
+   * formula is on the stack, so a cache that tested only for watchers killed
+   * the very run that was building the member it went on to hand back.
    */
-  get computing(): boolean {
-    return this.running
+  [RELEASE](): boolean {
+    if (this.running || this.observers.size > 0) return false
+    this.dispose()
+    return true
   }
 
   /** Let go of the sources. Next read recomputes from scratch. */

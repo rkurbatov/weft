@@ -214,4 +214,45 @@ describe('a run that puts down what it has', () => {
     assert.deepEqual(wrote, ['1:1', '2:1'], 'the abandoned run wrote nothing further')
     second()
   })
+  test('a partial from a run that was called off is not served as an answer', async () => {
+    const clock = world()
+    const steps: (() => void)[] = []
+    let runs = 0
+    const feed = supply<number>(
+      async ({ soFar }) => {
+        const mine = ++runs
+        await new Promise<void>(resolve => steps.push(resolve))
+        soFar(mine * 10)
+        await new Promise<void>(resolve => steps.push(resolve))
+        return mine * 100
+      },
+      { name: 'called off', timers: clock.timers, now: clock.now },
+    )
+
+    const stop = subscribe(feed.state, () => {})
+    await settle(3)
+    steps[0]?.() // the first run puts down what it has
+    await settle(3)
+    assert.equal(heldOf(feed.state.peek())?.value, 10)
+
+    stop() // the last watcher leaves and the run is called off
+    await settle(3)
+
+    const again = subscribe(feed.state, () => {})
+    await settle(3)
+    assert.equal(runs, 2, 'the next watcher asks again instead of waiting on a partial')
+
+    steps[1]?.() // the abandoned run finishes late
+    await settle(3)
+    assert.notEqual(feed.state.peek().kind, 'value', 'and its answer belongs to nobody')
+
+    steps[2]?.()
+    await settle(3)
+    steps[3]?.()
+    await settle(3)
+    const held = feed.state.peek()
+    assert.equal(held.kind, 'value')
+    assert.equal(held.kind === 'value' ? held.value : 0, 200, 'the run that was wanted answers')
+    again()
+  })
 })

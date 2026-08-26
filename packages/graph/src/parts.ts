@@ -35,10 +35,20 @@ export function markOf(value: unknown): NodeKind | undefined {
   return kind === 'input' || kind === 'cell' || kind === 'watcher' ? kind : undefined
 }
 
+/**
+ * Package-private: the slot a cache hangs a listener in to be told when this
+ * node goes from nobody-reading-it to somebody-reading-it and back. Not
+ * exported from the package: what a node is worth keeping is the business of
+ * whoever holds it, and an application branching on it would be reading the
+ * scheduler's state as if it were its own.
+ */
+export const WATCHED: unique symbol = Symbol('weft.watched')
+
 export interface Node extends Marked {
   readonly engine: Core
   readonly name: string
   readonly observers: Set<Consumer>
+  [WATCHED]?: ((watched: boolean) => void) | undefined
   readonly demand: number
   /** Bring own value up to date. Port cells are always current. */
   stabilize(): void

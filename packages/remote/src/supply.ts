@@ -148,7 +148,14 @@ export function supply<T>(
 
   /** Is what we hold too old to serve the next watcher? */
   function stale(): boolean {
-    const held = heldOf(state.peek())
+    const shown = state.peek()
+    // A flight that was called off leaves behind whatever it had published.
+    // That is worth showing and is never an answer — nothing is coming for it
+    // — so the next watcher must ask again. Without this line a source that
+    // had published a partial and then lost its last watcher looked fresh to
+    // the one after: nobody asked, and it stood in `loading` for ever.
+    if (shown.kind === 'loading' && inFlight === null) return true
+    const held = heldOf(shown)
     if (held === undefined) return true
     const age = now() - held.at
     const want = strictest()

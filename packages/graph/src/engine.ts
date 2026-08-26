@@ -9,7 +9,7 @@
 // reading.ts, because that is a property of the stack and not of any engine.
 
 import { TickTap } from './ticks.ts'
-import { CLEAN, CHECK, DIRTY } from './parts.ts'
+import { CLEAN, CHECK, DIRTY, WATCHED } from './parts.ts'
 import type { Consumer, EngineOptions, RegionOf, Node } from './parts.ts'
 import { asReader, untracked } from './reading.ts'
 
@@ -229,7 +229,8 @@ export class Core {
   detach(node: Consumer, sources: Iterable<Node>): void {
     const carried = node.contribution()
     for (const s of sources) {
-      s.observers.delete(node)
+      // And the one place it goes back to unread.
+      if (s.observers.delete(node) && s.observers.size === 0) s[WATCHED]?.(false)
       if (carried > 0) s.demandChanged(-carried)
     }
   }

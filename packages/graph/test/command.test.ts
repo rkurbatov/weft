@@ -134,6 +134,38 @@ describe('a command asked to wait for quiet', () => {
     assert.deepEqual(await Promise.all([first, second, third]), [3, 3, 3])
   })
 
+  test('reset takes back a start that was still waiting out the quiet', async () => {
+    const clock = world()
+    const asked: string[] = []
+    const search = command(
+      async (text: string) => {
+        asked.push(text)
+        return text.length
+      },
+      { calm: 300, timers: clock.timers },
+    )
+
+    const first = search.run('a')
+    const second = search.run('ab')
+    const outcome = Promise.all(
+      [first, second].map(held =>
+        held.then(
+          () => 'ran',
+          (error: unknown) => String(error),
+        ),
+      ),
+    )
+    search.reset()
+
+    await clock.advance(1000)
+    assert.deepEqual(asked, [], 'the body of a start that was taken back never runs')
+    assert.equal(search.state.peek().kind, 'idle', 'and nothing lands on the state later')
+    // Everyone still on the wait hears about it, not just the last caller.
+    const said = await outcome
+    assert.equal(said.length, 2)
+    for (const one of said) assert.match(one, /was reset before it started/)
+  })
+
   test('without a quiet asked for, a start is a start', async () => {
     const asked: string[] = []
     const save = command(async (text: string) => {

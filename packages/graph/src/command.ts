@@ -48,7 +48,11 @@ export interface Command<A extends unknown[], T> {
   readonly pending: Readable<boolean>
   readonly result: Readable<T | undefined>
   readonly error: Readable<unknown>
-  /** Forget the last outcome; an answer still in flight is then ignored. */
+  /**
+   * Forget the last outcome; an answer still in flight is then ignored. A
+   * start still waiting out `calm` never happens, and its callers are refused
+   * rather than left waiting.
+   */
   reset(): void
 }
 
@@ -120,7 +124,12 @@ export function command<A extends unknown[], T>(
 
   const calm = options.calm
   const timers = options.timers ?? wallClock
-  let quiet: { timer: unknown; resolve: (value: T | Promise<T>) => void } | undefined
+  interface Held {
+    timer: unknown
+    resolve: (value: T | Promise<T>) => void
+    reject: (error: unknown) => void
+  }
+  let quiet: Held | undefined
 
   /**
    * With no quiet asked for, a start is a start. With one, the start is held,
@@ -130,23 +139,40 @@ export function command<A extends unknown[], T>(
    */
   const run = (...args: A): Promise<T> => {
     if (calm === undefined) return start(...args)
-    if (quiet !== undefined) timers.clear(quiet.timer)
-    return new Promise<T>((resolve, reject) => {
-      const waiting = quiet
+    const waiting = quiet
+    if (waiting !== undefined) timers.clear(waiting.timer)
+    const held = new Promise<T>((resolve, reject) => {
       const timer = timers.set(() => {
         quiet = undefined
         const answer = start(...args)
         resolve(answer)
         waiting?.resolve(answer)
       }, calm)
-      quiet = { timer, resolve: waiting === undefined ? resolve : waiting.resolve }
-      if (waiting !== undefined)
-        quiet.resolve = value => {
-          waiting.resolve(value)
-          resolve(value)
-        }
-      void reject
+      // The chain, so that whoever takes the wait back reaches every caller
+      // still on it and not just the last one.
+      quiet = {
+        timer,
+        resolve:
+          waiting === undefined
+            ? resolve
+            : value => {
+                waiting.resolve(value)
+                resolve(value)
+              },
+        reject:
+          waiting === undefined
+            ? reject
+            : error => {
+                waiting.reject(error)
+                reject(error)
+              },
+      }
     })
+    // A start taken back is not a refusal by the world and is told to nobody;
+    // marking it handled keeps a caller who did not await from meeting it as
+    // an unhandled rejection. One that did await still gets it.
+    held.catch(() => {})
+    return held
   }
 
   return {
@@ -171,6 +197,17 @@ export function command<A extends unknown[], T>(
     reset: () => {
       generation++
       inFlight = null
+      // A start still waiting out its quiet has not happened yet, so this
+      // takes it back rather than forgetting it: the timer went with the
+      // state, or the body ran a moment later into a command that says it is
+      // idle, and callers on the wait were left holding a promise that would
+      // never settle.
+      if (quiet !== undefined) {
+        const held = quiet
+        quiet = undefined
+        timers.clear(held.timer)
+        held.reject(new Error(`weft: ${name} was reset before it started`))
+      }
       state.set({ kind: 'idle' })
     },
   }
