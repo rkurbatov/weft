@@ -25,7 +25,7 @@ export type {
   Trace,
   Engine,
 } from './graph.ts'
-export { command, onCommandFailure } from './command.ts'
+export { command, CommandReset, onCommandFailure } from './command.ts'
 export type { Command, CommandOptions, CommandState, WhileRunning } from './command.ts'
 export { family } from './family.ts'
 export type { Family, FamilyOptions } from './family.ts'

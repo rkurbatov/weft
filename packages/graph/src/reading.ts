@@ -5,7 +5,7 @@
 // refused. So the reader is tracked per isolate, and the engines are compared
 // at the moment the link is made.
 
-import { WATCHED } from './parts.ts'
+import { OBSERVED } from './parts.ts'
 import type { Consumer, Node } from './parts.ts'
 
 /**
@@ -37,7 +37,7 @@ export function observe(source: Node): void {
   source.observers.add(consumer)
   // The one place a node goes from unread to read. A link kept across a
   // recompute returned above, so this fires on real edges only.
-  if (source.observers.size === 1) source[WATCHED]?.(true)
+  if (source.observers.size === 1) source[OBSERVED]?.cooled(true)
   const carried = consumer.contribution()
   if (carried > 0) source.demandChanged(carried)
 }

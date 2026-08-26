@@ -36,19 +36,36 @@ export function markOf(value: unknown): NodeKind | undefined {
 }
 
 /**
- * Package-private: the slot a cache hangs a listener in to be told when this
- * node goes from nobody-reading-it to somebody-reading-it and back. Not
- * exported from the package: what a node is worth keeping is the business of
- * whoever holds it, and an application branching on it would be reading the
- * scheduler's state as if it were its own.
+ * Package-private: the slot whoever keeps a node hangs a listener in, to hear
+ * when the node stops being read and starts again.
+ *
+ * Not the same question as demand, and the two never merge. Demand drives work
+ * up the graph — should this source be running, holding a socket, in flight.
+ * Observation guards identity — may the keeper destroy this node, or is
+ * somebody still expecting to hear from it. A cold watcher settles that they
+ * are different: it guards the identity and deliberately raises no work.
+ *
+ * Kept inside the package: demand is the public resource contract, and a
+ * second set of lifecycle callbacks that looked like an alternative demand is
+ * exactly what an application should not be handed.
  */
-export const WATCHED: unique symbol = Symbol('weft.watched')
+export const OBSERVED: unique symbol = Symbol('weft.observed')
+
+/**
+ * Whoever keeps a node, hearing that it stopped being read or started again.
+ * An object with a method rather than a bare listener, so a keeper of many
+ * nodes can put the method on one prototype instead of building a closure per
+ * node: at half a million members that was sixty megabytes.
+ */
+export interface Keeper {
+  cooled(observed: boolean): void
+}
 
 export interface Node extends Marked {
   readonly engine: Core
   readonly name: string
   readonly observers: Set<Consumer>
-  [WATCHED]?: ((watched: boolean) => void) | undefined
+  [OBSERVED]?: Keeper | undefined
   readonly demand: number
   /** Bring own value up to date. Port cells are always current. */
   stabilize(): void

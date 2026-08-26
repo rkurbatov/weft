@@ -17,10 +17,11 @@ export interface QueryOptions<K> extends SupplyPassport {
    * Ceiling on unwatched members; watched ones are never dropped and do not
    * count against it. Stated, not defaulted: an unbounded cache must say so.
    *
-   * Checked when a new member joins, and the one just handed to the caller is
-   * never the member that pays for it — so a cache stands one over its ceiling
-   * until the next key is asked for. At `max: 0` that is the normal state:
-   * the source just asked for is held, and goes when another key arrives.
+   * Checked when a new member joins, and a newborn never pays for its own
+   * arrival: with `max` above zero an older cold source pays instead, and the
+   * cache is inside its ceiling again by the time the call returns. Only at
+   * `max: 0` is there nobody older to pay — there the source just handed out
+   * is the one allowed exception, and it goes when a different key arrives.
    */
   max: number | 'unbounded'
 }

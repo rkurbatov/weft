@@ -15,10 +15,7 @@ import { family, subscribe } from '#graph'
 const max = 1024
 const keys = 50_000
 
-const once = (
-  watched: number,
-  watchedFirst: boolean,
-): { ms: number; size: number; cold: number } => {
+const once = (watched: number, watchedFirst: boolean): { ms: number; size: number; cold: number } => {
   const item = family((id: number) => id, { max })
   const stops: (() => void)[] = []
   const hold = () => {
@@ -43,8 +40,11 @@ const once = (
 
   let cold = 0
   for (const key of item.keys()) if (!item(key).observed) cold++
+  const size = item.size
+  // read before the watchers leave: letting them go cools their members, and
+  // the family then keeps its own ceiling
   for (const stop of stops) stop()
-  return { ms, size: item.size, cold }
+  return { ms, size, cold }
 }
 
 const run = (label: string, watched: number, watchedFirst: boolean): void => {

@@ -1,7 +1,7 @@
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { port, derived, subscribe, untracked } from '#graph'
-import { command, onCommandFailure } from '#graph'
+import { command, CommandReset, onCommandFailure } from '#graph'
 import { settle, track, world } from '#testkit'
 
 function deferred<T>() {
@@ -148,12 +148,7 @@ describe('a command asked to wait for quiet', () => {
     const first = search.run('a')
     const second = search.run('ab')
     const outcome = Promise.all(
-      [first, second].map(held =>
-        held.then(
-          () => 'ran',
-          (error: unknown) => String(error),
-        ),
-      ),
+      [first, second].map(held => held.then(() => 'ran', (error: unknown) => String(error))),
     )
     search.reset()
 
@@ -164,6 +159,44 @@ describe('a command asked to wait for quiet', () => {
     const said = await outcome
     assert.equal(said.length, 2)
     for (const one of said) assert.match(one, /was reset before it started/)
+    await assert.rejects(first, (error: unknown) => error instanceof CommandReset)
+  })
+
+  test('a crowd waiting out one quiet is a list, not a stack of frames', async () => {
+    const clock = world()
+    let asked = 0
+    const search = command(
+      async (text: string) => {
+        asked++
+        return text.length
+      },
+      { calm: 300, timers: clock.timers },
+    )
+
+    const waiting = Array.from({ length: 20_000 }, (_, i) => search.run(`q${String(i)}`))
+    await clock.advance(300)
+    assert.equal(asked, 1, 'one start for twenty thousand keystrokes')
+    const answers = await Promise.all(waiting)
+    assert.equal(answers.length, 20_000)
+    assert.equal(new Set(answers).size, 1, 'and all of them hold the same answer')
+  })
+
+  test('a refusal by the world is not silenced by asking for quiet', async () => {
+    const clock = world()
+    const told: string[] = []
+    const stopTelling = onCommandFailure((_error, command_) => told.push(command_))
+    const save = command(
+      async () => {
+        throw new Error('server said no')
+      },
+      { name: 'save', calm: 100, timers: clock.timers },
+    )
+    const held = save.run()
+    await clock.advance(100)
+    await assert.rejects(held, /server said no/)
+    assert.equal(save.state.peek().kind, 'failed')
+    assert.deepEqual(told, ['save'], 'told once, exactly as it would be without a quiet')
+    stopTelling()
   })
 
   test('without a quiet asked for, a start is a start', async () => {
