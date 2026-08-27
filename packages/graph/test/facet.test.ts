@@ -1,19 +1,18 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
-import { batch, derived, facet, keep, port, subscribe, trace } from '#graph'
+import { batch, derived, engineOf, facet, keep, port, subscribe, trace } from '#graph'
 import type { Derived } from '#graph'
+// Inside the package, so the test names the machinery it checks instead of
+// hunting for it by the text of a symbol through two prototypes.
+import { RELEASE } from '#graph/nodes.ts'
 
 // The lifecycle of the primitive itself, without Loom on top of it: a cell that
 // owns its sources only while somebody is actually reading it.
 
-const releasesOf = (cell: Derived<unknown>): (() => number) => {
-  const proto = Object.getPrototypeOf(cell) as Record<symbol, () => boolean>
-  const key = Object.getOwnPropertySymbols(Object.getPrototypeOf(proto)).find(
-    s => String(s) === 'Symbol(weft.release)',
-  )!
-  const real = (Object.getPrototypeOf(proto) as Record<symbol, () => boolean>)[key]!
+const releasesOf = <T>(cell: Derived<T>): (() => number) => {
+  const real = (cell as unknown as Record<symbol, () => boolean>)[RELEASE]!
   let count = 0
-  ;(cell as unknown as Record<symbol, unknown>)[key] = function (this: unknown) {
+  ;(cell as unknown as Record<symbol, unknown>)[RELEASE] = function (this: unknown) {
     count++
     return real.call(this)
   }
@@ -33,6 +32,24 @@ describe('a cell that lets go of what it read', () => {
     view.peek()
     assert.equal(runs, 2, 'nothing is kept for a reader who does not stay')
     assert.deepEqual(trace(view).reads, [], 'and nothing is held either')
+    assert.equal(source.observed, false)
+  })
+
+  test('a bare get holds nothing and keeps nothing either', () => {
+    // The same law as `peek`, run as its own path: the two reach the base read
+    // by different routes, and a defect in one of them is invisible from the
+    // other.
+    const source = port(1, { name: 'source' })
+    let runs = 0
+    const view = facet(() => {
+      runs++
+      return source.get()
+    })
+
+    view.get()
+    view.get()
+    assert.equal(runs, 2)
+    assert.deepEqual(trace(view).reads, [])
     assert.equal(source.observed, false)
   })
 
@@ -104,5 +121,33 @@ describe('one node, one keeper', () => {
     keep(node, undefined)
     keep(node, second) // and once it is free, it can be kept again
     keep(node, undefined)
+  })
+})
+
+describe('a release asked for many times is queued once', () => {
+  test('short-lived readers do not fill the queue with callbacks nobody needs', () => {
+    const source = port(1)
+    const view = facet(() => source.get())
+    const core = engineOf(view)!
+    const real = core.notice.bind(core)
+    let queued = 0
+    core.notice = (fn: () => void) => {
+      queued++
+      real(fn)
+    }
+    try {
+      batch(() => {
+        for (let i = 0; i < 1000; i++) {
+          const reader = derived(() => view.get())
+          reader.peek()
+          reader.dispose()
+        }
+      })
+    } finally {
+      core.notice = real
+    }
+    // One release happening was never the whole promise: one callback standing
+    // in the queue is the other half of it.
+    assert.equal(queued, 1)
   })
 })

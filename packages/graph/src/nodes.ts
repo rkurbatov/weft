@@ -327,13 +327,20 @@ export interface WatchOptions {
  * formula, it is the machinery behind a door.
  */
 export class Facet<T> extends Derived<T> {
-  /** A release already asked for, so that two of them cannot queue up. */
+  /**
+   * Two states, not one, because a deferred thing that can be called off has
+   * two: whether letting go is still the right answer, and whether something
+   * is already standing in the queue to ask. Folding them into one flag let a
+   * reader that came and went a hundred thousand times inside one turn queue a
+   * hundred thousand callbacks — one release happened, which is why it looked
+   * right, and the queue carried the rest of them for nothing.
+   */
   private releaseWanted = false
+  private releaseQueued = false
 
   private releaseNow(): void {
-    // Calls off a release already asked for as well: a bare read that let go
-    // first must not leave a second one standing behind it, and a reader that
-    // came back must not be let go of at all.
+    // Calls off the intention as well: a reader that came back must not be let
+    // go of at all, and a bare read that let go first leaves nothing to redo.
     this.releaseWanted = false
     this[RELEASE]()
   }
@@ -361,16 +368,15 @@ export class Facet<T> extends Derived<T> {
   }
 
   observationChanged(observed: boolean): void {
-    if (observed) {
-      this.releaseWanted = false
-      return
-    }
-    if (this.releaseWanted) return
-    // Not here and now: this runs inside the engine's unlinking. And within one
-    // turn a facet can lose its last reader, gain one, and lose it again — one
-    // release is asked for, and the question is asked afresh when it runs.
-    this.releaseWanted = true
+    this.releaseWanted = !observed
+    if (observed || this.releaseQueued) return
+    // Not here and now: this runs inside the engine's unlinking. Within one
+    // turn a facet can lose its last reader, gain one, and lose it again; the
+    // callback already standing there is reused, and what it finds when it
+    // runs is the answer that counts.
+    this.releaseQueued = true
     this.engine.notice(() => {
+      this.releaseQueued = false
       if (!this.releaseWanted) return
       this.releaseNow()
     })

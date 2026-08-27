@@ -43,6 +43,30 @@ describe('a face holds its source only while somebody reads it', () => {
     }
   })
 
+  test('the value behind the face lets go too, and it is the one that hides', () => {
+    // `value` is reached through `Truth.get/peek`, so a trace of it is not to
+    // be had directly. One legitimately held face shows the source, and the
+    // source says who is still reading it — which is the whole question.
+    const reads: ((face: { get(): Task; peek(): Task }) => Task)[] = [
+      face => face.get(),
+      face => face.peek(),
+    ]
+    for (const read of reads) {
+      const { detail } = make()
+      const face = detail(9)
+      const stop = subscribe(face.flight, () => {})
+      read(face)
+      const state = trace(face.flight).reads?.[0]
+      assert.ok(state !== undefined, 'the held face still reads the source')
+      assert.deepEqual(
+        state.readBy.filter(name => name.endsWith('.value')),
+        [],
+        'a bare read of the value did not stay attached to the source',
+      )
+      stop()
+    }
+  })
+
   test('a formula that read a face once holds it, until it is disposed', async () => {
     const { detail } = make()
     const face = detail(2)
