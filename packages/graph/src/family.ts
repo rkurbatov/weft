@@ -60,14 +60,23 @@ export interface Family<K, T> {
 // A watched member is never dropped: its watchers hold that very cell, and a
 // dropped one would leave them deaf. Nothing here breaks that invariant.
 
-function defaultNameOf<K>(key: K): string {
+/**
+ * How a primitive key becomes the name a cache holds it under. The kind is part
+ * of it: `1` and `'1'`, `true` and `'true'`, `1` and `1n` are different
+ * questions, and a cache that answered one of them with the other's source
+ * would be quietly wrong. Shared by both caches — the two had already grown
+ * apart once, one of them keeping the kind and the other dropping it.
+ */
+export function nameOfKey(key: unknown, who: string, option: string): string {
   const kind = typeof key
   if (kind === 'string' || kind === 'number' || kind === 'boolean' || kind === 'bigint') {
     return `${kind}:${String(key)}`
   }
-  throw new TypeError(
-    'weft: family needs nameOf for keys that are not string, number, boolean or bigint',
-  )
+  throw new TypeError(`weft: ${who} needs ${option} for ${kind} keys`)
+}
+
+function defaultNameOf<K>(key: K): string {
+  return nameOfKey(key, 'family', 'nameOf')
 }
 
 export function family<K, T>(

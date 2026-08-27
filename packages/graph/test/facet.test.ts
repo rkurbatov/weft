@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
-import { batch, derived, engineOf, facet, keep, port, subscribe, trace } from '#graph'
+import { batch, derived, facet, graph, keep, port, subscribe, trace } from '#graph'
 import type { Derived } from '#graph'
 // Inside the package, so the test names the machinery it checks instead of
 // hunting for it by the text of a symbol through two prototypes.
@@ -126,9 +126,11 @@ describe('one node, one keeper', () => {
 
 describe('a release asked for many times is queued once', () => {
   test('short-lived readers do not fill the queue with callbacks nobody needs', () => {
-    const source = port(1)
-    const view = facet(() => source.get())
-    const core = engineOf(view)!
+    // Its own engine: the witness replaces a method on the core, and the root
+    // one is shared by every other test in the run.
+    const app = graph('facet-queue')
+    const view = app.build(() => facet(() => app.port(1).get()))
+    const core = app.core
     const real = core.notice.bind(core)
     let queued = 0
     core.notice = (fn: () => void) => {
@@ -136,18 +138,53 @@ describe('a release asked for many times is queued once', () => {
       real(fn)
     }
     try {
-      batch(() => {
+      app.batch(() => {
         for (let i = 0; i < 1000; i++) {
-          const reader = derived(() => view.get())
+          const reader = app.derived(() => view.get())
           reader.peek()
           reader.dispose()
         }
       })
     } finally {
-      core.notice = real
+      app.dispose()
     }
     // One release happening was never the whole promise: one callback standing
     // in the queue is the other half of it.
     assert.equal(queued, 1)
+  })
+
+  test('a facet that let go once can be let go of again', () => {
+    // Negative control: drop the reset of the queued flag and the second life
+    // never asks for a release at all, because the machine still believes one
+    // is standing in the queue.
+    const source = port(1)
+    const view = facet(() => source.get())
+    for (const lifetime of [1, 2]) {
+      const reader = derived(() => view.get())
+      reader.peek()
+      reader.dispose()
+      assert.deepEqual(trace(view).reads, [], `life ${String(lifetime)}`)
+    }
+  })
+
+  test('a bare read that lets go first calls off the release standing behind it', () => {
+    // Negative control: drop the clearing of the intention in the direct path
+    // and the queued callback lets the same facet go a second time.
+    const source = port(1)
+    const view = facet(() => source.get())
+    const reader = derived(() => view.get())
+    reader.peek()
+
+    let disposals = 0
+    const real = view.dispose.bind(view)
+    view.dispose = () => {
+      disposals++
+      real()
+    }
+    batch(() => {
+      reader.dispose() // asks for a release later
+      view.peek() // and this one lets go now
+    })
+    assert.equal(disposals, 1)
   })
 })

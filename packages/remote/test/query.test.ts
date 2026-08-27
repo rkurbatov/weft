@@ -1,7 +1,7 @@
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
-import { subscribe } from '#graph'
-import { query } from '#remote'
+import { derived, subscribe, trace } from '#graph'
+import { fresh, query } from '#remote'
 import { heldOf } from '#remote'
 import { settle, until, world } from '#testkit'
 
@@ -81,7 +81,62 @@ describe('parametric queries', () => {
     assert.equal(user.size, 3)
     assert.equal(user.evict(1), false) // watched, never dropped
     stop()
-    assert.equal(user.sweep(), 3)
+    // Letting the reader go makes 1 a cache entry, which puts the cache one
+    // over its ceiling: it is kept there and then, without waiting for anybody
+    // to ask a new question.
+    assert.equal(user.size, 2, 'cooling restores the ceiling without another key')
+    assert.equal(user.sweep(), 2)
+    assert.equal(user.size, 0)
+  })
+
+  test('a reader that asks for nothing still holds the source it waits on', async () => {
+    const clock = world()
+    const user = query(async (id: number) => `user ${id}`, {
+      max: 1,
+      now: clock.now,
+      timers: clock.timers,
+    })
+    // Two shapes of the same thing, and the cache must not tell them apart: a
+    // watcher that deliberately raises no demand, and a formula read once and
+    // left linked. Neither asks the source to work; both wait to hear from it.
+    //
+    // Negative control: retain by `demanded` instead of by being read, and both
+    // halves of this go red.
+    const first = user(1)
+    const stopCold = subscribe(first.state, () => {}, { demand: false })
+    user(2)
+    assert.equal(user(1), first, 'the cold watcher kept the source it watches')
+    assert.equal(user.evict(1), false)
+    stopCold()
+
+    const second = user(3)
+    const bridge = derived(() => second.state.get())
+    bridge.peek()
+    user(4)
+    assert.equal(user(3), second, 'and so did the formula that read it once')
+    assert.equal(user.evict(3), false)
+    bridge.dispose()
+  })
+
+  test('a source the cache let go of no longer reports to it', async () => {
+    const clock = world()
+    const user = query(async (id: number) => `user ${id}`, {
+      max: 1,
+      now: clock.now,
+      timers: clock.timers,
+    })
+    const first = user(1)
+    user(2) // 1 is the coldest and goes
+    assert.equal(user.size, 1)
+    // The caller still holds the old handle. Reading it now must not walk it
+    // back into a cache that let go of it.
+    //
+    // Negative control: leave the keeper on an evicted source and this grows.
+    const stop = subscribe(first.state, () => {})
+    assert.equal(user.size, 1)
+    assert.equal(user(1) === first, false, 'the key builds a fresh source, as it should')
+    assert.equal(user.size, 1, 'and the old one did not walk back in beside it')
+    stop()
   })
 
   test('the member just asked for is never the one dropped to make room', async () => {
@@ -99,6 +154,60 @@ describe('parametric queries', () => {
     assert.equal(user.size, 1)
     user(2)
     assert.equal(user.size, 1) // the first is cold and goes; the newborn stays
+  })
+
+  test('keys of different kinds are different questions', () => {
+    // Negative control: name a key by `String(key)` alone and every one of
+    // these pairs collapses into one member.
+    const mixed = query(async (key: string | number | boolean | bigint) => key, { max: 10 })
+    assert.notEqual(mixed(1), mixed('1'))
+    assert.notEqual(mixed(true), mixed('true'))
+    assert.notEqual(mixed(1), mixed(1n))
+    assert.equal(mixed.size, 5)
+  })
+
+  test('a freshness view stops holding the source when its last reader goes', async () => {
+    const clock = world()
+    const user = query(async (id: number) => `user ${id}`, {
+      max: 1,
+      now: clock.now,
+      timers: clock.timers,
+    })
+    const first = user(1)
+    const view = fresh(first, 100)
+    const stop = subscribe(view, () => {})
+    stop()
+    await settle(2)
+
+    // Two levels of the same law. What the adapter holds:
+    //
+    // Negative control: build `fresh` from an ordinary cell and both halves go
+    // red — the requirement leaves with the watcher, but the edge does not.
+    assert.deepEqual(trace(view).reads, [], 'the view let the source go')
+
+    // And what it means for whoever uses the cache:
+    user(2)
+    assert.notEqual(user(1), first, 'so the source is an ordinary cache entry again')
+    assert.equal(user.size, 1)
+  })
+
+  test('the ceiling is restored on a second wave of cooling as well as the first', async () => {
+    // Negative control: drop the reset of the queued flag and the second wave
+    // never gets a trim, because the cache still believes one is standing.
+    const clock = world()
+    const user = query(async (id: number) => `user ${id}`, {
+      max: 1,
+      now: clock.now,
+      timers: clock.timers,
+    })
+    const one = user(1)
+    for (const wave of [1, 2]) {
+      const stop = subscribe(one.state, () => {}, { demand: false })
+      user(2)
+      stop()
+      await settle(2)
+      assert.equal(user.size, 1, `wave ${String(wave)}`)
+    }
   })
 
   test('object keys need keyOf, and get their own member each', async () => {

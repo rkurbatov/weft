@@ -199,8 +199,15 @@ export function truthBy<K, T>(
   // duplicate that answer and then disagree with it — growing without bound,
   // and handing out a face wired to a source the family had already let go,
   // which asks the world nothing ever again. A weak map keyed by the source
-  // follows the family's decisions for free: evicted source, collected face;
-  // same source, same face.
+  // follows the cache's decisions for free and adds no ownership of its own:
+  // the same source has the same face, and when neither the cache nor anybody
+  // else holds the source, the face goes with it. It does not promise that an
+  // evicted source is collected — a caller still holding the old face holds
+  // the source through it, quite legitimately, and that is the price of a
+  // bounded cache that does not tear up handles it has already handed out. Two
+  // sources for one key can therefore exist side by side for as long as the
+  // old handle is used; what cannot happen is the old one finding its way back
+  // into the cache.
   const faces = new WeakMap<object, Truth<T>>()
   const byKey = (key: K): Truth<T> => {
     const feed = family(key)

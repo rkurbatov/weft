@@ -85,7 +85,12 @@ export interface Supply<T> {
   readonly name: string
   /** The state of what the world said: empty, in flight, value with an age, refused. */
   readonly state: Readable<Remote<T>>
-  /** Is anything live watching right now. */
+  /**
+   * Is there a live demanding path right now — somebody asking this source to
+   * work, not merely reading it. Demand starts and keeps the work; observation
+   * guards the source's identity and raises no work of its own, so a cold
+   * watcher leaves this false while still holding the source.
+   */
   readonly demanded: boolean
   /** How often the source is asked right now, given every live requirement. Undefined means "once per demand". */
   readonly pace: number | undefined

@@ -42,6 +42,7 @@ export type { EngineOptions } from './engine.ts'
 // The retention seam, for the caches inside the library and nothing else:
 // named here, never at the door in `#weft`.
 export { engineOf, facet, keep } from './graph.ts'
+export { nameOfKey } from './family.ts'
 export type { Keeper } from './parts.ts'
 export { giveWay } from './time.ts'
 export { wallClock } from '#core'

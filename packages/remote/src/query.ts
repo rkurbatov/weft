@@ -2,10 +2,11 @@
 // Asking for a key hands back its source; the same key hands back the same
 // source, which is what makes two screens asking for the same thing share one
 // request. Cancellation is not an operator here: a screen that
-// moves to another key stops watching the old one, and a source nobody watches
+// moves to another key stops asking the old one, and a source nobody asks
 // goes quiet by itself — the answer for the old key lands in its own cell,
 // which nobody is looking at.
 
+import { engineOf, keep, nameOfKey } from '#graph'
 import { supply, tally } from './supply.ts'
 import type { Supply, SupplyPassport } from './supply.ts'
 import type { Tally } from './contract.ts'
@@ -17,11 +18,20 @@ export interface QueryOptions<K> extends SupplyPassport {
    * Ceiling on unwatched members; watched ones are never dropped and do not
    * count against it. Stated, not defaulted: an unbounded cache must say so.
    *
-   * Checked when a new member joins, and a newborn never pays for its own
-   * arrival: with `max` above zero an older cold source pays instead, and the
-   * cache is inside its ceiling again by the time the call returns. Only at
-   * `max: 0` is there nobody older to pay — there the source just handed out
-   * is the one allowed exception, and it goes when a different key arrives.
+   * Read, not asked. A cold reader — one watching without asking the source to
+   * work, or a formula that read it once and stayed linked — raises no request
+   * and still holds the source's identity, because it is waiting to hear from
+   * that very source. Handing the next caller a second source for the same key
+   * would leave the reader deaf on the old one, and put two states and two
+   * requests behind one question.
+   *
+   * Checked when a new member joins, and again when one cools, so that letting
+   * go of readers restores the ceiling without waiting for somebody to ask a
+   * new question. A newborn never pays for its own arrival: with `max` above
+   * zero an older cold source pays instead, and the cache is inside its ceiling
+   * again by the time the call returns. Only at `max: 0` is there nobody older
+   * to pay — there the source just handed out is the one allowed exception, and
+   * it goes when a different key arrives.
    */
   max: number | 'unbounded'
 }
@@ -53,83 +63,127 @@ export function query<K, T>(
   // has done, not what the current key has done — and a run called off because
   // the key changed belongs to the family, not to the key that replaced it.
   const shared = tally(`${perSupply.name ?? 'query'}.tally`)
-  const held = new Map<string, { key: K; feed: Supply<T> }>()
+  const nameOf = (key: K): string => keyOf?.(key) ?? nameOfKey(key, 'query', 'keyOf')
 
-  const nameOf = (key: K): string => {
-    if (keyOf !== undefined) return keyOf(key)
-    const kind = typeof key
-    if (kind === 'string' || kind === 'number' || kind === 'boolean' || kind === 'bigint') {
-      return String(key)
+  /**
+   * What the cache holds for one key. A class so the method the graph is given
+   * lives on one prototype rather than in a closure per source.
+   */
+  class Held {
+    readonly name: string
+    readonly feed: Supply<T>
+
+    constructor(name: string, feed: Supply<T>) {
+      this.name = name
+      this.feed = feed
     }
-    throw new Error(`weft: query needs keyOf for ${kind} keys`)
+
+    observationChanged(observed: boolean): void {
+      if (observed) {
+        cold.delete(this.name)
+        hot.set(this.name, this)
+        return
+      }
+      // Its age as a cache entry starts here, at the tail, not at the moment it
+      // was built: until now it was not a cache entry at all.
+      hot.delete(this.name)
+      cold.set(this.name, this)
+      wantTrim(this)
+    }
+  }
+
+  /** Sources nobody is reading, oldest first: the cache proper. */
+  const cold = new Map<string, Held>()
+  /** Sources somebody is reading. Not cache entries, so their order says nothing. */
+  const hot = new Map<string, Held>()
+  let trimQueued = false
+
+  const forget = (member: Held): void => {
+    // The ear comes off before the source does: a handle the caller kept must
+    // not go on reporting to a cache that no longer owns it.
+    keep(member.feed.state, undefined)
+    cold.delete(member.name)
+    hot.delete(member.name)
   }
 
   /**
-   * Unwatched members past the ceiling go, oldest first; watched ones stay.
-   * Called just before a new member joins, so the newborn counts against the
-   * ceiling but cannot be the candidate that pays for it — a caller handed a
-   * source the cache has already let go asks the world twice for one answer.
+   * Drop the oldest cold sources until no more than `limit` are left. Nothing
+   * here can refuse to go and nothing cascades — a source is a handle, not a
+   * formula with a stack — so one walk is the whole of it.
    */
-  const makeRoom = (): void => {
-    if (max === 'unbounded') return
-    let unwatched = 1 // the one about to join: nobody demands it yet
-    for (const member of held.values()) if (!member.feed.demanded) unwatched++
-    let over = unwatched - max
-    if (over <= 0) return
-    for (const [name, member] of held) {
-      if (over <= 0) return
-      if (member.feed.demanded) continue
-      held.delete(name)
-      over--
+  const shrinkTo = (limit: number): number => {
+    let went = 0
+    for (const member of cold.values()) {
+      if (cold.size <= limit) break
+      forget(member)
+      went++
     }
+    return went
+  }
+
+  /**
+   * A reader let go of a source while the cache was already full. Not here and
+   * now: this runs inside the engine's unlinking. One callback, and only one —
+   * unlike the facet next door this needs no second flag for the intention,
+   * because whether a trim is still wanted can be read off `cold` when the
+   * callback runs, and a reader who came back has already moved the member out
+   * of it.
+   */
+  const wantTrim = (member: Held): void => {
+    if (trimQueued || max === 'unbounded' || cold.size <= max) return
+    const core = engineOf(member.feed.state)
+    if (core === undefined) return
+    trimQueued = true
+    core.notice(() => {
+      trimQueued = false
+      // `max` is a number by here — the guard above returned on 'unbounded' —
+      // and whether a trim is still wanted is simply what `cold` says now.
+      if (cold.size > max) shrinkTo(max)
+    })
   }
 
   const ask = ((key: K): Supply<T> => {
     const name = nameOf(key)
-    const known = held.get(name)
-    if (known !== undefined) {
-      // Freshen its place in insertion order, so eviction drops the coldest.
+    const chilled = cold.get(name)
+    if (chilled !== undefined) {
+      // Freshen its place in the cache order, so eviction drops the coldest.
       //
-      // Unconditionally, unlike the cell family next door, which only
-      // reorders once its ceiling is in sight. Both are right where they
-      // stand and the difference is the cost of a read: asking here means a
-      // request over a wire, so a delete and an insert beside it are free —
-      // in a family a read is a cached formula on a hot path, and the same
-      // pair of operations showed up whole in a profile. Named in both
-      // places so neither reads as an oversight.
-      held.delete(name)
-      held.set(name, known)
-      return known.feed
+      // Unconditionally, unlike the cell family next door, which only reorders
+      // once its ceiling is in sight. Both are right where they stand and the
+      // difference is the cost of a read: asking here means a request over a
+      // wire, so a delete and an insert beside it are free — in a family a read
+      // is a cached formula on a hot path, and the same pair of operations
+      // showed up whole in a profile.
+      cold.delete(name)
+      cold.set(name, chilled)
+      return chilled.feed
     }
+    const warm = hot.get(name)
+    if (warm !== undefined) return warm.feed
     const feed = supply<T>(asked => load(key, asked), {
       ...perSupply,
       tally: shared,
       name: `${perSupply.name ?? 'query'}:${name}`,
     })
-    makeRoom()
-    held.set(name, { key, feed })
+    // Room before the newborn joins: a source handed to the caller that the
+    // cache has already let go asks the world twice for one answer.
+    if (max !== 'unbounded') shrinkTo(max - 1)
+    const member = new Held(name, feed)
+    keep(feed.state, member)
+    cold.set(name, member)
     return feed
   }) as Query<K, T>
 
-  Object.defineProperty(ask, 'size', { get: () => held.size })
+  Object.defineProperty(ask, 'size', { get: () => cold.size + hot.size })
   Object.defineProperty(ask, 'tally', { value: shared })
   ask.evict = key => {
-    const name = nameOf(key)
-    const member = held.get(name)
-    if (member === undefined || member.feed.demanded) return false
-    held.delete(name)
+    // A source somebody is reading is not in the cold map at all, and that is
+    // the whole of the answer: it is not the cache's to drop.
+    const member = cold.get(nameOf(key))
+    if (member === undefined) return false
+    forget(member)
     return true
   }
-  ask.sweep = () => {
-    let went = 0
-    // Snapshot: eviction deletes from `held` while we walk it.
-    // oxlint-disable-next-line unicorn/no-useless-spread
-    for (const [name, member] of [...held]) {
-      if (member.feed.demanded) continue
-      held.delete(name)
-      went++
-    }
-    return went
-  }
+  ask.sweep = () => shrinkTo(0)
   return ask
 }

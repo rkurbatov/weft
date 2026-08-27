@@ -1,9 +1,9 @@
 // A supply owns delivery: fetching, retrying, polling, and its own pace.
-// It runs only while somebody live is watching it — demand starts it, idleness
+// It runs only while somebody is asking for it — demand starts it, idleness
 // stops it — so an unwatched screen costs nothing.
 
 import { backoff as doubling } from '#core'
-import { derived, port, subscribe, untracked } from '#graph'
+import { derived, facet, port, subscribe, untracked } from '#graph'
 import type { Port } from '#graph'
 import type { Watchable } from '#graph'
 import { owned } from '#graph'
@@ -365,7 +365,13 @@ export function fresh<T>(feed: Supply<T>, within: number): Readable<Remote<T>> {
       release = null
     },
   })
-  return derived(
+  // A facet, not an ordinary cell: this view's links belong to whoever reads
+  // it, exactly as its requirement does. An ordinary cell keeps what it read
+  // until it is disposed, and nothing disposes this one — so a screen that
+  // unmounted left the view an observer of the source for ever. Invisible
+  // while a cache retained by demand; once caches retain by being read, that
+  // one edge pinned the source in the cache and broke its ceiling.
+  return facet(
     () => {
       gate.get()
       return feed.state.get()
