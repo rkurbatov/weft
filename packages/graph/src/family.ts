@@ -25,15 +25,28 @@ export interface FamilyOptions<K, T> {
    * on a family whose members read each other can stand at many times that
    * while the roots are within it.
    *
-   * Which cold member goes is one-scan grace, not a full order of time: a
-   * member read since the last automatic pass is passed over once, and taken
-   * by the pass after that unless it is read again. Not the classic
-   * second-chance queue, which also moves the spared member behind the others
-   * and so gives it a new place as well as a skip — that costs a map delete
-   * and insert per spared member, and with a large working set all read it
-   * gathered into one admission of half a second. This grants the skip and
-   * leaves the order alone, which is weaker and cheaper, and is what the
-   * sentence above promises. `evict` and `sweep` ignore it entirely.
+   * Which cold member goes is CLOCK second chance. The cold members stand in a
+   * ring in the order they cooled and a hand stands at one of them. A pass
+   * walks forward from the hand: a member read since the hand last passed it
+   * is passed over once, with its mark cleared, and goes to the pass that
+   * reaches it again unless it was read once more. A read moves nothing — the
+   * mark is one store — so a whole working set being read again costs no
+   * bookkeeping at all.
+   *
+   * The hand is what makes that cheap in the long run: it stays where the last
+   * pass left it, so what it has already judged is not judged again until it
+   * comes round. Not because the walk was long — it was a couple of steps per
+   * admission either way. A pass that began at the oldest built a fresh
+   * `values()` over `cold` every time, and a map whose head keeps being deleted
+   * makes each new iterator cross the slots already deleted before it reaches a
+   * live one. Constant work per admission, quadratic time, minutes on half a
+   * million members.
+   *
+   * Whatever joins the ring — a newborn, a member that just cooled, one that
+   * refused to go — stands *behind* the hand, and so is not judged in the turn
+   * it arrived in. A turn is bounded by the size of the ring when it began,
+   * which is what makes that true and what keeps a cascade of freed members
+   * from spinning the hand. `evict` and `sweep` ignore the marks entirely.
    *
    * Kept up at two moments and no others: when a member is admitted, and when
    * one cools with the cache already full — the second as one coalesced pass
@@ -100,11 +113,19 @@ export function family<K, T>(
     readonly id: string
     readonly cell: Derived<T>
     /**
-     * Read since an automatic pass last looked at it. Not protection and not a
-     * place in any full order of time: it buys one skip from the next pass and
-     * nothing else. `evict` and `sweep` do not look at it at all.
+     * Read since the hand last passed it. Not protection and not a place in
+     * any order of time: it buys one pass-over and nothing else. `evict` and
+     * `sweep` do not look at it at all.
      */
     referenced = false
+    /**
+     * Neighbours in the cold ring, both undefined exactly while the member is
+     * out of it. Links on the member rather than an order kept beside it: the
+     * ring is entered and left at arbitrary points, and finding a member's
+     * place in anything else is the walk this policy exists to avoid.
+     */
+    previous: Member | undefined = undefined
+    next: Member | undefined = undefined
 
     constructor(key: K, id: string, cell: Derived<T>) {
       this.key = key
@@ -114,33 +135,25 @@ export function family<K, T>(
 
     observationChanged(observed: boolean): void {
       // The credit belongs to one cold lifetime and crosses neither border: a
-      // read from an earlier cold life must not buy a skip after a whole spell
-      // of being read, which cooling has already answered by giving the member
-      // a fresh age at the tail.
+      // read from an earlier cold life must not buy a pass-over after a whole
+      // spell of being read, which cooling has already answered by putting the
+      // member behind the hand.
       this.referenced = false
       if (observed) {
-        cold.delete(this.id)
+        leaveCold(this)
         hot.set(this.id, this)
         return
       }
       hot.delete(this.id)
-      cold.set(this.id, this)
+      enterCold(this)
       if (cold.size > max) wantTrim(this)
     }
   }
 
   /**
-   * The cache proper: members nobody is reading, oldest first.
-   *
-   * A member enters when it cools and leaves when somebody looks at it, so its
-   * age starts at the moment it actually became a cache entry rather than at
-   * the moment it was built. Two members with the same history of being read
-   * therefore come out in the same order, whatever housekeeping happened to
-   * walk past them meanwhile.
-   *
-   * It is also what makes a pass reach its fixed point without restarting:
-   * letting a member go turns whatever it was holding cold, those land at the
-   * tail of this map, and a walk of a map sees what was added during it.
+   * The cache proper: every member nobody is reading, found by name. Order is
+   * not this map's business but the ring's, so nothing is deleted from it and
+   * put back merely to say that a member was read.
    */
   const cold = new Map<string, Member>()
 
@@ -153,13 +166,65 @@ export function family<K, T>(
    */
   const hot = new Map<string, Member>()
 
+  /**
+   * Where the next pass starts looking, undefined exactly when nothing is
+   * cold. It survives between passes: that is the whole of CLOCK, and the
+   * reason a scan of a cache at its ceiling costs what it costs.
+   */
+  let hand: Member | undefined
+
   let trimWanted = false
   let passing = false
 
+  /**
+   * Join the ring immediately behind the hand — the last place it will reach.
+   * One door for a newborn, for a member that just cooled and for one that
+   * refused to go, because all three mean the same thing here: not this turn's
+   * business.
+   */
+  const enterCold = (member: Member): void => {
+    cold.set(member.id, member)
+    const at = hand
+    if (at === undefined) {
+      member.previous = member
+      member.next = member
+      hand = member
+      return
+    }
+    const back = at.previous as Member
+    back.next = member
+    member.previous = back
+    member.next = at
+    at.previous = member
+  }
+
+  /** Leave the ring, wherever the hand happens to stand. */
+  const leaveCold = (member: Member): void => {
+    // Cleared by the member the entry points at, never by name alone: a release
+    // that has committed can run other work on its way out, that work can take
+    // the same key, and the entry is then the new member's. Deleting by name
+    // unmade it and left the ring holding a member the map denied.
+    if (cold.get(member.id) === member) cold.delete(member.id)
+    const next = member.next
+    const previous = member.previous
+    if (next === undefined || previous === undefined) return
+    if (next === member) {
+      hand = undefined
+    } else {
+      previous.next = next
+      next.previous = previous
+      // The hand never stands on a member that is gone — whether a pass, an
+      // `evict`, a `sweep` or a reader took it out.
+      if (hand === member) hand = next
+    }
+    member.previous = undefined
+    member.next = undefined
+  }
+
   const forget = (member: Member): void => {
     keep(member.cell, undefined)
-    cold.delete(member.id)
-    hot.delete(member.id)
+    leaveCold(member)
+    if (hot.get(member.id) === member) hot.delete(member.id)
   }
 
   /**
@@ -169,70 +234,84 @@ export function family<K, T>(
    * about what is droppable, which is how `evict` came to kill a running
    * computation.
    *
-   * The candidate leaves the cold order before the attempt, not after. Letting
-   * a cell go unlinks it, that can cool other members, and cooling can start a
-   * pass from inside this one: a candidate still standing in the order would
-   * be picked a second time and asked to release twice. A refused one is put
-   * back by whoever asked.
+   * The candidate leaves the ring before the attempt, not after. Letting a
+   * cell go unlinks it, that can cool other members, and cooling can start a
+   * pass from inside this one: a candidate still standing in the ring would be
+   * picked a second time and asked to release twice. A refused one is put back
+   * by whoever asked, and its own name is still its own — that is the inert
+   * half of the contract at `[RELEASE]`.
    */
   const release = (member: Member): boolean => {
-    cold.delete(member.id)
+    leaveCold(member)
     if (!member.cell[RELEASE]()) return false
     forget(member)
     return true
   }
 
   /**
-   * Drop the oldest cold members until no more than `limit` are left, or until
-   * none of the ones left can go.
+   * One turn of the hand: at most as many steps as the ring held when the turn
+   * began. That bound is the arrival rule itself — whatever joins during the
+   * turn stands behind the hand, and the steps run out before the hand gets
+   * there — and it is also what stops a member that refused from being asked
+   * twice in one turn.
+   */
+  const turn = (limit: number, spare: boolean): { went: number; spared: number } => {
+    let went = 0
+    let spared = 0
+    for (let steps = cold.size; steps > 0 && cold.size > limit; steps--) {
+      const member = hand
+      if (member === undefined) break
+      hand = member.next
+      if (spare && member.referenced) {
+        // The pass-over costs one store and leaves the ring alone. Moving a
+        // spared member behind the others instead was the obvious thing and
+        // the expensive one: with half a million members all read, one
+        // admission became a million map operations and half a second.
+        member.referenced = false
+        spared++
+        continue
+      }
+      if (release(member)) {
+        went++
+        continue
+      }
+      enterCold(member)
+    }
+    return { went, spared }
+  }
+
+  /**
+   * Drop cold members until no more than `limit` are left, or until none of
+   * the ones left can go.
    *
-   * `spare` is the replacement policy: an automatic pass gives a member that
-   * has been read since the last pass one skip, clearing its bit on the way,
-   * so the next pass may take it. An explicit `sweep` sets this false — its
-   * whole purpose is to keep nothing, and paying a round for a policy of
-   * keeping would be beside the point.
+   * `spare` is the replacement policy: an automatic pass gives a member read
+   * since the hand last passed it one pass-over, clearing its mark on the way.
+   * An explicit `sweep` sets this false — its whole purpose is to keep
+   * nothing, and paying a turn for a policy of keeping would be beside the
+   * point.
    *
-   * A skip does not move anything: the bit is cleared and the walk goes on, so
-   * a member that keeps being read keeps being skipped and the order is left
-   * alone. Only a member the cell refused leaves the walk, and it comes back
-   * at the tail afterwards.
-   *
-   * Two rounds at most, and the second is what makes the ceiling a promise
-   * rather than a hope: after the first every bit it met is cleared, so a set
-   * where everything had been read cannot end with everybody spared and the
-   * ceiling still broken.
+   * Turns go on while they free members, since freeing one cools whatever it
+   * held and those arrive behind the hand. A turn that only spared may be
+   * followed by one more, and that second turn is what makes the ceiling a
+   * promise rather than a hope: after the first every mark the hand met is
+   * down. A turn that neither freed nor spared met nothing but members that
+   * refused, and there is nothing further to try.
    */
   const shrinkTo = (limit: number, spare = true): number => {
     if (cold.size <= limit) return 0
     passing = true
     let went = 0
+    let mercy = true
     try {
-      for (let round = 0; round < 2; round++) {
-        let spared = 0
-        let stuck: Member[] | undefined
-        for (const member of cold.values()) {
-          if (cold.size + (stuck?.length ?? 0) <= limit) break
-          if (spare && member.referenced) {
-            // The skip costs one store and leaves the order alone. Moving a
-            // spared member to the tail instead was the obvious thing and the
-            // expensive one: with half a million members all read, one
-            // admission became a million map operations and half a second.
-            member.referenced = false
-            spared++
-            continue
-          }
-          if (release(member)) {
-            went++
-            continue
-          }
-          // Refused, so it left the cold order on the way in and comes back
-          // at the tail after the walk: a map re-entered during its own
-          // iteration is walked twice.
-          stuck ??= []
-          stuck.push(member)
+      while (cold.size > limit) {
+        const round = turn(limit, spare)
+        went += round.went
+        if (round.went > 0) continue
+        if (round.spared > 0 && mercy) {
+          mercy = false
+          continue
         }
-        if (stuck !== undefined) for (const member of stuck) cold.set(member.id, member)
-        if (spared === 0 || cold.size <= limit) break
+        break
       }
     } finally {
       passing = false
@@ -262,11 +341,10 @@ export function family<K, T>(
     const id = nameOf(key)
     const chilled = cold.get(id)
     if (chilled !== undefined) {
-      // Read, so the next pass owes it one skip. A bit rather than moving it
-      // down the order: taking a member out of a map and putting it back cost
-      // a scene 95ms against 16ms, and it cost that on every read while the
-      // ceiling was in sight. This costs one store, always, and the moving
-      // happens only under real pressure — where the old rule did it anyway.
+      // Read, so the hand owes it one pass-over. A mark rather than a move:
+      // taking a member out of a map and putting it back cost a scene 95ms
+      // against 16ms, and it cost that on every read while the ceiling was in
+      // sight. This costs one store, always.
       //
       // What it buys is an order that remembers reads made below the ceiling
       // too. Under the old rule a member read while the cache was half empty
@@ -280,7 +358,7 @@ export function family<K, T>(
     const warm = hot.get(id)
     if (warm !== undefined) return warm.cell
     // Room is made before the newborn joins, not after: a member that is not
-    // yet in the map cannot be chosen as the candidate to drop, and the caller
+    // yet in the ring cannot be chosen as the candidate to drop, and the caller
     // cannot be handed a cell the family disposed on its way out.
     shrinkTo(max - 1)
     const cell = derived(() => build(key), {
@@ -289,7 +367,7 @@ export function family<K, T>(
     })
     const member = new Member(key, id, cell)
     keep(cell, member)
-    cold.set(id, member)
+    enterCold(member)
     return cell
   }
 
@@ -314,7 +392,7 @@ export function family<K, T>(
     const member = cold.get(nameOf(key))
     if (member === undefined) return false
     if (release(member)) return true
-    cold.set(member.id, member)
+    enterCold(member)
     return false
   }
 

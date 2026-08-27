@@ -1,10 +1,10 @@
 // What a family costs at its ceiling, and how much cache it keeps there.
 //
-// Two orders, because the eviction pass walks the map from the oldest and the
-// answer must not depend on which kind of member it meets first: watched-first
-// is a screen that subscribed before it started churning keys, cold-first is
-// the same screen after its watched members were read again and moved to the
-// tail. Both must keep the same amount of cold cache.
+// Two orders, because a pass walks the cold ring from wherever the hand stands
+// and the answer must not depend on which kind of member it meets first:
+// watched-first is a screen that subscribed before it started churning keys,
+// cold-first is the same screen after its watched members were read again.
+// Both must keep the same amount of cold cache.
 //
 // Each case is run several times and the best is reported: one pass through a
 // fresh family measures the compiler warming up more than it measures the

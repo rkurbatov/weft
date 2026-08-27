@@ -1,68 +1,155 @@
-// Slow on purpose and slow in a way that matters: the last scene takes minutes,
-// and that is the finding rather than the setup. Reading every key of a cache
-// that sits exactly at its ceiling, in order, makes each read miss the key the
-// previous admission just took — and under one-scan grace each of those
-// admissions walks the whole cold set twice. See the note in family.ts.
+// What CLOCK second chance costs, on the two shapes that matter: a working set
+// read again while the cache is holding, and a scan of a cache standing exactly
+// at its ceiling, where every read misses the key the last admission took and so
+// is itself an admission.
 //
-// What second chance costs, on the two shapes that matter: many reads of a
-// cache that is holding, and one admission after a big working set has been
-// read. The second is the one that moves — the work spread over the reads
-// gathers into the pass that follows them.
+// The second shape is the one that moves. While a pass began at the oldest cold
+// member it built a fresh iterator over a map whose head kept being deleted,
+// which V8 pays for by walking the deleted slots — quadratic in the size of the
+// set, minutes on half a million members. The hand does not begin anywhere: it
+// stands where the last pass left it.
+//
+// Both bands run at n and 2n, because the finding is a growth and not a
+// threshold: twice the members must be about twice the time.
+//
+// Small by default. `--full` is the whole witness, and `--expose-gc` is needed
+// for the memory line:
+//
+//   node --expose-gc demo/bench/replace.ts --full
 
 import { family } from '#graph'
+import { blocks } from '#line'
 
-const members = 500_000
-const reads = 1_000_000
+const flag = (name: string, fallback: number): number => {
+  const given = process.argv.find(arg => arg.startsWith(`--${name}=`))
+  return given === undefined ? fallback : Number(given.slice(name.length + 3))
+}
+const full = process.argv.includes('--full')
+// Partials are heavier than plain members and there are two levels of them, so
+// the full witness asks for fewer.
+const members = flag('members', full ? 500_000 : 20_000)
+const partials = flag('partials', full ? 100_000 : 20_000)
+const rounds = flag('rounds', 3)
 
-const gc = (globalThis as { gc?: () => void }).gc
-const heap = (): number => {
-  gc?.()
-  return process.memoryUsage().heapUsed
+const middle = (of: number[]): number => of.toSorted((a, b) => a - b)[of.length >> 1] ?? 0
+const worst = (of: number[]): number => of.reduce((most, one) => (one > most ? one : most), 0)
+const say = (label: string, ms: number[]): void => {
+  console.log(
+    `  ${label.padEnd(26)} median ${middle(ms).toFixed(1).padStart(9)} ms   ` +
+      `worst ${worst(ms).toFixed(1).padStart(9)} ms`,
+  )
+}
+const count = (label: string, of: number[]): void => {
+  console.log(`  ${label.padEnd(26)} median ${String(middle(of)).padStart(9)}`)
 }
 
-const build = (max: number, fill: number) => {
-  const item = family((id: number) => id, { max })
-  for (let i = 0; i < fill; i++) item(i)
-  return item
+/** A family of plain members: the policy on its own, with nothing else in the way. */
+const synthetic = (n: number): void => {
+  console.log(`\nfamily: ${n.toLocaleString()} members, ceiling ${n.toLocaleString()}`)
+  const scans: number[] = []
+  const admissions: number[] = []
+  const races: number[] = []
+  for (let round = 0; round < rounds; round++) {
+    const item = family((id: number) => id, { max: n })
+    for (let i = 0; i < n; i++) item(i)
+
+    let started = performance.now()
+    for (let i = 0; i < n; i++) item(i) // every read a hit: one store each
+    scans.push(performance.now() - started)
+
+    started = performance.now()
+    item(n) // one key too many, over a set that has just been read whole
+    admissions.push(performance.now() - started)
+
+    started = performance.now()
+    for (let i = 0; i < n; i++) item(i) // every read a miss, so every read admits
+    races.push(performance.now() - started)
+  }
+  say('scan, every read a hit', scans)
+  say('admission after that scan', admissions)
+  say('scan, every read a miss', races)
 }
 
-const readsOver = (fill: number, label: string): void => {
-  const item = build(members, fill)
-  const started = performance.now()
-  for (let i = 0; i < reads; i++) item(i % fill)
-  console.log(`${label.padEnd(28)} ${(performance.now() - started).toFixed(1).padStart(8)} ms`)
+/**
+ * The same two shapes on a real client: a fold over a long line, where each
+ * root is one block's partial answer and a range asks for one of them.
+ */
+const client = (n: number): void => {
+  console.log(`\nblocks.range: ${n.toLocaleString()} roots, ceiling ${n.toLocaleString()}`)
+  const span = 32
+  const scans: number[] = []
+  const races: number[] = []
+  const admissions: number[] = []
+  const scanWork: number[] = []
+  const raceWork: number[] = []
+  for (let round = 0; round < rounds; round++) {
+    const fold = blocks<number>({
+      read: (_line, at) => at & 7,
+      zero: 0,
+      join: (a, b) => a + b,
+      span,
+      max: n,
+    })
+    const over = (index: number): number =>
+      fold.range('line', index * span, index * span + span - 1)
+    for (let i = 0; i < n; i++) over(i)
+
+    fold.resetWorked()
+    let started = performance.now()
+    for (let i = 0; i < n; i++) over(i)
+    scans.push(performance.now() - started)
+    scanWork.push(fold.worked())
+
+    started = performance.now()
+    over(n)
+    admissions.push(performance.now() - started)
+
+    fold.resetWorked()
+    started = performance.now()
+    for (let i = 0; i < n; i++) over(i)
+    races.push(performance.now() - started)
+    raceWork.push(fold.worked())
+  }
+  say('scan, every read a hit', scans)
+  count('partials worked', scanWork)
+  say('admission after that scan', admissions)
+  say('scan, every read a miss', races)
+  count('partials worked', raceWork)
 }
 
-readsOver(members / 2, `${reads.toLocaleString()} reads, half full`)
-readsOver(members, `${reads.toLocaleString()} reads, full`)
-
-// Built last and on its own: three families of half a million members alive in
-// one process measure the collector, not the cache.
-const before = heap()
-const held = build(members, members)
-const grew = ((heap() - before) / 1024 / 1024).toFixed(2)
-console.log(`${members.toLocaleString()} members: ${grew} MB`)
-
-// Touch everything, then ask for one more key. Several rounds, and both the
-// middle and the worst of them: this is the number that moved when the policy
-// changed, and one sample of it says nothing about a frame budget.
-const admissions: number[] = []
-const touches: number[] = []
-for (let round = 0; round < 3; round++) {
-  const touched = performance.now()
-  for (let i = 0; i < members; i++) held(i)
-  touches.push(performance.now() - touched)
-  const admitted = performance.now()
-  held(members + round + 1)
-  admissions.push(performance.now() - admitted)
+/**
+ * What the ring itself costs. Built last and on its own: several families of
+ * half a million members alive in one process measure the collector, not the
+ * cache.
+ */
+const held = (n: number): void => {
+  const gc = (globalThis as { gc?: () => void }).gc
+  if (gc === undefined) {
+    console.log('\nrun with --expose-gc for what the members weigh')
+    return
+  }
+  // The least of several collections: one gc after four bands of garbage leaves
+  // enough behind to swamp the two pointers this is here to price.
+  const heap = (): number => {
+    let least = Number.POSITIVE_INFINITY
+    for (let i = 0; i < 4; i++) {
+      gc()
+      least = Math.min(least, process.memoryUsage().heapUsed)
+    }
+    return least
+  }
+  const before = heap()
+  const item = family((id: number) => id, { max: n })
+  for (let i = 0; i < n; i++) item(i)
+  const grew = heap() - before
+  console.log(
+    `\n${n.toLocaleString()} members: ${(grew / 1024 / 1024).toFixed(1)} MB` +
+      `, ${(grew / n).toFixed(1)} bytes each (${item.size} held)`,
+  )
 }
-const middle = (of: number[]): number =>
-  of.toSorted((a, b) => a - b)[Math.floor(of.length / 2)] ?? 0
-const worst = (of: number[]): number => Math.max(...of)
-console.log(
-  `touch all: median ${middle(touches).toFixed(1)} ms, worst ${worst(touches).toFixed(1)} ms`,
-)
-console.log(
-  `next admission: median ${middle(admissions).toFixed(1)} ms, ` +
-    `worst ${worst(admissions).toFixed(1)} ms`,
-)
+
+synthetic(members)
+synthetic(members * 2)
+client(partials)
+client(partials * 2)
+held(members)

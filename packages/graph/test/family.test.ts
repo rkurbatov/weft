@@ -1,9 +1,25 @@
 import { describe, test } from 'node:test'
 import assert from 'node:assert/strict'
-import { port, derived, subscribe } from '#graph'
+import { port, derived, subscribe, watch } from '#graph'
 import { family } from '#graph'
 import type { Derived, Family } from '#graph'
+import { RELEASE } from '#graph/nodes.ts'
 import { until } from '#testkit'
+
+/**
+ * A member that will not go, and a count of how often it was asked. The throw
+ * is the point: a pass that counts a refusal as progress walks the ring
+ * forever, and a suite that hangs says nothing about why.
+ */
+const refuses = <T>(cell: Derived<T>): (() => number) => {
+  let asked = 0
+  ;(cell as unknown as Record<symbol, unknown>)[RELEASE] = function (): boolean {
+    asked++
+    if (asked > 4) throw new Error('the turn came round to it again')
+    return false
+  }
+  return () => asked
+}
 
 describe('families of cells', () => {
   test('same key gives the same cell, different keys different cells', () => {
@@ -231,18 +247,18 @@ describe('families of cells', () => {
         return cell
       }
       const stops: (() => void)[] = []
-      const watch = () => {
+      const hold = () => {
         for (const id of [1, 2, 3]) stops.push(subscribe(made(id), () => {}))
       }
       const chill = () => {
         for (const id of [4, 5, 6]) made(id)
       }
       if (watchedFirst) {
-        watch()
+        hold()
         chill()
       } else {
         chill()
-        watch()
+        hold()
       }
       const cold = () => [...cells].filter(([id, c]) => item.has(id) && !c.observed).length
       assert.equal(cold(), 3, 'three cold, one under the ceiling')
@@ -374,15 +390,148 @@ describe('families of cells', () => {
     assert.equal(item.evict('a'), true, 'a survived the pass')
   })
 
-  test('a second chance is spent, not renewed', () => {
+  test('a spent chance costs the member its place, and a newborn is not a candidate', () => {
+    // The law of the hand, in the scene that tells a real one from a saved map
+    // iterator: the iterator sees what was inserted after it and would take the
+    // newborn `c`; the hand judged `a` and stopped, so `a` is what it comes back
+    // to.
+    //
+    // Red under: a door that puts an arrival at the hand rather than behind it.
     const item = family((id: string) => id, { max: 2 })
     item('a')
     item('b')
-    item('a') // a is marked
-    item('c') // the pass skips a, takes b
-    assert.equal(item.evict('b'), false)
-    item('d') // and now a has no mark left
-    assert.equal(item.evict('a'), false, 'the chance was spent')
+    item('a') // marked
+    item('c') // the turn passes over a, takes b
+    assert.equal(item.has('b'), false)
+    item('d')
+    assert.equal(item.has('a'), false, 'the chance was spent')
+    assert.equal(item.has('c'), true, 'the newborn stood behind the hand')
+    assert.equal(item.has('d'), true)
+  })
+
+  test('the hand stays where the last pass left it', () => {
+    // What survives between passes is a position, not an order: after the pass
+    // for `d` the hand stands on `c`, though `a` is the older member. This is
+    // also the whole of why a scan of a cache at its ceiling is linear — a pass
+    // that began at the oldest built a fresh iterator over a map whose head kept
+    // being deleted, and V8 walks the deleted slots. That cost is a wall-clock
+    // one and no counter here can see it: the walk was two steps either way. It
+    // is measured in demo/bench/replace.ts, at n and 2n, and not asserted here,
+    // because the honest work of the same scene grows faster than its own size
+    // on a machine whose cache the small case fits and the large one does not.
+    //
+    // Red under: beginning every pass at the oldest cold member.
+    const item = family((id: string) => id, { max: 3 })
+    item('a')
+    item('b')
+    item('c')
+    item('a') // marked
+    item('d') // passes over a, takes b, stops on c
+    assert.equal(item.has('b'), false)
+    item('e')
+    assert.equal(item.has('c'), false, 'the hand went on from where it stopped')
+    assert.equal(item.has('a'), true, 'and did not start at the oldest again')
+  })
+
+  test('a member that cools stands behind the hand', () => {
+    // Cooling puts a member where an arrival goes, not where the hand is
+    // standing: `c` cools with the hand on it and is still not the candidate.
+    //
+    // Red under: an arrival taking the hand's place, or the hand staying on a
+    // member that left the ring.
+    const item = family((id: string) => id, { max: 3 })
+    item('a')
+    item('b')
+    item('c')
+    item('a')
+    item('d') // stops on c
+    const stop = subscribe(item('c'), () => {})
+    stop()
+    item('e')
+    assert.equal(item.has('c'), true, 'the freshly cooled member was not the candidate')
+    assert.equal(item.has('a'), false)
+  })
+
+  test('every candidate refusing ends the pass, and none is asked twice', () => {
+    // The ceiling gives way to members that cannot go — and the turn ends,
+    // rather than walking a ring where nothing will ever be releasable.
+    //
+    // Red under: counting a refusal as progress, or bounding the turn by
+    // anything other than the size of the ring it began with.
+    const item = family((id: string) => id, { max: 2 })
+    const askedA = refuses(item('a'))
+    const askedB = refuses(item('b'))
+    item('c')
+    assert.equal(item.size, 3, 'the ceiling gives way to what cannot go')
+    assert.equal(askedA(), 1, 'asked once in the turn')
+    assert.equal(askedB(), 1)
+    assert.equal(item.sweep(), 1, 'sweep takes the newborn and leaves the two')
+    assert.equal(item.size, 2)
+  })
+
+  test('a turn of marks, then a turn that frees', () => {
+    // Marks and refusals together: the first turn puts every mark down, the
+    // second takes the one member that can actually go.
+    //
+    // Red under: stopping after a turn that only spared.
+    const item = family((id: string) => id, { max: 2 })
+    const askedA = refuses(item('a'))
+    item('b')
+    item('a')
+    item('b') // both marked
+    item('c')
+    assert.equal(item.has('b'), false, 'the second turn took the one that could go')
+    assert.equal(item.has('a'), true)
+    assert.equal(askedA(), 1)
+  })
+
+  test('every way a member leaves takes the hand with it', () => {
+    // Red under: not moving the hand off a member that leaves the ring. It then
+    // points at something unlinked, the next turn has nowhere to step, and the
+    // ceiling quietly stops being kept.
+    const evicted = family((id: string) => id, { max: 3 })
+    evicted('a')
+    evicted('b')
+    evicted('c')
+    assert.equal(evicted.evict('a'), true) // the hand was standing on a
+    evicted('d')
+    evicted('e')
+    assert.equal(evicted.has('b'), false, 'the hand moved on to b')
+    assert.equal(evicted.has('c'), true)
+
+    const watched = family((id: string) => id, { max: 2 })
+    watched('a')
+    watched('b')
+    const stop = subscribe(watched('a'), () => {}) // a leaves the ring under the hand
+    watched('c')
+    watched('d')
+    assert.equal(watched.has('b'), false)
+    assert.equal(watched.has('c'), true)
+    stop()
+
+    const swept = family((id: string) => id, { max: 2 })
+    swept('a')
+    swept('b')
+    assert.equal(swept.sweep(), 2)
+    swept('c')
+    swept('d')
+    swept('e')
+    assert.equal(swept.has('c'), false, 'the ring works again after emptying')
+    assert.equal(swept.size, 2)
+  })
+
+  test('a chain freed member by member reaches its fixed point', () => {
+    // Each freed member cools the next one behind the hand, so the chain needs
+    // as many turns as it has links. A map walk saw what it appended to itself
+    // and needed one; the ring trades that for the arrival rule.
+    //
+    // Red under: any fixed cap on the number of turns.
+    let item!: Family<number, number>
+    item = family((id: number) => (id < 4 ? item(id + 1).get() : id), { max: 1 })
+    item(1).peek()
+    assert.equal(item.size, 4)
+    item(9)
+    assert.deepEqual(item.keys().toSorted(), [9], 'the whole chain went in one pass')
   })
 
   test('a second chance belongs to one cold lifetime', () => {
@@ -420,6 +569,87 @@ describe('families of cells', () => {
     item(4)
     assert.equal(item.size, 3)
     assert.equal(item.has(1), false, 'the oldest went, marked or not')
+  })
+
+  test('a key taken again while its member is let go is the one the family keeps', () => {
+    // The trim runs as a notice. Letting a member go disposes its cell, and
+    // that move of the graph used to drain the queue again, so the next notice
+    // — somebody's onIdle — admitted the very key being released. The release
+    // then cleared the newcomer's entry and the family denied a member it was
+    // still holding, while the ring went on holding it.
+    //
+    // The scene as it was reported, kept for that reason. Red under: both the
+    // guard on the drain and the identity of the index entry being dropped —
+    // either alone keeps this green, and each has a witness of its own beside
+    // this one.
+    let item!: Family<string, string>
+    let replacement: Derived<string> | undefined
+    const tick = port(0, {
+      onIdle: () => {
+        replacement = item('b')
+      },
+    })
+    item = family((id: string) => id, { max: 1 })
+    const stop = watch(() => {
+      item('a').get()
+      tick.get()
+    })
+    item('b') // cold, and the older of the two once 'a' cools
+    stop()
+    assert.equal(item.has('b'), true)
+    assert.equal(item.size, 1)
+    assert.equal(item('b'), replacement, 'and it is the cell the notice was handed')
+    assert.equal(item.sweep(), 1, 'the ring holds what the map holds, and nothing besides')
+    assert.equal(item.size, 0)
+  })
+
+  test('a release clears the entry that is its own, not the one under its name', () => {
+    // A committed release — one that has begun destroying and may run other
+    // work on its way out — can find the key handed to a new member while it
+    // goes. What it clears afterwards is its own entry, not whatever stands
+    // under its name by then. A refusal never reaches this: `[RELEASE]`
+    // promises to be inert when it says no.
+    //
+    // Through the seam, because with notices no longer nesting nothing public
+    // reaches it. Red under: clearing `cold` by name rather than by identity.
+    const item = family((id: string) => id, { max: 2 })
+    const older = item('b')
+    item('x')
+    let replacement: Derived<string> | undefined
+    const real = (older as unknown as Record<symbol, () => boolean>)[RELEASE]!
+    ;(older as unknown as Record<symbol, unknown>)[RELEASE] = function (this: unknown): boolean {
+      // The key is free: a candidate leaves the ring before it is asked.
+      replacement = item('b')
+      return real.call(this)
+    }
+    item('c') // the turn takes b, and b takes the key back on its way out
+    assert.notEqual(replacement, older, 'the old member had already left the index')
+    assert.equal(item.has('b'), true, 'and the release did not unmake its successor')
+    assert.equal(item('b'), replacement)
+    assert.equal(item.has('x'), false, 'the turn went on to a real candidate, not a ghost')
+  })
+
+  test('a release does not erase a successor somebody is already watching', () => {
+    // The other half of the same law: the successor need not be cold. Somebody
+    // can be reading it by the time the old member finishes going, and then the
+    // entry that carries its name is in `hot`.
+    //
+    // Red under: clearing `hot` by name rather than by identity.
+    const item = family((id: string) => id, { max: 2 })
+    const older = item('b')
+    item('x')
+    let replacement: Derived<string> | undefined
+    let stop: (() => void) | undefined
+    const real = (older as unknown as Record<symbol, () => boolean>)[RELEASE]!
+    ;(older as unknown as Record<symbol, unknown>)[RELEASE] = function (this: unknown): boolean {
+      replacement = item('b')
+      stop = subscribe(replacement, () => {})
+      return real.call(this)
+    }
+    item('c')
+    assert.equal(item.has('b'), true, "the successor is watched, and still the family's")
+    assert.equal(item('b'), replacement)
+    stop?.()
   })
 
   test('a watched member survives every drop path', () => {

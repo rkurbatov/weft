@@ -7,7 +7,7 @@
 
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
-import { graph } from '../src/graph.ts'
+import { derived, graph, port, watch } from '../src/graph.ts'
 import type { Core } from '../src/engine.ts'
 
 /** The engine's own list of things to let go of. Not offered to anybody. */
@@ -71,5 +71,75 @@ describe('what the engine holds', () => {
     })
 
     g.dispose()
+  })
+})
+
+describe('the queue the engine runs when the graph is quiet', () => {
+  test('a notice waits for the one already running to finish', () => {
+    // A notice that lets a cell go disposes it, and disposing is a move of the
+    // graph: it enters and leaves. Leaving used to drain the queue again, so
+    // the next notice ran in the middle of the first one — with the graph
+    // halfway through a release rather than quiet.
+    //
+    // Red under: dropping the guard on the drain.
+    const inside: boolean[] = []
+    let running = false
+    const first = port(0, {
+      onIdle: () => {
+        running = true
+        derived(() => 1).dispose() // a move of the graph, from inside a notice
+        running = false
+      },
+    })
+    const second = port(0, {
+      onIdle: () => {
+        inside.push(running)
+      },
+    })
+    const stop = watch(() => {
+      first.get()
+      second.get()
+    })
+    stop()
+    assert.deepEqual(inside, [false], 'the second notice ran, and not inside the first')
+  })
+
+  test('a notice put down by a notice waits for its turn', () => {
+    // The other way in: not a move of the graph draining again, but a callback
+    // queueing one itself. Same law, and the queue stays first in, first out.
+    //
+    // Red under: running a notice on the spot when one is already running.
+    const app = graph('notice-order')
+    const order: string[] = []
+    app.core.notice(() => {
+      order.push('first in')
+      app.core.notice(() => order.push('second'))
+      order.push('first out')
+    })
+    assert.deepEqual(order, ['first in', 'first out', 'second'])
+    app.dispose()
+  })
+
+  test('a notice that throws does not jam the ones behind it', () => {
+    // The queue is a piece of state, and the flag that keeps it from running
+    // twice at once has to come back down however the callback ends. It threw
+    // once in this library already, and a stuck flag would have silenced every
+    // notice afterwards — no error, no eviction, no idle hook, nothing.
+    //
+    // Red under: lowering the flag after the loop instead of in a finally.
+    const app = graph('notice-throw')
+    assert.throws(
+      () =>
+        app.core.notice(() => {
+          throw new Error('boom')
+        }),
+      /boom/,
+    )
+    let ran = false
+    app.core.notice(() => {
+      ran = true
+    })
+    assert.equal(ran, true, 'the queue runs again after one of them threw')
+    app.dispose()
   })
 })

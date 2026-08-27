@@ -203,6 +203,14 @@ export class Derived<T> implements Node, Consumer {
    * steps — the two could disagree, and did: `dispose` refuses a cell whose
    * formula is on the stack, so a cache that tested only for watchers killed
    * the very run that was building the member it went on to hand back.
+   *
+   * The two answers carry different licences, and a cache leans on the
+   * difference. `false` is inert: nothing has happened, and in particular
+   * nothing can have handed this cell's key to another member. `true` has run
+   * everything disposal runs, re-entry included, so by then the key may well
+   * be somebody else's — which is why a cache clears up after a release by
+   * identity rather than by name. A release that means to let others in
+   * partway through must therefore end in `true`; saying no has to stay inert.
    */
   [RELEASE](): boolean {
     if (this.running || this.observers.size > 0) return false

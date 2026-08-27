@@ -42,6 +42,7 @@ export class Core {
   /** Whether a settling is already running: writes from watchers join it. */
   private settling = false
   private readonly notices: Array<() => void> = []
+  private draining = false
   /**
    * Watchers, and only watchers: they are the leaves that hold demand, and
    * there are as many of them as there are screens — not as many as there are
@@ -160,9 +161,21 @@ export class Core {
   }
 
   private drain(): void {
-    while (this.notices.length > 0) {
-      const fn = this.notices.shift()
-      if (fn !== undefined) fn()
+    // One notice never runs inside another. Letting a cached cell go disposes
+    // it, disposing is a move of the graph, and a move that ends leaves —
+    // which drained the queue again and ran the next notice in the middle of
+    // the release. The queue stays FIFO: what is added while a notice runs
+    // goes out after it returns, which is what "after the graph is quiet"
+    // meant in the first place.
+    if (this.draining) return
+    this.draining = true
+    try {
+      while (this.notices.length > 0) {
+        const fn = this.notices.shift()
+        if (fn !== undefined) fn()
+      }
+    } finally {
+      this.draining = false
     }
   }
 
