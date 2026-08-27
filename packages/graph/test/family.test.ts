@@ -357,6 +357,57 @@ describe('families of cells', () => {
     assert.doesNotThrow(() => family((id: number) => id, { max: Number.MAX_SAFE_INTEGER }))
   })
 
+  test('a member read after another went cold outlives it', () => {
+    // The law both caches keep, whatever their order underneath: `a` was read
+    // after `b` was already a cache entry, so one automatic eviction cannot
+    // spare `b` by taking `a`.
+    //
+    // Negative control: forget reads made below the ceiling — as the family did
+    // before — and `a` goes instead.
+    const item = family((id: string) => id, { max: 3 })
+    item('a')
+    item('b')
+    item('a')
+    item('c')
+    item('d')
+    assert.equal(item.evict('b'), false, 'b was the one taken')
+    assert.equal(item.evict('a'), true, 'a survived the pass')
+  })
+
+  test('a second chance is spent, not renewed', () => {
+    const item = family((id: string) => id, { max: 2 })
+    item('a')
+    item('b')
+    item('a') // a is marked
+    item('c') // the pass skips a, takes b
+    assert.equal(item.evict('b'), false)
+    item('d') // and now a has no mark left
+    assert.equal(item.evict('a'), false, 'the chance was spent')
+  })
+
+  test('evict and sweep do not treat a mark as protection', () => {
+    const item = family((id: string) => id, { max: 4 })
+    item('a')
+    item('b')
+    item('a')
+    item('b')
+    assert.equal(item.evict('a'), true, 'evict ignores the mark')
+    assert.equal(item.sweep(), 1, 'and so does sweep')
+    assert.equal(item.size, 0)
+  })
+
+  test('when everything is marked the ceiling is still kept', () => {
+    // Termination: a pass that spared everybody would leave the ceiling broken
+    // until somebody asked another question. The second round is what makes it
+    // a promise.
+    const item = family((id: number) => id, { max: 3 })
+    for (const id of [1, 2, 3]) item(id)
+    for (const id of [1, 2, 3]) item(id) // all marked
+    item(4)
+    assert.equal(item.size, 3)
+    assert.equal(item.has(1), false, 'the oldest went, marked or not')
+  })
+
   test('a watched member survives every drop path', () => {
     const item = family((id: number) => id, { max: 1 })
     const stop = subscribe(item(1), () => {})

@@ -25,6 +25,11 @@ export interface FamilyOptions<K, T> {
    * on a family whose members read each other can stand at many times that
    * while the roots are within it.
    *
+   * Which cold member goes is second chance, not a full order of time: a
+   * member read since the last automatic pass is skipped once, and taken by
+   * the pass after that unless it is read again. `evict` and `sweep` ignore
+   * this entirely.
+   *
    * Kept up at two moments and no others: when a member is admitted, and when
    * one cools with the cache already full — the second as one coalesced pass
    * after the graph is quiet, since the cooling happens inside the engine's
@@ -89,6 +94,12 @@ export function family<K, T>(
     readonly key: K
     readonly id: string
     readonly cell: Derived<T>
+    /**
+     * Read since an automatic pass last looked at it. Not protection and not a
+     * place in any full order of time: it buys one skip from the next pass and
+     * nothing else. `evict` and `sweep` do not look at it at all.
+     */
+    referenced = false
 
     constructor(key: K, id: string, cell: Derived<T>) {
       this.key = key
@@ -163,28 +174,57 @@ export function family<K, T>(
 
   /**
    * Drop the oldest cold members until no more than `limit` are left, or until
-   * none of the ones left can go. A member that cannot — its formula is on the
-   * stack — is held aside and put back at the tail afterwards, so that the
-   * walk does not meet it again and the count it is judged by still includes
-   * it.
+   * none of the ones left can go.
+   *
+   * `spare` is the replacement policy: an automatic pass gives a member that
+   * has been read since the last pass one skip, clearing its bit on the way,
+   * so the next pass may take it. An explicit `sweep` sets this false — its
+   * whole purpose is to keep nothing, and paying a round for a policy of
+   * keeping would be beside the point.
+   *
+   * A skip does not move anything: the bit is cleared and the walk goes on, so
+   * a member that keeps being read keeps being skipped and the order is left
+   * alone. Only a member the cell refused leaves the walk, and it comes back
+   * at the tail afterwards.
+   *
+   * Two rounds at most, and the second is what makes the ceiling a promise
+   * rather than a hope: after the first every bit it met is cleared, so a set
+   * where everything had been read cannot end with everybody spared and the
+   * ceiling still broken.
    */
-  const shrinkTo = (limit: number): number => {
+  const shrinkTo = (limit: number, spare = true): number => {
     if (cold.size <= limit) return 0
     passing = true
     let went = 0
-    let stuck: Member[] | undefined
     try {
-      for (const member of cold.values()) {
-        if (cold.size + (stuck?.length ?? 0) <= limit) break
-        if (release(member)) {
-          went++
-          continue
+      for (let round = 0; round < 2; round++) {
+        let spared = 0
+        let stuck: Member[] | undefined
+        for (const member of cold.values()) {
+          if (cold.size + (stuck?.length ?? 0) <= limit) break
+          if (spare && member.referenced) {
+            // The skip costs one store and leaves the order alone. Moving a
+            // spared member to the tail instead was the obvious thing and the
+            // expensive one: with half a million members all read, one
+            // admission became a million map operations and half a second.
+            member.referenced = false
+            spared++
+            continue
+          }
+          if (release(member)) {
+            went++
+            continue
+          }
+          // Refused, so it left the cold order on the way in and comes back
+          // at the tail after the walk: a map re-entered during its own
+          // iteration is walked twice.
+          stuck ??= []
+          stuck.push(member)
         }
-        stuck ??= []
-        stuck.push(member)
+        if (stuck !== undefined) for (const member of stuck) cold.set(member.id, member)
+        if (spared === 0 || cold.size <= limit) break
       }
     } finally {
-      if (stuck !== undefined) for (const member of stuck) cold.set(member.id, member)
       passing = false
     }
     return went
@@ -212,14 +252,17 @@ export function family<K, T>(
     const id = nameOf(key)
     const chilled = cold.get(id)
     if (chilled !== undefined) {
-      // Looked at, so it is not the oldest cache entry any more. Only while the
-      // ceiling is in sight: a delete and an insert on every read is pure cost
-      // while the cache is half empty, and showed up whole in a scene profile
-      // (95ms → 16ms without it).
-      if (cold.size >= max) {
-        cold.delete(id)
-        cold.set(id, chilled)
-      }
+      // Read, so the next pass owes it one skip. A bit rather than moving it
+      // down the order: taking a member out of a map and putting it back cost
+      // a scene 95ms against 16ms, and it cost that on every read while the
+      // ceiling was in sight. This costs one store, always, and the moving
+      // happens only under real pressure — where the old rule did it anyway.
+      //
+      // What it buys is an order that remembers reads made below the ceiling
+      // too. Under the old rule a member read while the cache was half empty
+      // was still the oldest thing in it, and went first at the first
+      // overflow — which is not what "looked at" ought to mean.
+      chilled.referenced = true
       return chilled.cell
     }
     // The cold map is asked first because the scenes with the most reads by far
@@ -265,7 +308,7 @@ export function family<K, T>(
     return false
   }
 
-  api.sweep = () => shrinkTo(0)
+  api.sweep = () => shrinkTo(0, false)
 
   return api
 }
