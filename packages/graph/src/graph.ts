@@ -14,6 +14,7 @@ import { CHECK, CLEAN } from './engine.ts'
 import type { Probe } from './ticks.ts'
 import {
   Derived as DerivedCell,
+  Facet as FacetCell,
   engineOf,
   Port as PortCell,
   Watcher as WatcherNode,
@@ -57,6 +58,19 @@ export function port<T>(initial: T, options?: PortOptions<T>): Port<T> {
 
 export function derived<T>(formula: () => T, options?: DerivedOptions<T>): Derived<T> {
   return buildDerived(coreForBuild(), formula, options)
+}
+
+/**
+ * Package-internal: a cell that holds its sources only while it is being read.
+ * For bridges inside the library — see `Facet`. Named in `#graph`, never at
+ * the door in `#weft`.
+ */
+export function facet<T>(formula: () => T, options?: DerivedOptions<T>): Derived<T> {
+  const core = coreForBuild()
+  const cell = new FacetCell(formula, options, core)
+  core.owned(() => cell.dispose())
+  keep(cell, cell)
+  return cell
 }
 
 export function watch(body: () => void, options?: WatchOptions): () => void {
@@ -274,5 +288,15 @@ function adopt<T>(core: Core, source: Watchable<T>): Watchable<T> {
  * second set of lifecycle hooks for applications.
  */
 export function keep(node: unknown, keeper: Keeper | undefined): void {
-  ;(node as Node)[OBSERVED] = keeper
+  const held = node as Node
+  const standing = held[OBSERVED]
+  // One owner at a time, said out loud. Three things install keepers now — the
+  // cell family, the query cache and a facet on itself — and a second one
+  // arriving would silently take the first one's ear away, leaving a cache
+  // that no longer hears about its own members. An assert where things are
+  // built, not a check on any hot path.
+  if (keeper !== undefined && standing !== undefined && standing !== keeper) {
+    throw new Error('weft: this node already has somebody keeping it')
+  }
+  held[OBSERVED] = keeper
 }

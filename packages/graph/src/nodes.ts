@@ -304,6 +304,79 @@ export interface WatchOptions {
   demand?: boolean
 }
 
+/**
+ * A cell that owns its links only while somebody is actually reading it.
+ *
+ * An ordinary cell keeps the sources it found until it is disposed, which is
+ * right for a cell an application holds and wrong for a bridge inside the
+ * library: one read of `face.flight.peek()` left the face an observer of the
+ * source for ever, and a cache that retains by being read would then never let
+ * a single key go. The lifecycle belongs to the edge of ownership, not to the
+ * object that happens to own four of them — so each bridge lets go by itself,
+ * and "is this face in use" is the union of real graph edges rather than a
+ * counter somebody has to keep.
+ *
+ * The contract differs from `derived` in one visible way: a facet caches
+ * nothing for a reader who does not stay. A tracked read behaves exactly as
+ * before; a bare `get()` or `peek()` computes, answers, and hands the sources
+ * back before returning, so the next such read computes again. That is the
+ * price of the bridge not outliving its use, and these are projections of one
+ * cell, not work worth keeping.
+ *
+ * Package-private on purpose: for an application this is not a second kind of
+ * formula, it is the machinery behind a door.
+ */
+export class Facet<T> extends Derived<T> {
+  /** A release already asked for, so that two of them cannot queue up. */
+  private releaseWanted = false
+
+  private releaseNow(): void {
+    // Calls off a release already asked for as well: a bare read that let go
+    // first must not leave a second one standing behind it, and a reader that
+    // came back must not be let go of at all.
+    this.releaseWanted = false
+    this[RELEASE]()
+  }
+
+  override get(): T {
+    try {
+      return super.get()
+    } finally {
+      // The same question the caches ask, asked by the cell about itself:
+      // read by somebody or on the stack, it stays; otherwise it hands the
+      // sources back. One predicate for all of its users.
+      this.releaseNow()
+    }
+  }
+
+  override peek(): T {
+    // Straight to the base `get`, not through this class's own: `Derived.peek`
+    // calls `get` virtually, so going the ordinary way asked one read the
+    // release question twice.
+    try {
+      return this.engine.untracked(() => super.get())
+    } finally {
+      this.releaseNow()
+    }
+  }
+
+  observationChanged(observed: boolean): void {
+    if (observed) {
+      this.releaseWanted = false
+      return
+    }
+    if (this.releaseWanted) return
+    // Not here and now: this runs inside the engine's unlinking. And within one
+    // turn a facet can lose its last reader, gain one, and lose it again — one
+    // release is asked for, and the question is asked afresh when it runs.
+    this.releaseWanted = true
+    this.engine.notice(() => {
+      if (!this.releaseWanted) return
+      this.releaseNow()
+    })
+  }
+}
+
 export class Watcher implements Consumer {
   get [NODE](): NodeKind {
     return 'watcher'

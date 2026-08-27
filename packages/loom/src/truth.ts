@@ -5,12 +5,15 @@
 // not exist in application code.
 
 import type { Now } from '#core'
-import { derived } from '#weft'
 import type { Tally, Watchable } from '#weft'
 import { heldOf } from '#weft'
 import type { Remote } from '#weft'
 import { arrivalOf, supply } from '#weft'
 import { query } from '#weft'
+// Straight to the machine room: a self-releasing cell is the library's own
+// machinery, deliberately absent from the `#weft` door, and a bridge inside
+// the library is exactly who it is for.
+import { facet } from '#graph'
 import type { Timers } from '#core'
 
 export interface TruthPassport<T> {
@@ -72,9 +75,9 @@ function faceOf<T>(
   name: string,
 ): Truth<T> {
   const state = feed.state
-  const value = derived(() => heldOf(state.get())?.value.value ?? empty, { name: `${name}.value` })
-  const flight = derived(() => state.get().loading, { name: `${name}.flight` })
-  const fault = derived(
+  const value = facet(() => heldOf(state.get())?.value.value ?? empty, { name: `${name}.value` })
+  const flight = facet(() => state.get().loading, { name: `${name}.flight` })
+  const fault = facet(
     () => {
       const s = state.get()
       return s.kind === 'failed' ? String(s.error) : null
@@ -84,7 +87,7 @@ function faceOf<T>(
   // Only a whole answer dates what is held. A piece of one leaves this at
   // zero, and whoever waits on it — an optimistic write waiting to be taken
   // back by the world's own version — waits, which is the right answer.
-  const asked = derived(
+  const asked = facet(
     () => {
       const held = heldOf(state.get())
       return held !== undefined && held.value.whole ? held.value.askedAt : 0
