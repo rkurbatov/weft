@@ -329,6 +329,34 @@ describe('families of cells', () => {
     assert.equal(item.has(3), true)
   })
 
+  test('keys of different kinds are different members here too', () => {
+    // The same law as the query cache, run on this side as well: the two grew
+    // apart over exactly this once, and one witness each is what keeps them
+    // from doing it again.
+    const mixed = family((key: string | number | boolean | bigint) => key, { max: 10 })
+    assert.notEqual(mixed(1), mixed('1'))
+    assert.notEqual(mixed(true), mixed('true'))
+    assert.notEqual(mixed(1), mixed(1n))
+    assert.equal(mixed.size, 5)
+  })
+
+  test('a ceiling is a whole count of none or more', () => {
+    // Safe, not merely whole: past MAX_SAFE_INTEGER a cache cannot count up to
+    // its own ceiling, so `Number.isInteger` in place of `isSafeInteger` must go
+    // red here.
+    for (const bad of [
+      -1,
+      0.5,
+      Number.NaN,
+      Number.POSITIVE_INFINITY,
+      Number.MAX_SAFE_INTEGER + 1,
+    ]) {
+      assert.throws(() => family((id: number) => id, { max: bad }), RangeError)
+    }
+    assert.doesNotThrow(() => family((id: number) => id, { max: 0 }))
+    assert.doesNotThrow(() => family((id: number) => id, { max: Number.MAX_SAFE_INTEGER }))
+  })
+
   test('a watched member survives every drop path', () => {
     const item = family((id: number) => id, { max: 1 })
     const stop = subscribe(item(1), () => {})

@@ -6,13 +6,17 @@
 // goes quiet by itself — the answer for the old key lands in its own cell,
 // which nobody is looking at.
 
-import { engineOf, keep, nameOfKey } from '#graph'
+import { ceiling, engineOf, keep, nameOfKey } from '#graph'
 import { supply, tally } from './supply.ts'
 import type { Supply, SupplyPassport } from './supply.ts'
 import type { Tally } from './contract.ts'
 
 export interface QueryOptions<K> extends SupplyPassport {
-  /** How a key becomes a map key. Required for object keys. */
+  /**
+   * How a key becomes the name a source is held under. Without one,
+   * `string | number | boolean | bigint` keys work as they are; anything else —
+   * an object, a symbol, a function — needs a name of your own.
+   */
   keyOf?: (key: K) => string
   /**
    * Ceiling on unwatched members; watched ones are never dropped and do not
@@ -31,7 +35,14 @@ export interface QueryOptions<K> extends SupplyPassport {
    * zero an older cold source pays instead, and the cache is inside its ceiling
    * again by the time the call returns. Only at `max: 0` is there nobody older
    * to pay — there the source just handed out is the one allowed exception, and
-   * it goes when a different key arrives.
+   * it holds only until the next maintenance pass: an admission, a trim after
+   * something cooled, or an `evict`/`sweep`. A newborn is blocked from paying
+   * for its own arrival and for nothing longer; once handed over it is an
+   * ordinary cache entry like any other.
+   *
+   * No ceiling at all is said in the word `'unbounded'`, never by a number: a
+   * numeric infinity is refused, as is anything that is not a finite, safe,
+   * whole count of none or more.
    */
   max: number | 'unbounded'
 }
@@ -58,7 +69,8 @@ export function query<K, T>(
   load: (key: K, asked: { signal: AbortSignal; soFar: (value: T) => void }) => Promise<T>,
   options: QueryOptions<K>,
 ): Query<K, T> {
-  const { keyOf, max, ...perSupply } = options
+  const { keyOf, max: stated, ...perSupply } = options
+  const max = stated === 'unbounded' ? stated : ceiling(stated, 'query')
   // One set of counters for the whole family: a panel asks what the question
   // has done, not what the current key has done — and a run called off because
   // the key changed belongs to the family, not to the key that replaced it.

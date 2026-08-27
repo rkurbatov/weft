@@ -3,11 +3,16 @@
 
 import { derived, engineOf, keep } from './graph.ts'
 import type { Derived } from './graph.ts'
+import { ceiling, nameOfKey } from './cache.ts'
 import { RELEASE } from './nodes.ts'
 
 export interface FamilyOptions<K, T> {
   name?: string
-  /** How a key becomes a map key. Required for object keys; numbers and strings work as they are. */
+  /**
+   * How a key becomes the name the family holds it under. Without one,
+   * `string | number | boolean | bigint` keys work as they are; anything else
+   * needs a name of your own.
+   */
   nameOf?: (key: K) => string
   /**
    * Ceiling on cold members — the ones nobody is reading. A member somebody
@@ -60,21 +65,6 @@ export interface Family<K, T> {
 // A watched member is never dropped: its watchers hold that very cell, and a
 // dropped one would leave them deaf. Nothing here breaks that invariant.
 
-/**
- * How a primitive key becomes the name a cache holds it under. The kind is part
- * of it: `1` and `'1'`, `true` and `'true'`, `1` and `1n` are different
- * questions, and a cache that answered one of them with the other's source
- * would be quietly wrong. Shared by both caches — the two had already grown
- * apart once, one of them keeping the kind and the other dropping it.
- */
-export function nameOfKey(key: unknown, who: string, option: string): string {
-  const kind = typeof key
-  if (kind === 'string' || kind === 'number' || kind === 'boolean' || kind === 'bigint') {
-    return `${kind}:${String(key)}`
-  }
-  throw new TypeError(`weft: ${who} needs ${option} for ${kind} keys`)
-}
-
 function defaultNameOf<K>(key: K): string {
   return nameOfKey(key, 'family', 'nameOf')
 }
@@ -85,7 +75,7 @@ export function family<K, T>(
 ): Family<K, T> {
   const name = options.name ?? 'family'
   const nameOf = options.nameOf ?? defaultNameOf<K>
-  const max = options.max ?? 1024
+  const max = ceiling(options.max ?? 1024, 'family')
   const equal = options.equal
 
   /**

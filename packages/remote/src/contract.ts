@@ -21,7 +21,10 @@ export interface SupplyPassport {
    * its own keeps its own.
    */
   tally?: Tally
-  /** Ask again this often while watched. Without it, a source loads once per demand. */
+  /**
+   * Ask again this often while somebody is demanding it. Without it, a source
+   * loads once per demand.
+   */
   every?: number
   /**
    * The quiet a look must survive before it becomes a question. A demand that

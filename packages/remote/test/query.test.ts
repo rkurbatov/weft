@@ -210,6 +210,60 @@ describe('parametric queries', () => {
     }
   })
 
+  test('a cold reader of a freshness view holds the source without waking it', async () => {
+    const clock = world()
+    let calls = 0
+    const user = query(
+      async (id: number) => {
+        calls++
+        return `user ${id}`
+      },
+      { max: 1, now: clock.now, timers: clock.timers },
+    )
+    const first = user(1)
+    const view = fresh(first, 100)
+    // The whole difference between the two questions in one scene, on four
+    // coordinates: the identity is held, no demand is raised, no freshness is
+    // required, and no work is started.
+    //
+    // Negative controls: retain by demand and the identity is lost; hang the
+    // requirement on being read and a pace of 100 appears; start a load from
+    // being read and the count of calls does.
+    const stop = subscribe(view, () => {}, { demand: false })
+    await settle(3)
+    user(2)
+    assert.equal(user(1), first, 'read, so its identity is held')
+    assert.equal(user.evict(1), false)
+    assert.equal(first.demanded, false, 'and not asked, so it is not working')
+    assert.equal(first.pace, undefined, 'and no freshness is required of it')
+    assert.equal(calls, 0, 'and nothing was asked of the world')
+    assert.equal(user.tally.asked.peek(), 0)
+    stop()
+    await settle(2)
+    assert.equal(user.size, 1, 'and when the reader goes, the ceiling comes back')
+  })
+
+  test('a ceiling is a whole count of none or more', () => {
+    // Negative control: take the number as given and -1, 0.5 and NaN each
+    // quietly keep one member while Infinity turns the cache unbounded behind
+    // the word meant to say so.
+    // Safe, not merely whole: past MAX_SAFE_INTEGER a cache cannot count up to
+    // its own ceiling, so `Number.isInteger` in place of `isSafeInteger` must go
+    // red here.
+    for (const bad of [
+      -1,
+      0.5,
+      Number.NaN,
+      Number.POSITIVE_INFINITY,
+      Number.MAX_SAFE_INTEGER + 1,
+    ]) {
+      assert.throws(() => query(async (id: number) => id, { max: bad }), RangeError)
+    }
+    assert.doesNotThrow(() => query(async (id: number) => id, { max: 0 }))
+    assert.doesNotThrow(() => query(async (id: number) => id, { max: Number.MAX_SAFE_INTEGER }))
+    assert.doesNotThrow(() => query(async (id: number) => id, { max: 'unbounded' }))
+  })
+
   test('object keys need keyOf, and get their own member each', async () => {
     const clock = world()
     const page = query(async (at: { list: string; page: number }) => `${at.list}#${at.page}`, {

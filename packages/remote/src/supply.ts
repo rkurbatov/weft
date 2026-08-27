@@ -3,7 +3,7 @@
 // stops it — so an unwatched screen costs nothing.
 
 import { backoff as doubling } from '#core'
-import { derived, facet, port, subscribe, untracked } from '#graph'
+import { facet, port, subscribe, untracked } from '#graph'
 import type { Port } from '#graph'
 import type { Watchable } from '#graph'
 import { owned } from '#graph'
@@ -146,13 +146,13 @@ export function supply<T>(
     schedule(Math.max(0, due))
   }
 
-  /** Is what we hold too old to serve the next watcher? */
+  /** Is what we hold too old to serve the next demanding reader? */
   function stale(): boolean {
     const shown = state.peek()
     // A flight that was called off leaves behind whatever it had published.
     // That is worth showing and is never an answer — nothing is coming for it
-    // — so the next watcher must ask again. Without this line a source that
-    // had published a partial and then lost its last watcher looked fresh to
+    // — so the next demanding reader must ask again. Without this line a source that
+    // had published a partial and then lost its last demanding reader looked fresh to
     // the one after: nobody asked, and it stood in `loading` for ever.
     if (shown.kind === 'loading' && inFlight === null) return true
     const held = heldOf(shown)
@@ -349,9 +349,14 @@ export function supply<T>(
 }
 
 /**
- * A view of a source that states a requirement while anybody watches it:
- * the demand and the requirement arrive and leave together, so nothing has to
- * be released by hand.
+ * A view of a source that states a requirement while anybody is asking it to
+ * work: the demand and the requirement arrive and leave together, so nothing
+ * has to be released by hand.
+ *
+ * Asking, not reading. A cold reader of this view holds the source's identity
+ * — it is waiting to hear from it — and raises neither work nor a requirement:
+ * the source stays quiet and keeps its own pace. The two are different
+ * questions and this is where the difference is easiest to see.
  */
 export function fresh<T>(feed: Supply<T>, within: number): Readable<Remote<T>> {
   let release: (() => void) | null = null
