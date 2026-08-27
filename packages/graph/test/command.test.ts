@@ -148,7 +148,12 @@ describe('a command asked to wait for quiet', () => {
     const first = search.run('a')
     const second = search.run('ab')
     const outcome = Promise.all(
-      [first, second].map(held => held.then(() => 'ran', (error: unknown) => String(error))),
+      [first, second].map(held =>
+        held.then(
+          () => 'ran',
+          (error: unknown) => String(error),
+        ),
+      ),
     )
     search.reset()
 
