@@ -25,10 +25,15 @@ export interface FamilyOptions<K, T> {
    * on a family whose members read each other can stand at many times that
    * while the roots are within it.
    *
-   * Which cold member goes is second chance, not a full order of time: a
-   * member read since the last automatic pass is skipped once, and taken by
-   * the pass after that unless it is read again. `evict` and `sweep` ignore
-   * this entirely.
+   * Which cold member goes is one-scan grace, not a full order of time: a
+   * member read since the last automatic pass is passed over once, and taken
+   * by the pass after that unless it is read again. Not the classic
+   * second-chance queue, which also moves the spared member behind the others
+   * and so gives it a new place as well as a skip — that costs a map delete
+   * and insert per spared member, and with a large working set all read it
+   * gathered into one admission of half a second. This grants the skip and
+   * leaves the order alone, which is weaker and cheaper, and is what the
+   * sentence above promises. `evict` and `sweep` ignore it entirely.
    *
    * Kept up at two moments and no others: when a member is admitted, and when
    * one cools with the cache already full — the second as one coalesced pass
@@ -108,6 +113,11 @@ export function family<K, T>(
     }
 
     observationChanged(observed: boolean): void {
+      // The credit belongs to one cold lifetime and crosses neither border: a
+      // read from an earlier cold life must not buy a skip after a whole spell
+      // of being read, which cooling has already answered by giving the member
+      // a fresh age at the tail.
+      this.referenced = false
       if (observed) {
         cold.delete(this.id)
         hot.set(this.id, this)

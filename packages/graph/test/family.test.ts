@@ -385,6 +385,20 @@ describe('families of cells', () => {
     assert.equal(item.evict('a'), false, 'the chance was spent')
   })
 
+  test('a second chance belongs to one cold lifetime', () => {
+    // Negative control: leave the bit alone across the borders and the stale
+    // credit spares `a`, sacrificing `b` in its place.
+    const item = family((id: string) => id, { max: 2 })
+    item('a')
+    item('a') // credit, in the old cold lifetime
+    const stop = subscribe(item('a'), () => {})
+    stop() // watched, then cooled: a new cold lifetime begins at the tail
+    item('b')
+    item('c')
+    assert.equal(item.evict('a'), false, 'a was the oldest member of its new cold life')
+    assert.equal(item.evict('b'), true, 'and the stale credit did not cost b its place')
+  })
+
   test('evict and sweep do not treat a mark as protection', () => {
     const item = family((id: string) => id, { max: 4 })
     item('a')
