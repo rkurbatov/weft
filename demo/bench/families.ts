@@ -15,10 +15,7 @@ import { family, subscribe } from '#graph'
 const max = 1024
 const keys = 50_000
 
-const once = (
-  watched: number,
-  watchedFirst: boolean,
-): { ms: number; size: number; cold: number } => {
+const once = (watched: number, watchedFirst: boolean): { ms: number; size: number; cold: number } => {
   const item = family((id: number) => id, { max })
   const stops: (() => void)[] = []
   const hold = () => {
