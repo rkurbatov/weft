@@ -200,7 +200,10 @@ export class Core {
         // the queue was reached. Cleared first: the answering can start work
         // of its own, and a failure already told about must not be told twice.
         if (this.failures.length > 0) this.report(this.failures.splice(0))
-      } while (this.notices.length > 0)
+        // Answering can queue a notice, and it can also write — and a write
+        // settles, and a settling can fall. Both are work of this round, so
+        // both are looked for again.
+      } while (this.notices.length > 0 || this.failures.length > 0)
     } finally {
       this.draining = false
     }
@@ -317,27 +320,42 @@ export class Core {
       // per node instead finds the culprit in the round where it misbehaves,
       // and names it.
       let woken: Map<Consumer, number> | undefined
+      let suspected: Set<Consumer> | undefined
+      // One watcher failing is not a reason for its neighbours to sleep
+      // through the change: the round is carried to its end, and what fell is
+      // collected on the way.
       while (this.pending.size > 0) {
         const round = Array.from(this.pending)
         this.pending.clear()
-        if (round.length > 0) {
+        for (const w of round) {
+          // Stood down for the rest of this settling — that one watcher, and
+          // nothing else. Stopping the whole settling at the first suspicion
+          // took the rest of the front down with it, and those consumers were
+          // already out of `pending`: nothing would put them back, so an
+          // ordinary write that happened to travel beside a loop was lost for
+          // good. A watcher that writes nothing cannot keep a loop turning,
+          // which is all the stopping that is needed. The next write starts
+          // its count afresh.
+          if (suspected?.has(w) === true) continue
           woken ??= new Map()
-          for (const w of round) {
-            const times = (woken.get(w) ?? 0) + 1
-            woken.set(w, times)
-            if (times > ROUNDS_BEFORE_SUSPICION) {
-              throw new Error(
+          const times = (woken.get(w) ?? 0) + 1
+          woken.set(w, times)
+          if (times > ROUNDS_BEFORE_SUSPICION) {
+            // Into the ledger rather than thrown from here. Thrown, it left by
+            // a door of its own: past whoever was listening on `onError`, and
+            // into a flight that the next lifecycle hook to fall would
+            // replace. It is a failure of this round like any other.
+            this.failures.push(
+              new Error(
                 `weft: "${w.name}" in engine "${this.name}" has woken ${times} times in one ` +
                   `settling — something in this round writes what it reads, directly or ` +
                   `through another watcher`,
-              )
-            }
+              ),
+            )
+            suspected ??= new Set()
+            suspected.add(w)
+            continue
           }
-        }
-        // One watcher failing is not a reason for its neighbours to sleep
-        // through the change: the round is carried to its end, and what fell
-        // is collected on the way.
-        for (const w of round) {
           try {
             w.stabilize()
           } catch (error) {

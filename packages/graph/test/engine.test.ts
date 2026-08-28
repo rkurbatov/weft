@@ -244,11 +244,14 @@ describe('the queue the engine runs when the graph is quiet', () => {
     // same door afterwards and replaced the one already in flight. Formally
     // thrown, never seen.
     //
-    // Red under: a ledger and an answer of the settling's own.
+    // Red under: a ledger and an answer of the settling's own — and, for the
+    // second half of it, throwing away the queue once anything has fallen.
     const app = graph('combined-errors')
+    const trail: string[] = []
     const changed = app.port(false)
     const held = app.port(0, {
       onIdle: () => {
+        trail.push('idle ran')
         throw new Error('idle second')
       },
     })
@@ -263,6 +266,7 @@ describe('the queue the engine runs when the graph is quiet', () => {
       failure = error
     }
     assert.match(String(failure), /watcher first/)
+    assert.deepEqual(trail, ['idle ran'], 'and the hook had its turn rather than being dropped')
     app.dispose()
   })
 
@@ -296,6 +300,141 @@ describe('the queue the engine runs when the graph is quiet', () => {
     })
     stop()
     assert.deepEqual(heard, ['notice first', 'watcher second'])
+    app.dispose()
+  })
+
+  test('a failure raised by the handler own work belongs to the same round', () => {
+    // Answering for a failure can write, a write settles, and a settling can
+    // fall. That failure is this round's too — waiting for some unrelated push
+    // to carry it out is the same thing the queue used to do with its tail.
+    //
+    // Red under: ending the round on an empty queue without looking at what
+    // has fallen since.
+    const heard: string[] = []
+    let writeFromHandler: (() => void) | undefined
+    const app = graph('handler-settling', {
+      onError: error => {
+        const message = (error as Error).message
+        heard.push(message)
+        if (message === 'first') writeFromHandler?.()
+      },
+    })
+    const trigger = app.port(false)
+    writeFromHandler = () => trigger.set(true)
+    app.watch(() => {
+      if (trigger.get()) throw new Error('second')
+    })
+    const falling = app.port(0, {
+      onIdle: () => {
+        throw new Error('first')
+      },
+    })
+    const stop = app.watch(() => falling.get())
+    stop()
+    assert.deepEqual(heard, ['first', 'second'])
+    app.dispose()
+  })
+
+  test('a loop is a failure of its round, not a door of its own', () => {
+    // Suspicion of a loop used to be thrown from inside the settling, which
+    // took it past whoever was listening and into a flight the next falling
+    // hook replaced. It stops the spinning either way; where it goes afterwards
+    // is the round's business, like everything else that falls.
+    //
+    // Red under: throwing the suspicion from the settling instead of putting it
+    // in the ledger.
+    const app = graph('loop-and-hook')
+    const gate = app.port(false)
+    const held = app.port(0, {
+      onIdle: () => {
+        throw new Error('idle later')
+      },
+    })
+    const ping = app.port(0)
+    const pong = app.port(0)
+    app.watch(() => {
+      if (gate.get()) pong.set(ping.get() + 1)
+      else held.get()
+    })
+    app.watch(() => {
+      ping.set(pong.get() + 1)
+    })
+    let thrown: unknown
+    try {
+      gate.set(true)
+    } catch (error) {
+      thrown = error
+    }
+    assert.match(String(thrown), /has woken/, 'the later hook did not take its place')
+    app.dispose()
+  })
+
+  test('with a handler, a loop is heard there and not thrown past it', () => {
+    // The other side of the same law: one border for the round, so nothing
+    // arrives at whoever happened to make the write while the handler hears
+    // something else.
+    //
+    // Red under: throwing the suspicion from the settling instead of putting it
+    // in the ledger.
+    const heard: string[] = []
+    const app = graph('loop-heard', {
+      onError: error => heard.push(String((error as Error).message)),
+    })
+    const gate = app.port(false)
+    const held = app.port(0, {
+      onIdle: () => {
+        throw new Error('idle later')
+      },
+    })
+    const ping = app.port(0)
+    const pong = app.port(0)
+    app.watch(() => {
+      if (gate.get()) pong.set(ping.get() + 1)
+      else held.get()
+    })
+    app.watch(() => {
+      ping.set(pong.get() + 1)
+    })
+    gate.set(true) // and nothing is thrown at the writer
+    assert.equal(heard.length, 2)
+    assert.match(heard[0] ?? '', /has woken/)
+    assert.equal(heard[1], 'idle later')
+    app.dispose()
+  })
+
+  test('a loop stands its own watcher down, not the work beside it', () => {
+    // Suspicion falls in the middle of a front that already holds ordinary
+    // consumers, and by then they are out of `pending`: stopping the settling
+    // outright loses their update for good, because nothing will queue them
+    // again. Standing the suspect down is all the stopping a loop needs — a
+    // watcher that writes nothing cannot keep one turning — and the next write
+    // starts its count afresh.
+    //
+    // Red under: stopping the whole settling at the first suspicion.
+    const app = graph('loop-front')
+    const gate = app.port(false)
+    const left = app.port(0)
+    const right = app.port(0)
+    const tail = app.port(0)
+    const carried = app.port(0)
+    let runs = 0
+    app.watch(() => {
+      if (gate.get()) left.set(right.get() + 1)
+    })
+    app.watch(() => {
+      if (!gate.get()) return
+      right.set(left.get() + 1)
+      runs++
+      // From deep inside the loop and different every time, so an innocent
+      // consumer stands in every front the loop makes — including the one the
+      // suspicion falls in.
+      if (runs > 90) tail.set(runs)
+    })
+    app.watch(() => {
+      carried.set(tail.get())
+    })
+    assert.throws(() => gate.set(true), /has woken/)
+    assert.equal(carried.peek(), tail.peek(), 'the write beside the loop was carried through')
     app.dispose()
   })
 })
