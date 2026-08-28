@@ -120,11 +120,12 @@ describe('the queue the engine runs when the graph is quiet', () => {
     app.dispose()
   })
 
-  test('a notice that throws does not jam the ones behind it', () => {
-    // The queue is a piece of state, and the flag that keeps it from running
-    // twice at once has to come back down however the callback ends. It threw
-    // once in this library already, and a stuck flag would have silenced every
-    // notice afterwards — no error, no eviction, no idle hook, nothing.
+  test('a thrown notice does not lock later rounds out', () => {
+    // Only that, and the name says only that: the flag that keeps the queue
+    // from running twice at once has to come back down however a callback
+    // ends. A stuck flag would have silenced every notice afterwards — no
+    // eviction, no idle hook, no error, nothing. What happens to the notices
+    // standing behind the one that threw is the next witness.
     //
     // Red under: lowering the flag after the loop instead of in a finally.
     const app = graph('notice-throw')
@@ -140,6 +141,161 @@ describe('the queue the engine runs when the graph is quiet', () => {
       ran = true
     })
     assert.equal(ran, true, 'the queue runs again after one of them threw')
+    app.dispose()
+  })
+
+  test('a notice that throws does not strand the round behind it', () => {
+    // The round is carried to its end and the failure comes after it, exactly
+    // as a settling does with its watchers. Half a round left lying until some
+    // unrelated push arrives is not a boundary anybody chose: the hooks behind
+    // the one that fell are ordinary work, and one of them is the eviction that
+    // keeps a ceiling.
+    //
+    // Red under: letting a callback's failure out of the loop instead of
+    // collecting it.
+    const app = graph('notice-errors')
+    const order: string[] = []
+    const first = app.port(0, {
+      onIdle: () => {
+        order.push('first')
+        throw new Error('boom')
+      },
+    })
+    const second = app.port(0, {
+      onIdle: () => {
+        order.push('second')
+      },
+    })
+    const stop = app.watch(() => {
+      first.get()
+      second.get()
+    })
+    assert.throws(stop, /boom/, 'and the failure is not swallowed either')
+    assert.deepEqual(order, ['first', 'second'])
+    app.dispose()
+  })
+
+  test('with a handler, every notice runs and every failure is heard in order', () => {
+    // The same border the settling uses: with somebody to tell, all of them are
+    // told, and nothing is thrown at whoever happened to make the graph quiet.
+    //
+    // Red under: answering for only the first failure of the round.
+    const heard: string[] = []
+    const app = graph('notice-handler', {
+      onError: error => heard.push((error as Error).message),
+    })
+    const order: string[] = []
+    const first = app.port(0, {
+      onIdle: () => {
+        order.push('first')
+        throw new Error('one')
+      },
+    })
+    const second = app.port(0, {
+      onIdle: () => {
+        order.push('second')
+        throw new Error('two')
+      },
+    })
+    const stop = app.watch(() => {
+      first.get()
+      second.get()
+    })
+    stop()
+    assert.deepEqual(order, ['first', 'second'])
+    assert.deepEqual(heard, ['one', 'two'])
+    app.dispose()
+  })
+
+  test('work put down by the error handler is done before the round ends', () => {
+    // Answering for a failure is itself something that can queue a notice, and
+    // the guard against nesting keeps it out of the handler. Somebody has to
+    // come back for it, and that somebody is the round it belongs to.
+    //
+    // Red under: looking at the queue once rather than again after the failures
+    // have been answered for.
+    const trail: string[] = []
+    let insideHandler = false
+    const app = graph('notice-tail', {
+      onError: () => {
+        insideHandler = true
+        app.core.notice(() => trail.push('put down by the handler'))
+        trail.push('handler')
+        insideHandler = false
+      },
+    })
+    const falling = app.port(0, {
+      onIdle: () => {
+        trail.push('hook')
+        throw new Error('boom')
+      },
+    })
+    const stop = app.watch(() => falling.get())
+    stop()
+    assert.deepEqual(trail, ['hook', 'handler', 'put down by the handler'])
+    assert.equal(insideHandler, false)
+    app.dispose()
+  })
+
+  test('a failing hook does not hide the watcher that set it off', () => {
+    // With nobody to tell, the first failure of the round is the one thrown.
+    // The settling used to answer for its own the moment it ended, from a
+    // `finally` that then went on to drain — so the hook's failure left by the
+    // same door afterwards and replaced the one already in flight. Formally
+    // thrown, never seen.
+    //
+    // Red under: a ledger and an answer of the settling's own.
+    const app = graph('combined-errors')
+    const changed = app.port(false)
+    const held = app.port(0, {
+      onIdle: () => {
+        throw new Error('idle second')
+      },
+    })
+    app.watch(() => {
+      if (changed.get()) throw new Error('watcher first')
+      held.get()
+    })
+    let failure: unknown
+    try {
+      changed.set(true)
+    } catch (error) {
+      failure = error
+    }
+    assert.match(String(failure), /watcher first/)
+    app.dispose()
+  })
+
+  test('failures of a round are heard in the order they happened, wherever they fell', () => {
+    // The mirror of it, with somebody to tell: a hook fails, a later hook
+    // writes, that write settles and a watcher fails. Two sources, one round,
+    // and the order is the round's — not one source's before the other's.
+    //
+    // Red under: a ledger and an answer of the settling's own.
+    const heard: string[] = []
+    const app = graph('cross-order', {
+      onError: error => heard.push((error as Error).message),
+    })
+    const trigger = app.port(false)
+    app.watch(() => {
+      if (trigger.get()) throw new Error('watcher second')
+    })
+    const failing = app.port(0, {
+      onIdle: () => {
+        throw new Error('notice first')
+      },
+    })
+    const writing = app.port(0, {
+      onIdle: () => {
+        trigger.set(true)
+      },
+    })
+    const stop = app.watch(() => {
+      failing.get()
+      writing.get()
+    })
+    stop()
+    assert.deepEqual(heard, ['notice first', 'watcher second'])
     app.dispose()
   })
 })

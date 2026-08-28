@@ -44,6 +44,15 @@ export class Core {
   private readonly notices: Array<() => void> = []
   private draining = false
   /**
+   * What has fallen in the round now under way: watchers that threw while
+   * settling, lifecycle hooks that threw while the queue drained. One ledger
+   * because it is one round — a settling sets hooks off, hooks write and start
+   * a settling — and two ledgers answered for at two moments made the later
+   * failure hide the earlier one, which is exactly what `onError`'s contract
+   * says must not happen.
+   */
+  private readonly failures: unknown[] = []
+  /**
    * Watchers, and only watchers: they are the leaves that hold demand, and
    * there are as many of them as there are screens — not as many as there are
    * rows. Cells are left to garbage collection; without a watcher they are
@@ -170,10 +179,28 @@ export class Core {
     if (this.draining) return
     this.draining = true
     try {
-      while (this.notices.length > 0) {
-        const fn = this.notices.shift()
-        if (fn !== undefined) fn()
-      }
+      // A round is carried to its end, as a settling is: one lifecycle hook
+      // falling is not a reason for the ones queued behind it to be left
+      // lying. Anything else leaves half a round on the floor until some
+      // unrelated push happens to come along, which is not a boundary anybody
+      // chose. What fell is answered for once the queue is empty — and
+      // answering can queue work of its own, so the outer loop looks again.
+      do {
+        while (this.notices.length > 0) {
+          const fn = this.notices.shift()
+          if (fn === undefined) continue
+          try {
+            fn()
+          } catch (error) {
+            this.failures.push(error)
+          }
+        }
+        // The round's ordinary work is over, so what fell during it is
+        // answered for — including what a settling put in the ledger before
+        // the queue was reached. Cleared first: the answering can start work
+        // of its own, and a failure already told about must not be told twice.
+        if (this.failures.length > 0) this.report(this.failures.splice(0))
+      } while (this.notices.length > 0)
     } finally {
       this.draining = false
     }
@@ -281,7 +308,6 @@ export class Core {
     if (this.settling) return
     this.settling = true
     this.enter()
-    const failures: unknown[] = []
     try {
       // Watchers may write, queueing more watchers; drain until quiet.
       //
@@ -315,14 +341,16 @@ export class Core {
           try {
             w.stabilize()
           } catch (error) {
-            failures.push(error)
+            this.failures.push(error)
           }
         }
       }
     } finally {
       this.settling = false
+      // Answering for them is the end of the round's business, not the end of
+      // the settling's: leaving drains the hooks this settling set off, and
+      // those are part of the same round.
       this.leave()
-      this.report(failures)
     }
   }
 
