@@ -548,8 +548,13 @@ describe('the queue the engine runs when the graph is quiet', () => {
     // some later write happens to clear it keeps all of that alive through any
     // amount of quiet — and through the engine's own death.
     //
-    // Red under: emptying it at the next settling's door instead of at the end
-    // of this one.
+    // The same goes for whose turn a source write is being told on: that field
+    // is a watcher too, and it is only meant to hold one while a write is
+    // propagating.
+    //
+    // Red under: emptying the evidence at the next settling's door instead of
+    // at the end of this one, or leaving the write's owner in place after the
+    // propagation it belonged to.
     const app = graph('worked-retention')
     const trigger = app.port(false)
     const target = app.port(0)
@@ -560,9 +565,10 @@ describe('the queue the engine runs when the graph is quiet', () => {
     trigger.set(true)
     stopWriter()
     stopReader()
-    const held = (app.core as unknown as { worked?: Set<unknown> }).worked
+    const guard = app.core as unknown as { worked?: Set<unknown>; writer?: unknown }
     assert.equal(app.core.watching, 0)
-    assert.equal(held?.size ?? 0, 0)
+    assert.equal(guard.worked?.size ?? 0, 0)
+    assert.equal(guard.writer, undefined, 'and the write it was told on is over')
     app.dispose()
   })
 })
