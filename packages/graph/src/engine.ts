@@ -44,12 +44,19 @@ export class Core {
   private readonly notices: Array<() => void> = []
   private draining = false
   /**
-   * The watcher whose turn it is, while a settling is running, and the ones
-   * whose turn queued somebody. A watcher that has queued nobody has produced
-   * no work, and something that produces no work cannot be what keeps a
-   * settling going round — however often it is woken itself.
+   * The watcher whose turn it is, while a settling is running; the turn a
+   * source write is being told to its observers on, if any; and the watchers
+   * whose last turn wrote something that woke somebody.
+   *
+   * The evidence is about writes and about one turn. A watcher that pulls a
+   * cell and finds it has moved has queued work too, and none of it is its
+   * doing — the write that moved the cell was somebody else's. And a turn that
+   * wrote once, a hundred turns ago, is not what is keeping a settling going
+   * now: the evidence is spent when it is read, so only a watcher that goes on
+   * writing goes on being answerable for the storm.
    */
   private stabilizing: Consumer | undefined
+  private writer: Consumer | undefined
   private worked: Set<Consumer> | undefined
   /**
    * What has fallen in the round now under way: watchers that threw while
@@ -249,7 +256,7 @@ export class Core {
       // Always queue: a watcher marked while it runs must still be woken.
       node.state = DIRTY
       this.pending.add(node)
-      if (this.stabilizing !== undefined) (this.worked ??= new Set()).add(this.stabilizing)
+      if (this.writer !== undefined) (this.worked ??= new Set()).add(this.writer)
       return
     }
     if (node.state === DIRTY) return
@@ -257,12 +264,28 @@ export class Core {
     for (const o of node.observers) this.markCheck(o)
   }
 
+  /**
+   * A source changed: tell whoever reads it, and remember whose turn the
+   * change was made on. Only what is queued from in here counts as that turn's
+   * doing — a watcher pulling a cell that has moved queues work as well, and
+   * that work belongs to whoever wrote, not to whoever looked.
+   */
+  wrote(observers: Iterable<Consumer>): void {
+    const before = this.writer
+    this.writer = this.stabilizing
+    try {
+      for (const o of observers) this.markDirty(o)
+    } finally {
+      this.writer = before
+    }
+  }
+
   /** Something upstream changed: consumer must verify before trusting its value. */
   markCheck(node: Consumer): void {
     if (node.leaf) {
       if (node.state === CLEAN) node.state = CHECK
       this.pending.add(node)
-      if (this.stabilizing !== undefined) (this.worked ??= new Set()).add(this.stabilizing)
+      if (this.writer !== undefined) (this.worked ??= new Set()).add(this.writer)
       return
     }
     if (node.state !== CLEAN) return
@@ -333,10 +356,6 @@ export class Core {
       // not claim to be — but it never names a watcher that only reads.
       let woken: Map<Consumer, number> | undefined
       let suspected: Set<Consumer> | undefined
-      // Emptied rather than dropped: kept between settlings it would blame a
-      // watcher for work it made in an earlier one, and re-allocated every
-      // settling it would cost the healthy path an object it never uses.
-      this.worked?.clear()
       // One watcher failing is not a reason for its neighbours to sleep
       // through the change: the round is carried to its end, and what fell is
       // collected on the way.
@@ -354,6 +373,10 @@ export class Core {
           woken ??= new Map()
           const times = (woken.get(w) ?? 0) + 1
           woken.set(w, times)
+          // Spent by reading it: what counts is the turn just gone, so a
+          // watcher that goes on writing keeps earning it back and one that
+          // wrote once, long ago, is a passenger again by now.
+          const wroteLastTurn = this.worked?.delete(w) === true
           // Woken past all reason, and its own turns have been making work:
           // the two together are as close to blame as counting gets. A watcher
           // that only reads is a passenger — woken by the storm, no part of
@@ -361,7 +384,7 @@ export class Core {
           // storm by anything at all. It is not a proof of a cycle: a watcher
           // writing at this rate to somewhere outside one is spinning too, and
           // is named for the same reason.
-          if (times > ROUNDS_BEFORE_SUSPICION && this.worked?.has(w) === true) {
+          if (times > ROUNDS_BEFORE_SUSPICION && wroteLastTurn) {
             // Into the ledger rather than thrown from here. Thrown, it left by
             // a door of its own: past whoever was listening on `onError`, and
             // into a flight that the next lifecycle hook to fall would
@@ -389,9 +412,15 @@ export class Core {
       }
     } finally {
       this.settling = false
-      // Answering for them is the end of the round's business, not the end of
-      // the settling's: leaving drains the hooks this settling set off, and
-      // those are part of the same round.
+      // Emptied here rather than at the next settling's door: what is left in
+      // it is a watcher, and holding one after its round is over holds a
+      // disposed region and everything its body closed over. Before leaving,
+      // too — leaving drains hooks, a hook can write, and a write starts a
+      // settling whose evidence must not be swept up by this one.
+      this.worked?.clear()
+      // Answering for the failures is the end of the round's business, not the
+      // end of the settling's: leaving drains the hooks this settling set off,
+      // and those are part of the same round.
       this.leave()
     }
   }

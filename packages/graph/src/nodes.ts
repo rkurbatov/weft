@@ -102,7 +102,7 @@ export class Port<T> implements Node {
     core.enter()
     try {
       if (core.tap.watching) core.tap.write(this.name, next)
-      for (const o of this.observers) core.markDirty(o)
+      core.wrote(this.observers)
       core.flush()
     } finally {
       core.leave()

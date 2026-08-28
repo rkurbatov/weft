@@ -469,4 +469,100 @@ describe('the queue the engine runs when the graph is quiet', () => {
     assert.equal(seen, left.peek(), 'and the reader had its turn once the loop broke')
     app.dispose()
   })
+
+  test('a reader pulling a cell that has moved is a passenger too', () => {
+    // Pulling queues work as well: the cell is found stale, it recomputes, and
+    // whoever reads it is marked. None of that is the reader's doing — the
+    // write that moved the cell was somebody else's turn. Counting "somebody
+    // was queued while this watcher was on the stack" called the reader a
+    // writer; counting what a write queues does not.
+    //
+    // Red under: counting anything queued during a turn rather than what that
+    // turn's writes queued.
+    const heard: string[] = []
+    const app = graph('derived-passenger', {
+      onError: error => heard.push((error as Error).message),
+    })
+    const gate = app.port(false)
+    const left = app.port(0)
+    const right = app.port(0)
+    const view = app.derived(() => left.get() * 2)
+    let seen = 0
+    app.watch(() => {
+      if (gate.get()) seen = view.get() // made first, and reads only
+    })
+    app.watch(() => {
+      if (gate.get()) right.set(left.get() + 1)
+    })
+    app.watch(() => {
+      if (gate.get()) left.set(right.get() + 1)
+    })
+    gate.set(true)
+    assert.equal(heard.length, 1)
+    assert.equal(seen, left.peek() * 2, 'and the reader ends on the final value')
+    app.dispose()
+  })
+
+  test('one early write does not answer for a storm a hundred turns later', () => {
+    // Evidence of writing belongs to the turn that wrote. Kept for the whole
+    // settling it turns a watcher that wrote once — a first load, a diagnostic
+    // — into a permissible casualty at the moment its write has nothing to do
+    // with anything.
+    //
+    // Red under: keeping the evidence for the settling instead of spending it
+    // at each turn.
+    const heard: string[] = []
+    const app = graph('former-writer', {
+      onError: error => heard.push((error as Error).message),
+    })
+    const gate = app.port(false)
+    const left = app.port(0)
+    const right = app.port(0)
+    const side = app.port(0)
+    let seen = 0
+    let wrote = false
+    app.watch(() => {
+      if (!gate.get()) return
+      seen = left.get()
+      if (!wrote) {
+        wrote = true
+        side.set(1) // once, early, and bounded
+      }
+    })
+    app.watch(() => side.get()) // so that the one write really does wake somebody
+    app.watch(() => {
+      if (gate.get()) right.set(left.get() + 1)
+    })
+    app.watch(() => {
+      if (gate.get()) left.set(right.get() + 1)
+    })
+    gate.set(true)
+    assert.equal(heard.length, 1)
+    assert.equal(seen, left.peek())
+    app.dispose()
+  })
+
+  test('what the guard learned is not held past the settling it learned it in', () => {
+    // The evidence is watchers, and a watcher holds its body, its region and
+    // everything either closed over. Holding the last productive front until
+    // some later write happens to clear it keeps all of that alive through any
+    // amount of quiet — and through the engine's own death.
+    //
+    // Red under: emptying it at the next settling's door instead of at the end
+    // of this one.
+    const app = graph('worked-retention')
+    const trigger = app.port(false)
+    const target = app.port(0)
+    const stopReader = app.watch(() => target.get())
+    const stopWriter = app.watch(() => {
+      if (trigger.get()) target.set(1)
+    })
+    trigger.set(true)
+    stopWriter()
+    stopReader()
+    const held = (app.core as unknown as { worked?: Set<unknown> }).worked
+    assert.equal(app.core.watching, 0)
+    assert.equal(held?.size ?? 0, 0)
+    app.dispose()
+  })
 })
