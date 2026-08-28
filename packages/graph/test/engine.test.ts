@@ -425,16 +425,48 @@ describe('the queue the engine runs when the graph is quiet', () => {
       if (!gate.get()) return
       right.set(left.get() + 1)
       runs++
-      // From deep inside the loop and different every time, so an innocent
-      // consumer stands in every front the loop makes — including the one the
-      // suspicion falls in.
-      if (runs > 90) tail.set(runs)
+      // From inside the loop and different every time, so an innocent consumer
+      // stands in every front the loop makes — the one the suspicion falls in
+      // among them, whatever the threshold happens to be.
+      tail.set(runs)
     })
     app.watch(() => {
       carried.set(tail.get())
     })
     assert.throws(() => gate.set(true), /has woken/)
+    assert.ok(tail.peek() > 0, 'the loop did turn, so there was work to carry')
     assert.equal(carried.peek(), tail.peek(), 'the write beside the loop was carried through')
+    app.dispose()
+  })
+
+  test('a passenger is not stood down for a loop it only watches', () => {
+    // Woken as often as the writers, and by them — a watcher that only reads
+    // reaches any threshold just as fast, and it was named first here because
+    // it was made first. Standing it down silences a reader and slows the
+    // storm by nothing, since it produces no work to slow.
+    //
+    // Red under: standing down whoever is woken too often, without asking
+    // whether its own turns made any work.
+    const heard: string[] = []
+    const app = graph('loop-passenger', {
+      onError: error => heard.push((error as Error).message),
+    })
+    const gate = app.port(false)
+    const left = app.port(0)
+    const right = app.port(0)
+    let seen = 0
+    app.watch(() => {
+      if (gate.get()) seen = left.get() // made first, and reads only
+    })
+    app.watch(() => {
+      if (gate.get()) right.set(left.get() + 1)
+    })
+    app.watch(() => {
+      if (gate.get()) left.set(right.get() + 1)
+    })
+    gate.set(true)
+    assert.equal(heard.length, 1, 'one of the two writers, and not the reader')
+    assert.equal(seen, left.peek(), 'and the reader had its turn once the loop broke')
     app.dispose()
   })
 })
